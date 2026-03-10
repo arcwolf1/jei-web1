@@ -38,6 +38,7 @@ export interface PluginTabIframeConfig {
   allowedOrigins: string[];
   sandbox?: string;
   noApi?: boolean;
+  keepAlive?: boolean;
 }
 
 export interface PluginTabApiConfig {

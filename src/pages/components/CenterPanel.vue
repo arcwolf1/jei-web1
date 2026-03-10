@@ -176,18 +176,31 @@
           v-for="tab in centerPluginTabs"
           :key="`center-plugin-wrap:${tab.tabKey}`"
           v-show="centerTab === tab.tabKey"
-          class="jei-panel__terminal-wrap"
+          class="jei-panel__terminal-wrap relative-position"
         >
           <iframe
             v-if="isCenterPluginTabMounted(tab.tabKey)"
+            v-show="!loadingCenterPluginTabs[tab.tabKey]"
             class="jei-terminal-iframe"
             :src="tab.src"
             :title="tab.tabLabel"
             referrerpolicy="no-referrer"
             :sandbox="tab.sandbox || 'allow-scripts allow-same-origin allow-forms allow-popups'"
+            @load="loadingCenterPluginTabs[tab.tabKey] = false"
           />
           <div
-            v-if="!tab.noApi && isCenterPluginTabMounted(tab.tabKey)"
+            v-if="loadingCenterPluginTabs[tab.tabKey] && isCenterPluginTabMounted(tab.tabKey)"
+            class="absolute-full flex flex-center"
+            :class="$q.dark.isActive ? 'bg-dark' : 'bg-grey-1'"
+          >
+            <q-spinner color="primary" size="3em" />
+          </div>
+          <div
+            v-if="
+              !tab.noApi &&
+              isCenterPluginTabMounted(tab.tabKey) &&
+              !loadingCenterPluginTabs[tab.tabKey]
+            "
             class="absolute-top-right q-ma-sm"
           >
             <q-btn
@@ -279,6 +292,7 @@ const props = defineProps<{
     src: string;
     sandbox?: string;
     noApi?: boolean;
+    keepAlive?: boolean;
   }>;
   resolvePluginApi: (
     pluginId: string,
@@ -307,19 +321,35 @@ defineEmits<{
 
 const advancedPlannerRef = ref<InstanceType<typeof AdvancedPlanner>>();
 const mountedCenterPluginTabs = ref<Record<string, boolean>>({});
+const loadingCenterPluginTabs = ref<Record<string, boolean>>({});
 
 watch(
   () => [props.centerTab, props.centerPluginTabs] as const,
   ([tab, tabs]) => {
-    if (tab && tabs.some((it) => it.tabKey === tab)) {
-      mountedCenterPluginTabs.value = {
-        ...mountedCenterPluginTabs.value,
-        [tab]: true,
-      };
+    // 只有声明了 keepAlive 的 Tab 才会被记录在 mountedCenterPluginTabs 中
+    if (tab) {
+      const currentTab = tabs.find((it) => it.tabKey === tab);
+      if (currentTab && currentTab.keepAlive) {
+        mountedCenterPluginTabs.value = {
+          ...mountedCenterPluginTabs.value,
+          [tab]: true,
+        };
+      }
+      // 初始化 loading 状态
+      if (currentTab && loadingCenterPluginTabs.value[tab] === undefined) {
+        loadingCenterPluginTabs.value = {
+          ...loadingCenterPluginTabs.value,
+          [tab]: true,
+        };
+      }
     }
     const validKeys = new Set(tabs.map((it) => it.tabKey));
     mountedCenterPluginTabs.value = Object.fromEntries(
       Object.entries(mountedCenterPluginTabs.value).filter(([key]) => validKeys.has(key)),
+    );
+    // 清理无效的 loading 状态
+    loadingCenterPluginTabs.value = Object.fromEntries(
+      Object.entries(loadingCenterPluginTabs.value).filter(([key]) => validKeys.has(key)),
     );
   },
   { immediate: true },
@@ -345,6 +375,9 @@ const currentViewTitle = computed(() => {
 });
 
 function isCenterPluginTabMounted(tabKey: string): boolean {
+  // 如果当前是激活状态，总是渲染
+  if (props.centerTab === tabKey) return true;
+  // 如果之前挂载过且声明了 keepAlive，则保持渲染
   return !!mountedCenterPluginTabs.value[tabKey];
 }
 

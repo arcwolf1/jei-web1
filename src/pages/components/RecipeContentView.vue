@@ -162,6 +162,7 @@
     <template v-for="tab in pluginTabs" :key="tab.tabKey">
       <div v-if="tab.iframe" v-show="activeTab === tab.tabKey" class="col column">
         <plugin-iframe-tab
+          v-if="isPluginTabMounted(tab.tabKey, tab.iframe.keepAlive)"
           class="col"
           :plugin-id="tab.pluginId"
           :src="tab.iframe.src(pluginContext) ?? ''"
@@ -427,6 +428,37 @@ const props = defineProps<{
   containerClass?: string;
   panelClass?: string;
 }>();
+
+const mountedPluginTabs = ref<Record<string, boolean>>({});
+
+watch(
+  () => [props.activeTab, props.pluginTabs] as const,
+  ([tab, tabs]) => {
+    // 只有声明了 keepAlive 的 Tab 才会被记录在 mountedPluginTabs 中
+    if (tab) {
+      const currentTab = tabs.find((it) => it.tabKey === tab);
+      if (currentTab?.iframe?.keepAlive) {
+        mountedPluginTabs.value = {
+          ...mountedPluginTabs.value,
+          [tab]: true,
+        };
+      }
+    }
+    const validKeys = new Set(tabs.map((it) => it.tabKey));
+    mountedPluginTabs.value = Object.fromEntries(
+      Object.entries(mountedPluginTabs.value).filter(([key]) => validKeys.has(key)),
+    );
+  },
+  { immediate: true },
+);
+
+function isPluginTabMounted(tabKey: string, keepAlive?: boolean): boolean {
+  // 如果当前是激活状态，总是渲染
+  if (props.activeTab === tabKey) return true;
+  // 如果声明了 keepAlive 且之前挂载过，则保持渲染
+  if (keepAlive && mountedPluginTabs.value[tabKey]) return true;
+  return false;
+}
 
 function normalizeWikiItem(raw: unknown): WikiItem | null {
   if (!raw || typeof raw !== 'object') return null;

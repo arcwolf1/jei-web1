@@ -26,13 +26,22 @@
         @click="callFirstService"
       />
     </div>
-    <div class="plugin-iframe-tab__frame-wrap">
+    <div class="plugin-iframe-tab__frame-wrap relative-position">
       <iframe
+        v-show="!isLoading"
         ref="iframeRef"
         class="plugin-iframe-tab__frame"
         :src="src || undefined"
         :sandbox="sandbox || defaultSandbox"
+        @load="onIframeLoad"
       />
+      <div
+        v-if="isLoading"
+        class="absolute-full flex flex-center"
+        :class="$q.dark.isActive ? 'bg-dark' : 'bg-grey-1'"
+      >
+        <q-spinner color="primary" size="3em" />
+      </div>
     </div>
     <q-banner v-if="lastResult" dense class="bg-grey-2 text-grey-9">
       {{ lastResult }}
@@ -42,6 +51,7 @@
 
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref, watch, inject } from 'vue';
+import { useQuasar } from 'quasar';
 import type { PluginItemContext, HostApiHandler } from 'src/jei/plugins/types';
 
 type MessageEnvelope = {
@@ -61,12 +71,14 @@ const props = defineProps<{
 }>();
 
 const iframeRef = ref<HTMLIFrameElement | null>(null);
+const isLoading = ref(true);
 const ready = ref(false);
 const services = ref<string[]>([]);
 const lastResult = ref('');
 const pendingServiceRequests = new Map<string, string>();
 const defaultSandbox = 'allow-scripts allow-same-origin';
 const hostApi = inject<HostApiHandler>('pluginHostApi');
+const $q = useQuasar();
 
 const statusText = computed(() => {
   if (!props.src) return 'iframe 未配置';
@@ -212,11 +224,22 @@ function callFirstService(): void {
   });
 }
 
+function onIframeLoad() {
+  isLoading.value = false;
+}
+
 watch(
   () => [props.context.itemDef?.key.id, props.context.activeTab, props.src] as const,
   () => {
     if (!ready.value) return;
     pushContext();
+  },
+);
+
+watch(
+  () => props.src,
+  () => {
+    isLoading.value = true;
   },
 );
 

@@ -68,30 +68,50 @@ queryActions: [
 
 ### 3. Iframe 标签页 (`tabs`)
 
-在物品详情页嵌入自定义 iframe 页面。
+在物品详情页嵌入自定义 iframe 页面。支持定义多个标签页。
 
 ```typescript
 tabs: [
   {
-    key: 'custom-tab',
-    label: '自定义页面',
+    key: 'custom-tab-1',
+    label: '自定义页面 1',
     order: 10,
-    visibleWhen: (context) => !!context.itemDef, // 控制标签页显隐
+    visibleWhen: (context) => !!context.itemDef,
     iframe: {
-      // 动态生成 iframe URL
-      src: (context) => {
-        const itemId = context.itemDef?.key.id;
-        return `https://example.com/item/${itemId}`;
-      },
-      // 允许通信的源，必须显式声明
-      allowedOrigins: ['https://example.com'],
-      // 可选：自定义 sandbox 属性
-      sandbox: 'allow-scripts allow-same-origin',
-      // 可选：设为 true 则不显示“API连接中”状态条，仅显示外部打开按钮
-      noApi: true,
+      /* ... */
+    },
+  },
+  {
+    key: 'custom-tab-2',
+    label: '自定义页面 2',
+    order: 20,
+    iframe: {
+      /* ... */
     },
   },
 ];
+```
+
+#### 单个 Tab 配置示例
+
+```typescript
+{
+  key: 'wiki-tab',
+  label: 'Wiki',
+  iframe: {
+    // 动态生成 iframe URL
+    src: (context) => {
+      const itemId = context.itemDef?.key.id;
+      return `https://example.com/item/${itemId}`;
+    },
+    // 允许通信的源，必须显式声明
+    allowedOrigins: ['https://example.com'],
+    // 可选：自定义 sandbox 属性
+    sandbox: 'allow-scripts allow-same-origin',
+    // 可选：设为 true 则不显示“API连接中”状态条，仅显示外部打开按钮
+    noApi: true,
+  },
+}
 ```
 
 ## Iframe 通信协议

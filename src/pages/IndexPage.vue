@@ -657,6 +657,7 @@ const centerPluginTabs = computed<
     src: string;
     sandbox?: string;
     noApi?: boolean;
+    keepAlive?: boolean;
   }>
 >(() =>
   pluginManager
@@ -669,6 +670,7 @@ const centerPluginTabs = computed<
         src: tab.iframe.src(pluginContext.value) ?? '',
         ...(typeof sandbox === 'string' ? { sandbox } : {}),
         ...(typeof tab.iframe.noApi === 'boolean' ? { noApi: tab.iframe.noApi } : {}),
+        ...(typeof tab.iframe.keepAlive === 'boolean' ? { keepAlive: tab.iframe.keepAlive } : {}),
       };
     })
     .filter((tab) => !!tab.src),
