@@ -1,16 +1,32 @@
 # About
 
 ## Build
-- Version: 3c4bd14-dirty
-- Commit: 3c4bd14 (3c4bd14873b8ddc706d066c9b1578444666bc100)
-- Commit count: 108
-- Subject: feat: 修复type2数据的y坐标反转问题
+- Version: d53e9ab-dirty
+- Commit: d53e9ab (d53e9ab606fc4f41b249b09e74d45ba434295c01)
+- Commit count: 112
+- Subject: feat: 添加图标标签页及相关功能，优化上下文菜单和键绑定
 - Author: AndreaFrederica
-- Date: 2026-02-25T02:39:30+08:00
-- Generated at: 2026-02-24T19:38:12.343Z
+- Date: 2026-02-25T04:27:46+08:00
+- Generated at: 2026-03-10T15:44:56.688Z
 - Remote: https://github.com/AndreaFrederica/jei-web.git
 
 ## Version History
+
+### r112 (2026-02-25T04:27:46+08:00)
+- d53e9ab
+  feat: 添加图标标签页及相关功能，优化上下文菜单和键绑定
+
+### r111 (2026-02-25T03:54:42+08:00)
+- 9083827
+  feat: 添加单关模式下的分享编码逻辑，优化分享链接生成
+
+### r110 (2026-02-25T03:52:27+08:00)
+- dd90b31
+  feat: 添加单关题组的高级共享选项，优化分享链接生成逻辑
+
+### r109 (2026-02-25T03:43:20+08:00)
+- f09e62a
+  feat: 添加旋转功能到type2拼图块，优化解析逻辑
 
 ### r108 (2026-02-25T02:39:30+08:00)
 - 3c4bd14

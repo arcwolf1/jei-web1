@@ -56,7 +56,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed } from 'vue';
+import { computed, onMounted, watch } from 'vue';
 import MarkdownIt from 'markdown-it';
 import type { ItemDef, ItemKey, Recipe, RecipeTypeDef } from 'src/jei/types';
 import type { Document } from 'src/types/wiki';
@@ -76,7 +76,25 @@ const emit = defineEmits<{
   (e: 'item-mouseleave'): void;
   (e: 'item-context-menu', evt: Event, keyHash: string): void;
   (e: 'item-touch-hold', evt: unknown, keyHash: string): void;
+  (e: 'ensure-recipe-detail', recipeId: string): void;
 }>();
+
+function ensureRecipeDetailRequest() {
+  if (props.recipe.detailLoaded) return;
+  if (!props.recipe.detailPath) return;
+  emit('ensure-recipe-detail', props.recipe.id);
+}
+
+onMounted(() => {
+  ensureRecipeDetailRequest();
+});
+
+watch(
+  () => [props.recipe.id, props.recipe.detailPath, props.recipe.detailLoaded] as const,
+  () => {
+    ensureRecipeDetailRequest();
+  },
+);
 
 const md = new MarkdownIt({
   html: true,

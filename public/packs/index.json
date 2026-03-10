@@ -1,20 +1,16 @@
 {
   "packs": [
-    {
+        {
       "packId": "aef",
       "label": "Arknights:Endfield"
     },
     {
       "packId": "aef-skland",
-      "label": "Arknights:Endfield Skland Wiki"
-    },
-    {
-      "packId": "demo",
-      "label": "Demo Game Pack"
-    },
-    {
-      "packId": "single-item-demo",
-      "label": "Single Item Demo (New Format)"
+      "label": "Arknights:Endfield (Skland)",
+      "mirrors": [
+        "https://fastjeiskland.sirrus.cc/",
+        "https://jeiskland.sirrus.cc/"
+      ]
     }
   ]
 }

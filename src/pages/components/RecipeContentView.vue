@@ -269,6 +269,7 @@
                           :recipe-type="recipeTypesByKey.get(recipesById.get(rid)?.type || '')"
                           :item-defs-by-key-hash="itemDefsByKeyHash"
                           :lazy-visual="true"
+                          @ensure-recipe-detail="$emit('ensure-recipe-detail', $event)"
                           @item-click="$emit('item-click', $event)"
                           @item-mouseenter="$emit('item-mouseenter', $event)"
                           @item-mouseleave="$emit('item-mouseleave')"
@@ -290,6 +291,7 @@
                       :recipe-type="recipeTypesByKey.get(recipesById.get(rid)?.type || '')"
                       :item-defs-by-key-hash="itemDefsByKeyHash"
                       :lazy-visual="true"
+                      @ensure-recipe-detail="$emit('ensure-recipe-detail', $event)"
                       @item-click="$emit('item-click', $event)"
                       @item-mouseenter="$emit('item-mouseenter', $event)"
                       @item-mouseleave="$emit('item-mouseleave')"
@@ -480,6 +482,7 @@ const emit = defineEmits<{
   'item-mouseleave': [];
   'item-context-menu': [evt: Event, keyHash: string];
   'item-touch-hold': [evt: unknown, keyHash: string];
+  'ensure-recipe-detail': [recipeId: string];
   'update:active-type-key': [typeKey: string];
 }>();
 

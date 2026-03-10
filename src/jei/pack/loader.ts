@@ -39,6 +39,8 @@ export interface PackSource {
 
 const packRegistry = new Map<string, PackSource>();
 const activePackBaseUrl = new Map<string, string>();
+const packMirrorMode = new Map<string, 'auto' | 'manual'>();
+const packManualMirror = new Map<string, string>();
 
 export function clearPackRuntimeCache(packId?: string) {
   if (packId) {
@@ -62,10 +64,79 @@ export function registerPackSource(source: PackSource) {
   packRegistry.set(source.packId, source);
 }
 
+export function getPackSource(packId: string): PackSource | undefined {
+  return packRegistry.get(packId);
+}
+
+export function setPackMirrorPreference(
+  packId: string,
+  mode: 'auto' | 'manual',
+  manualMirror?: string,
+) {
+  packMirrorMode.set(packId, mode);
+  if (mode === 'manual' && manualMirror) {
+    packManualMirror.set(packId, manualMirror.replace(/\/+$/, ''));
+  } else if (mode === 'auto') {
+    packManualMirror.delete(packId);
+  }
+  activePackBaseUrl.delete(packId);
+  manifestCache.delete(packId);
+}
+
+function registrableDomain(hostname: string): string {
+  const parts = hostname.split('.').filter(Boolean);
+  if (parts.length < 2) return hostname;
+  return `${parts[parts.length - 2]}.${parts[parts.length - 1]}`;
+}
+
+function suffixMatchScore(a: string, b: string): number {
+  const pa = a.split('.').filter(Boolean).reverse();
+  const pb = b.split('.').filter(Boolean).reverse();
+  const n = Math.min(pa.length, pb.length);
+  let score = 0;
+  for (let i = 0; i < n; i += 1) {
+    if (pa[i] !== pb[i]) break;
+    score += 1;
+  }
+  return score;
+}
+
+function scoreMirrorUrlByHostProximity(url: string, current: URL): number {
+  let target: URL;
+  try {
+    target = new URL(url, current.origin);
+  } catch {
+    return -1;
+  }
+  const targetHost = target.hostname;
+  if (!targetHost) return -1;
+  let score = 0;
+  if (targetHost === current.hostname) score += 10000;
+  if (registrableDomain(targetHost) === registrableDomain(current.hostname)) score += 2000;
+  score += suffixMatchScore(targetHost, current.hostname) * 100;
+  if (target.protocol === current.protocol) score += 10;
+  return score;
+}
+
 function getPackBaseUrls(packId: string): string[] {
   const source = packRegistry.get(packId);
   if (source?.mirrors?.length) {
-    return source.mirrors.map((m) => m.replace(/\/+$/, ''));
+    const mirrors = source.mirrors.map((m) => m.replace(/\/+$/, ''));
+    const mode = packMirrorMode.get(packId) ?? 'auto';
+    const manual = packManualMirror.get(packId);
+    if (mode === 'manual' && manual && mirrors.includes(manual)) {
+      return [manual, ...mirrors.filter((m) => m !== manual)];
+    }
+    if (typeof window === 'undefined') return mirrors;
+    const current = new URL(window.location.href);
+    return mirrors
+      .map((url, idx) => ({
+        url,
+        idx,
+        score: scoreMirrorUrlByHostProximity(url, current),
+      }))
+      .sort((a, b) => b.score - a.score || a.idx - b.idx)
+      .map((it) => it.url);
   }
   const safe = encodeURIComponent(packId);
   return [`/packs/${safe}`];
@@ -429,6 +500,22 @@ export async function loadPack(packId: string): Promise<PackData> {
 export async function loadPackItemDetail(packId: string, detailPath: string): Promise<ItemDef> {
   const base = packBaseUrl(packId);
   const normalizedPath = detailPath.replace(/^\/+/, '');
+  const raw = await resolveDetailRaw(packId, base, normalizedPath, 'item detail');
+  const item = assertItemDef(raw, '$.itemDetail');
+  const manifest = await loadManifest(packId);
+  await ensurePackImageProxyTokens(manifest);
+  applyImageProxyToItem(item as unknown as Record<string, unknown>, manifest);
+  item.detailPath = normalizedPath;
+  item.detailLoaded = true;
+  return item;
+}
+
+async function resolveDetailRaw(
+  packId: string,
+  base: string,
+  normalizedPath: string,
+  label: string,
+): Promise<unknown> {
   const sharp = normalizedPath.lastIndexOf('#');
   const sourcePath = sharp > 0 ? normalizedPath.slice(0, sharp) : normalizedPath;
   const frag = sharp > 0 ? normalizedPath.slice(sharp + 1) : '';
@@ -444,21 +531,24 @@ export async function loadPackItemDetail(packId: string, detailPath: string): Pr
     }
     const arr = await arrayPromise;
     if (!Array.isArray(arr)) {
-      throw new Error(`Failed to load item detail from ${sourcePath}: expected array`);
+      throw new Error(`Failed to load ${label} from ${sourcePath}: expected array`);
     }
     raw = arr[idx];
     if (raw === undefined) {
-      throw new Error(`Failed to load item detail from ${sourcePath}: index ${idx} out of range`);
+      throw new Error(`Failed to load ${label} from ${sourcePath}: index ${idx} out of range`);
     }
   } else {
     raw = await fetchJson(`${base}/${sourcePath}`, packId);
   }
+  return raw;
+}
 
-  const item = assertItemDef(raw, '$.itemDetail');
-  const manifest = await loadManifest(packId);
-  await ensurePackImageProxyTokens(manifest);
-  applyImageProxyToItem(item as unknown as Record<string, unknown>, manifest);
-  item.detailPath = normalizedPath;
-  item.detailLoaded = true;
-  return item;
+export async function loadPackRecipeDetail(packId: string, detailPath: string): Promise<Recipe> {
+  const base = packBaseUrl(packId);
+  const normalizedPath = detailPath.replace(/^\/+/, '');
+  const raw = await resolveDetailRaw(packId, base, normalizedPath, 'recipe detail');
+  const recipe = assertRecipe(raw, '$.recipeDetail');
+  recipe.detailPath = normalizedPath;
+  recipe.detailLoaded = true;
+  return recipe;
 }

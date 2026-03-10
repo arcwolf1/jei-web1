@@ -81,6 +81,9 @@ export const useSettingsStore = defineStore('settings', {
       circuitEditorPiecePanel: { x: 16, y: 120, width: 420, height: 620, minimized: false, docked: false } as CircuitEditorPiecePanelState,
       circuitEditorPiecePanelSplitRatio: 0.5,
       detectPcDisableMobile: true,
+      customPackSources: [] as Array<{ packId: string; label: string; mirrors: string[] }>,
+      packMirrorSelectionModeByPack: {} as Record<string, 'auto' | 'manual'>,
+      packManualMirrorByPack: {} as Record<string, string>,
     };
     try {
       const raw = getSettingsJSON();
@@ -211,6 +214,29 @@ export const useSettingsStore = defineStore('settings', {
           typeof parsed.detectPcDisableMobile === 'boolean'
             ? parsed.detectPcDisableMobile
             : defaults.detectPcDisableMobile,
+        customPackSources: Array.isArray(parsed.customPackSources)
+          ? parsed.customPackSources.filter(
+            (x): x is { packId: string; label: string; mirrors: string[] } =>
+              typeof x === 'object' && !!x && typeof x.packId === 'string' && typeof x.label === 'string' && Array.isArray(x.mirrors)
+          )
+          : defaults.customPackSources,
+        packMirrorSelectionModeByPack:
+          parsed.packMirrorSelectionModeByPack && typeof parsed.packMirrorSelectionModeByPack === 'object'
+            ? Object.fromEntries(
+              Object.entries(parsed.packMirrorSelectionModeByPack).filter(
+                (entry): entry is [string, 'auto' | 'manual'] =>
+                  (entry[1] === 'auto' || entry[1] === 'manual'),
+              ),
+            )
+            : defaults.packMirrorSelectionModeByPack,
+        packManualMirrorByPack:
+          parsed.packManualMirrorByPack && typeof parsed.packManualMirrorByPack === 'object'
+            ? Object.fromEntries(
+              Object.entries(parsed.packManualMirrorByPack).filter(
+                (entry): entry is [string, string] => typeof entry[1] === 'string',
+              ),
+            )
+            : defaults.packManualMirrorByPack,
       };
       syncProxyTokensToStorage(restored);
       return restored;
@@ -349,6 +375,35 @@ export const useSettingsStore = defineStore('settings', {
       this.detectPcDisableMobile = value;
       void this.save();
     },
+    addCustomPackSource(source: { packId: string; label: string; mirrors: string[] }) {
+      // Ensure prefix
+      const safeId = source.packId.startsWith('ext-') ? source.packId : `ext-${source.packId}`;
+      const existing = this.customPackSources.findIndex((s) => s.packId === safeId);
+      if (existing >= 0) {
+        this.customPackSources[existing] = { ...source, packId: safeId };
+      } else {
+        this.customPackSources.push({ ...source, packId: safeId });
+      }
+      void this.save();
+    },
+    removeCustomPackSource(packId: string) {
+      this.customPackSources = this.customPackSources.filter((s) => s.packId !== packId);
+      void this.save();
+    },
+    setPackMirrorSelectionMode(packId: string, mode: 'auto' | 'manual') {
+      this.packMirrorSelectionModeByPack = {
+        ...this.packMirrorSelectionModeByPack,
+        [packId]: mode,
+      };
+      void this.save();
+    },
+    setPackManualMirror(packId: string, url: string) {
+      this.packManualMirrorByPack = {
+        ...this.packManualMirrorByPack,
+        [packId]: url,
+      };
+      void this.save();
+    },
     async save() {
       const json = JSON.stringify({
         historyLimit: this.historyLimit,
@@ -380,6 +435,9 @@ export const useSettingsStore = defineStore('settings', {
         circuitEditorPiecePanel: this.circuitEditorPiecePanel,
         circuitEditorPiecePanelSplitRatio: this.circuitEditorPiecePanelSplitRatio,
         detectPcDisableMobile: this.detectPcDisableMobile,
+        customPackSources: this.customPackSources,
+        packMirrorSelectionModeByPack: this.packMirrorSelectionModeByPack,
+        packManualMirrorByPack: this.packManualMirrorByPack,
       });
       await saveSettingsJSON(json);
     },
@@ -428,6 +486,27 @@ export const useSettingsStore = defineStore('settings', {
       if (typeof parsed.circuitCollectionPreviewShowPieces === 'boolean') this.circuitCollectionPreviewShowPieces = parsed.circuitCollectionPreviewShowPieces;
       if (typeof parsed.circuitEditorPiecePanelSplitRatio === 'number') this.circuitEditorPiecePanelSplitRatio = parsed.circuitEditorPiecePanelSplitRatio;
       if (typeof parsed.detectPcDisableMobile === 'boolean') this.detectPcDisableMobile = parsed.detectPcDisableMobile;
+      if (Array.isArray(parsed.customPackSources)) {
+        this.customPackSources = parsed.customPackSources.filter(
+          (x): x is { packId: string; label: string; mirrors: string[] } =>
+            typeof x === 'object' && !!x && typeof x.packId === 'string' && typeof x.label === 'string' && Array.isArray(x.mirrors)
+        );
+      }
+      if (parsed.packMirrorSelectionModeByPack && typeof parsed.packMirrorSelectionModeByPack === 'object') {
+        this.packMirrorSelectionModeByPack = Object.fromEntries(
+          Object.entries(parsed.packMirrorSelectionModeByPack).filter(
+            (entry): entry is [string, 'auto' | 'manual'] =>
+              (entry[1] === 'auto' || entry[1] === 'manual'),
+          ),
+        );
+      }
+      if (parsed.packManualMirrorByPack && typeof parsed.packManualMirrorByPack === 'object') {
+        this.packManualMirrorByPack = Object.fromEntries(
+          Object.entries(parsed.packManualMirrorByPack).filter(
+            (entry): entry is [string, string] => typeof entry[1] === 'string',
+          ),
+        );
+      }
     },
   },
 });

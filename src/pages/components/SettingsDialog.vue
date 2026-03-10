@@ -124,6 +124,61 @@
         </div>
 
         <q-separator class="q-my-sm" />
+        <div class="text-subtitle2 q-mb-sm">{{ t('packMirrorRoutingTitle') }}</div>
+        <q-select
+          dense
+          outlined
+          emit-value
+          map-options
+          :label="t('packMirrorMode')"
+          :options="[
+            { label: t('packMirrorModeAuto'), value: 'auto' },
+            { label: t('packMirrorModeManual'), value: 'manual' },
+          ]"
+          :model-value="packMirrorSelectionMode"
+          @update:model-value="
+            $emit('update:pack-mirror-selection-mode', $event as 'auto' | 'manual')
+          "
+        />
+        <q-select
+          dense
+          outlined
+          emit-value
+          map-options
+          :disable="packMirrors.length === 0 || packMirrorSelectionMode !== 'manual'"
+          :label="t('packMirrorManualSelect')"
+          :options="
+            packMirrors.map((m) => ({
+              label: `${m.url} (${formatLatency(m.latencyMs)})`,
+              value: m.url,
+            }))
+          "
+          :model-value="packManualMirror"
+          @update:model-value="$emit('update:pack-manual-mirror', String($event || ''))"
+        />
+        <q-btn
+          outline
+          color="primary"
+          :loading="mirrorLatencyLoading"
+          :label="t('packMirrorTestLatency')"
+          class="full-width q-mb-sm"
+          @click="$emit('refresh-mirror-latency')"
+        />
+        <q-list dense bordered separator>
+          <q-item v-for="mirror in packMirrors" :key="mirror.url">
+            <q-item-section>
+              <q-item-label>{{ mirror.url }}</q-item-label>
+              <q-item-label caption>
+                {{ t('packMirrorLatencyLabel') }}: {{ formatLatency(mirror.latencyMs) }}
+              </q-item-label>
+            </q-item-section>
+          </q-item>
+          <q-item v-if="packMirrors.length === 0">
+            <q-item-section class="text-grey italic">{{ t('packMirrorNoMirrors') }}</q-item-section>
+          </q-item>
+        </q-list>
+
+        <q-separator class="q-my-sm" />
         <div class="text-subtitle2 q-mb-sm">{{ t('packImageProxyTitle') }}</div>
         <q-toggle
           :label="t('packImageProxyUsePackProvided')"
@@ -234,6 +289,10 @@ defineProps<{
   packImageProxyAnonymousToken: string;
   packImageProxyFrameworkToken: string;
   customPackSources: Array<{ packId: string; url: string; label?: string }>;
+  packMirrors: Array<{ url: string; latencyMs: number | null }>;
+  packMirrorSelectionMode: 'auto' | 'manual';
+  packManualMirror: string;
+  mirrorLatencyLoading: boolean;
 }>();
 
 const emit = defineEmits<{
@@ -257,6 +316,9 @@ const emit = defineEmits<{
   'add-custom-source': [source: { packId: string; url: string; label?: string }];
   'remove-custom-source': [packId: string];
   'refresh-pack-cache': [];
+  'update:pack-mirror-selection-mode': [value: 'auto' | 'manual'];
+  'update:pack-manual-mirror': [value: string];
+  'refresh-mirror-latency': [];
 }>();
 
 import { ref } from 'vue';
@@ -275,5 +337,10 @@ function addSource() {
   newSourceId.value = '';
   newSourceUrl.value = '';
   newSourceLabel.value = '';
+}
+
+function formatLatency(latencyMs: number | null): string {
+  if (latencyMs == null) return t('packMirrorLatencyUnknown');
+  return `${Math.round(latencyMs)}ms`;
 }
 </script>

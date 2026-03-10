@@ -13,6 +13,7 @@
     :recipe-type="recipeType"
     :item-defs-by-key-hash="itemDefsByKeyHash"
     :lazy-visual="lazyVisual"
+    @ensure-recipe-detail="emit('ensure-recipe-detail', $event)"
     @item-click="emit('item-click', $event)"
     @item-mouseenter="emit('item-mouseenter', $event)"
     @item-mouseleave="emit('item-mouseleave')"
@@ -41,6 +42,7 @@ import WikiDocRecipeView from './WikiDocRecipeView.vue';
 
 const emit = defineEmits<{
   (e: 'item-click', itemKey: ItemKey): void;
+  (e: 'ensure-recipe-detail', recipeId: string): void;
   (e: 'item-mouseenter', keyHash: string): void;
   (e: 'item-mouseleave'): void;
   (e: 'item-context-menu', evt: Event, keyHash: string): void;

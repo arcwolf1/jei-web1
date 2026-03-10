@@ -104,6 +104,8 @@ export interface Recipe {
   slotContents: Record<string, SlotContent>;
   params?: Record<string, unknown>;
   inlineItems?: ItemDef[];
+  detailPath?: string;
+  detailLoaded?: boolean;
 }
 
 export interface InlineRecipe {

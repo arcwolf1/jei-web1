@@ -202,9 +202,16 @@
           label: s.label,
         }))
       "
+      :pack-mirrors="activePackMirrorRows"
+      :pack-mirror-selection-mode="activePackMirrorMode"
+      :pack-manual-mirror="activePackManualMirror"
+      :mirror-latency-loading="mirrorLatencyLoading"
       @add-custom-source="onAddCustomSource"
       @remove-custom-source="onRemoveCustomSource"
       @refresh-pack-cache="onRefreshPackCache"
+      @update:pack-mirror-selection-mode="onUpdatePackMirrorSelectionMode"
+      @update:pack-manual-mirror="onUpdatePackManualMirror"
+      @refresh-mirror-latency="refreshActivePackMirrorLatency"
       @open-keybindings="keybindingsOpen = true"
     />
 
@@ -242,6 +249,7 @@
       @machine-item-click="openMachineItem"
       @save-plan="savePlannerPlan"
       @state-change="onPlannerStateChange"
+      @ensure-recipe-detail="ensureRecipeDetailLoadedById"
       @item-mouseenter="
         hoveredKeyHash = $event;
         hoveredSource = 'recipe';
@@ -272,9 +280,12 @@ import type { ItemDef, ItemKey, PackData, Recipe } from 'src/jei/types';
 import { useDialogManager } from 'src/stores/dialogManager';
 import {
   clearPackRuntimeCache,
+  getPackSource,
   loadPackItemDetail,
+  loadPackRecipeDetail,
   loadRuntimePack,
   registerPackSource,
+  setPackMirrorPreference,
 } from 'src/jei/pack/loader';
 import { applyImageProxyToPack, ensurePackImageProxyTokens } from 'src/jei/pack/imageProxy';
 import {
@@ -453,11 +464,33 @@ const pageSize = ref(120);
 
 const settingsOpen = ref(false);
 const keybindingsOpen = ref(false);
+const mirrorLatencyByUrl = ref<Record<string, number | null>>({});
+const mirrorLatencyLoading = ref(false);
 const dialogOpen = ref(false);
 const contextMenuRef = ref();
 const centerPanelRef = ref();
 const contextMenuOpen = ref(false);
 const contextMenuKeyHash = ref<string | null>(null);
+
+const activePackMirrorMode = computed(
+  () => settingsStore.packMirrorSelectionModeByPack[activePackId.value] ?? 'auto',
+);
+const activePackMirrors = computed(() => {
+  const source = getPackSource(activePackId.value);
+  if (!source?.mirrors?.length) return [];
+  return source.mirrors.map((m) => m.replace(/\/+$/, ''));
+});
+const activePackManualMirror = computed(() => {
+  const saved = settingsStore.packManualMirrorByPack[activePackId.value];
+  if (saved) return saved;
+  return activePackMirrors.value[0] ?? '';
+});
+const activePackMirrorRows = computed(() =>
+  activePackMirrors.value.map((url) => ({
+    url,
+    latencyMs: mirrorLatencyByUrl.value[url] ?? null,
+  })),
+);
 
 function onContextMenu(evt: Event, keyHash: string) {
   contextMenuKeyHash.value = keyHash;
@@ -603,6 +636,7 @@ function mergeInlineItems(items: ItemDef[], recipes: Recipe[]): ItemDef[] {
 }
 
 const itemDetailLoadTasks = new Map<string, Promise<void>>();
+const recipeDetailLoadTasks = new Map<string, Promise<void>>();
 
 async function ensureItemDetailLoadedByKeyHash(keyHash: string): Promise<void> {
   const inflight = itemDetailLoadTasks.get(keyHash);
@@ -680,6 +714,53 @@ async function ensureItemDetailLoadedByKeyHash(keyHash: string): Promise<void> {
     await task;
   } finally {
     itemDetailLoadTasks.delete(keyHash);
+  }
+}
+
+async function ensureRecipeDetailLoadedById(recipeId: string): Promise<void> {
+  if (!recipeId) return;
+  const inflight = recipeDetailLoadTasks.get(recipeId);
+  if (inflight) return inflight;
+
+  const task = (async () => {
+    try {
+      const p = pack.value;
+      const idx = index.value;
+      if (!p || !idx) return;
+
+      const recipe = idx.recipesById.get(recipeId);
+      if (!recipe || recipe.detailLoaded || !recipe.detailPath) return;
+
+      const selectedPackAtStart = activePackId.value;
+      const packIdAtStart = p.manifest.packId;
+      const detailPath = recipe.detailPath;
+      const detail = await loadPackRecipeDetail(packIdAtStart, detailPath);
+
+      const currentPack = pack.value;
+      if (
+        !currentPack ||
+        currentPack.manifest.packId !== packIdAtStart ||
+        activePackId.value !== selectedPackAtStart
+      ) {
+        return;
+      }
+
+      const currentRecipe = index.value?.recipesById.get(recipeId);
+      if (!currentRecipe) return;
+      Object.assign(currentRecipe, detail, {
+        detailPath,
+        detailLoaded: true,
+      });
+    } catch (e) {
+      console.warn(`Failed to lazy-load recipe detail for ${recipeId}`, e);
+    }
+  })();
+
+  recipeDetailLoadTasks.set(recipeId, task);
+  try {
+    await task;
+  } finally {
+    recipeDetailLoadTasks.delete(recipeId);
   }
 }
 
@@ -1253,6 +1334,13 @@ watch(activePackId, async (next) => {
   void recomputePageSize(); // 切 pack 后重新计算一次
 });
 watch(
+  () => [settingsOpen.value, activePackId.value] as const,
+  async ([open]) => {
+    if (!open) return;
+    await refreshActivePackMirrorLatency();
+  },
+);
+watch(
   () =>
     [
       settingsStore.packImageProxyUsePackProvided,
@@ -1275,7 +1363,9 @@ async function reloadPack(packId: string) {
   error.value = '';
   loading.value = true;
   try {
+    applyMirrorPreference(packId);
     itemDetailLoadTasks.clear();
+    recipeDetailLoadTasks.clear();
     applyingRoute.value = true;
     closeDialog();
     applyingRoute.value = false;
@@ -1363,6 +1453,7 @@ async function loadPacksIndex() {
     if (!res.ok) {
       // 失败时，注册自定义源并返回
       registerCustomSources();
+      applyAllMirrorPreferences();
       packOptions.value = [...custom, ...packOptions.value, ...local];
       return;
     }
@@ -1383,6 +1474,7 @@ async function loadPacksIndex() {
 
       // 2. 注册自定义源（覆盖远程同名源）
       registerCustomSources();
+      applyAllMirrorPreferences();
 
       packOptions.value = [...remote, ...custom, ...local];
 
@@ -1393,6 +1485,7 @@ async function loadPacksIndex() {
     }
   } catch {
     registerCustomSources();
+    applyAllMirrorPreferences();
     packOptions.value = [...custom, ...packOptions.value, ...local];
   }
 }
@@ -1420,6 +1513,75 @@ function onAddCustomSource(source: { packId: string; url: string; label?: string
 function onRemoveCustomSource(packId: string) {
   settingsStore.removeCustomPackSource(packId);
   void loadPacksIndex();
+}
+
+function applyMirrorPreference(packId: string) {
+  const mode = settingsStore.packMirrorSelectionModeByPack[packId] ?? 'auto';
+  const manual = settingsStore.packManualMirrorByPack[packId];
+  setPackMirrorPreference(packId, mode, manual);
+}
+
+function applyAllMirrorPreferences() {
+  Object.keys(settingsStore.packMirrorSelectionModeByPack).forEach((packId) => {
+    applyMirrorPreference(packId);
+  });
+}
+
+async function measureMirrorLatency(url: string): Promise<number | null> {
+  try {
+    const endpoint = `${url.replace(/\/+$/, '')}/manifest.json?__ping=${Date.now()}`;
+    const controller = new AbortController();
+    const timeout = window.setTimeout(() => controller.abort(), 6000);
+    const t0 = performance.now();
+    const res = await fetch(endpoint, {
+      method: 'GET',
+      cache: 'no-store',
+      headers: { Accept: 'application/json' },
+      signal: controller.signal,
+    });
+    window.clearTimeout(timeout);
+    if (!res.ok) return null;
+    return performance.now() - t0;
+  } catch {
+    return null;
+  }
+}
+
+async function refreshActivePackMirrorLatency() {
+  const mirrors = activePackMirrors.value;
+  if (!mirrors.length) {
+    mirrorLatencyByUrl.value = {};
+    return;
+  }
+  mirrorLatencyLoading.value = true;
+  try {
+    const entries = await Promise.all(
+      mirrors.map(async (url) => [url, await measureMirrorLatency(url)] as const),
+    );
+    mirrorLatencyByUrl.value = Object.fromEntries(entries);
+  } finally {
+    mirrorLatencyLoading.value = false;
+  }
+}
+
+async function onUpdatePackMirrorSelectionMode(mode: 'auto' | 'manual') {
+  settingsStore.setPackMirrorSelectionMode(activePackId.value, mode);
+  if (mode === 'manual' && !settingsStore.packManualMirrorByPack[activePackId.value]) {
+    const first = activePackMirrors.value[0];
+    if (first) settingsStore.setPackManualMirror(activePackId.value, first);
+  }
+  applyMirrorPreference(activePackId.value);
+  clearPackRuntimeCache(activePackId.value);
+  await reloadPack(activePackId.value);
+}
+
+async function onUpdatePackManualMirror(url: string) {
+  settingsStore.setPackManualMirror(activePackId.value, url);
+  applyMirrorPreference(activePackId.value);
+  if (activePackMirrorMode.value === 'manual') {
+    clearPackRuntimeCache(activePackId.value);
+    await reloadPack(activePackId.value);
+  }
 }
 
 async function onRefreshPackCache() {

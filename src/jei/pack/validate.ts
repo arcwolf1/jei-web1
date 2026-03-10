@@ -300,6 +300,15 @@ export function assertRecipe(value: unknown, jsonPath: string): Recipe {
     }
     params = paramsRaw;
   }
+  const detailPath = assertOptionalString(obj.detailPath, `${jsonPath}.detailPath`);
+  const detailLoadedRaw = obj.detailLoaded;
+  let detailLoaded: boolean | undefined;
+  if (detailLoadedRaw !== undefined) {
+    if (typeof detailLoadedRaw !== 'boolean') {
+      throw new PackValidationError(`${jsonPath}.detailLoaded`, 'expected boolean');
+    }
+    detailLoaded = detailLoadedRaw;
+  }
 
   const out: Recipe = {
     id: assertString(obj.id, `${jsonPath}.id`),
@@ -308,6 +317,8 @@ export function assertRecipe(value: unknown, jsonPath: string): Recipe {
   };
   if (params !== undefined) out.params = params;
   if (inlineItems !== undefined) out.inlineItems = inlineItems;
+  if (detailPath !== undefined) out.detailPath = detailPath;
+  if (detailLoaded !== undefined) out.detailLoaded = detailLoaded;
   return out;
 }
 
