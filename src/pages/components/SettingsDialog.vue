@@ -58,6 +58,71 @@
           class="q-my-sm full-width"
           @click="$emit('open-keybindings')"
         />
+        <q-btn
+          flat
+          :label="t('refreshPackCache')"
+          color="warning"
+          class="q-mb-sm full-width"
+          @click="$emit('refresh-pack-cache')"
+        />
+        <q-separator class="q-my-sm" />
+
+        <div class="text-subtitle2 q-mb-sm">{{ t('customDataSources') }}</div>
+        <q-list dense bordered separator class="q-mb-md">
+          <q-item v-for="source in customPackSources" :key="source.packId">
+            <q-item-section>
+              <q-item-label>{{ source.label || source.packId }}</q-item-label>
+              <q-item-label caption>{{ source.url }}</q-item-label>
+              <q-item-label caption class="text-grey-7">ID: {{ source.packId }}</q-item-label>
+            </q-item-section>
+            <q-item-section side>
+              <q-btn
+                flat
+                round
+                dense
+                icon="delete"
+                color="negative"
+                @click="$emit('remove-custom-source', source.packId)"
+              />
+            </q-item-section>
+          </q-item>
+          <q-item v-if="customPackSources.length === 0">
+            <q-item-section class="text-grey italic">{{ t('noCustomSources') }}</q-item-section>
+          </q-item>
+        </q-list>
+
+        <div class="q-gutter-y-sm">
+          <q-input
+            v-model="newSourceId"
+            dense
+            outlined
+            :label="t('packId')"
+            placeholder="e.g. my-pack"
+          />
+          <q-input
+            v-model="newSourceUrl"
+            dense
+            outlined
+            :label="t('packUrl')"
+            placeholder="https://..."
+          />
+          <q-input
+            v-model="newSourceLabel"
+            dense
+            outlined
+            :label="t('packLabel')"
+            :placeholder="t('optional')"
+          />
+          <q-btn
+            outline
+            color="primary"
+            :label="t('addSource')"
+            class="full-width"
+            :disable="!newSourceId || !newSourceUrl"
+            @click="addSource"
+          />
+        </div>
+
         <q-separator class="q-my-sm" />
         <div class="text-subtitle2 q-mb-sm">{{ t('packImageProxyTitle') }}</div>
         <q-toggle
@@ -121,7 +186,9 @@
           :label="t('packImageProxyAnonymousToken')"
           type="password"
           :model-value="packImageProxyAnonymousToken"
-          @update:model-value="$emit('update:pack-image-proxy-anonymous-token', String($event ?? ''))"
+          @update:model-value="
+            $emit('update:pack-image-proxy-anonymous-token', String($event ?? ''))
+          "
         />
         <q-input
           dense
@@ -130,7 +197,9 @@
           :label="t('packImageProxyFrameworkToken')"
           type="password"
           :model-value="packImageProxyFrameworkToken"
-          @update:model-value="$emit('update:pack-image-proxy-framework-token', String($event ?? ''))"
+          @update:model-value="
+            $emit('update:pack-image-proxy-framework-token', String($event ?? ''))
+          "
         />
       </q-card-section>
       <q-card-actions align="right">
@@ -164,9 +233,10 @@ defineProps<{
   packImageProxyAccessToken: string;
   packImageProxyAnonymousToken: string;
   packImageProxyFrameworkToken: string;
+  customPackSources: Array<{ packId: string; url: string; label?: string }>;
 }>();
 
-defineEmits<{
+const emit = defineEmits<{
   'update:open': [value: boolean];
   'update:history-limit': [value: number];
   'update:debug-layout': [value: boolean];
@@ -184,5 +254,26 @@ defineEmits<{
   'update:pack-image-proxy-access-token': [value: string];
   'update:pack-image-proxy-anonymous-token': [value: string];
   'update:pack-image-proxy-framework-token': [value: string];
+  'add-custom-source': [source: { packId: string; url: string; label?: string }];
+  'remove-custom-source': [packId: string];
+  'refresh-pack-cache': [];
 }>();
+
+import { ref } from 'vue';
+
+const newSourceId = ref('');
+const newSourceUrl = ref('');
+const newSourceLabel = ref('');
+
+function addSource() {
+  if (!newSourceId.value || !newSourceUrl.value) return;
+  emit('add-custom-source', {
+    packId: newSourceId.value,
+    url: newSourceUrl.value,
+    label: newSourceLabel.value || undefined,
+  } as { packId: string; url: string; label?: string });
+  newSourceId.value = '';
+  newSourceUrl.value = '';
+  newSourceLabel.value = '';
+}
 </script>

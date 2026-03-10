@@ -75,6 +75,9 @@ export default {
   packImageProxyAccessToken: 'Access Token',
   packImageProxyAnonymousToken: 'Anonymous Token',
   packImageProxyFrameworkToken: 'Framework Token',
+  refreshPackCache: '現在のパックキャッシュを更新',
+  packCacheRefreshed: 'キャッシュを削除して現在のパックを再読み込みしました',
+  packCacheRefreshFailed: 'パックキャッシュの更新に失敗しました',
   close: '閉じる',
 
   // Context Menu
@@ -247,4 +250,13 @@ export default {
   pressKeyToBind: 'バインドするキーを押してください',
   resetToDefaults: 'デフォルトに戻す',
   detectPcDisableMobile: 'PC検出時にモバイルUIを無効化',
+
+  // Custom Sources
+  customDataSources: 'カスタムデータソース',
+  noCustomSources: 'カスタムデータソースなし',
+  packId: 'パックID',
+  packUrl: 'パックURL (ミラー)',
+  packLabel: '表示名',
+  addSource: 'ソースを追加',
+  optional: 'オプション',
 } as const;

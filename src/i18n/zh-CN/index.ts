@@ -76,6 +76,9 @@ export default {
   packImageProxyAccessToken: 'Access Token',
   packImageProxyAnonymousToken: 'Anonymous Token',
   packImageProxyFrameworkToken: 'Framework Token',
+  refreshPackCache: '刷新当前资源包缓存',
+  packCacheRefreshed: '已清除缓存并重新加载当前资源包',
+  packCacheRefreshFailed: '刷新资源包缓存失败',
   close: '关闭',
 
   // Context Menu
@@ -247,4 +250,13 @@ export default {
   keybindingCircuitDelete: '删除',
   pressKeyToBind: '按下要绑定的按键',
   resetToDefaults: '恢复默认',
+
+  // Custom Sources
+  customDataSources: '自定义数据源',
+  noCustomSources: '暂无自定义数据源',
+  packId: '数据源 ID',
+  packUrl: '数据源 URL (镜像地址)',
+  packLabel: '显示名称',
+  addSource: '添加源',
+  optional: '可选',
 } as const;

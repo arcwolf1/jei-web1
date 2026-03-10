@@ -5,11 +5,25 @@ import { assertItemDef, assertPackManifest, assertPackTags, assertRecipe, assert
 import { applyImageProxyToItem, applyImageProxyToPack, ensurePackImageProxyTokens } from './imageProxy';
 import JSZip from 'jszip';
 
-async function fetchJson(url: string): Promise<unknown> {
-  const res = await fetch(url, { headers: { Accept: 'application/json' } });
+const packRefreshToken = new Map<string, string>();
+
+function withRefreshToken(url: string, packId?: string): string {
+  if (!packId) return url;
+  const token = packRefreshToken.get(packId);
+  if (!token) return url;
+  const sep = url.includes('?') ? '&' : '?';
+  return `${url}${sep}__refresh=${encodeURIComponent(token)}`;
+}
+
+async function fetchJson(url: string, packId?: string): Promise<unknown> {
+  const requestUrl = withRefreshToken(url, packId);
+  const res = await fetch(requestUrl, {
+    headers: { Accept: 'application/json' },
+    ...(packId && packRefreshToken.has(packId) ? { cache: 'no-store' as const } : {}),
+  });
   if (!res.ok) {
     const body = await res.text().catch(() => '');
-    throw new Error(`Failed to fetch ${url} (${res.status}): ${body || res.statusText}`);
+    throw new Error(`Failed to fetch ${requestUrl} (${res.status}): ${body || res.statusText}`);
   }
   return res.json();
 }
@@ -17,9 +31,52 @@ async function fetchJson(url: string): Promise<unknown> {
 const jsonArrayCache = new Map<string, Promise<unknown>>();
 const manifestCache = new Map<string, Promise<PackManifest>>();
 
-function packBaseUrl(packId: string): string {
+export interface PackSource {
+  packId: string;
+  label: string;
+  mirrors: string[];
+}
+
+const packRegistry = new Map<string, PackSource>();
+const activePackBaseUrl = new Map<string, string>();
+
+export function clearPackRuntimeCache(packId?: string) {
+  if (packId) {
+    manifestCache.delete(packId);
+    activePackBaseUrl.delete(packId);
+    packRefreshToken.set(packId, `${Date.now()}`);
+    for (const key of jsonArrayCache.keys()) {
+      if (key.startsWith(`${packId}:`)) {
+        jsonArrayCache.delete(key);
+      }
+    }
+    return;
+  }
+  manifestCache.clear();
+  activePackBaseUrl.clear();
+  jsonArrayCache.clear();
+  packRefreshToken.clear();
+}
+
+export function registerPackSource(source: PackSource) {
+  packRegistry.set(source.packId, source);
+}
+
+function getPackBaseUrls(packId: string): string[] {
+  const source = packRegistry.get(packId);
+  if (source?.mirrors?.length) {
+    return source.mirrors.map((m) => m.replace(/\/+$/, ''));
+  }
   const safe = encodeURIComponent(packId);
-  return `/packs/${safe}`;
+  return [`/packs/${safe}`];
+}
+
+export function packBaseUrl(packId: string): string {
+  if (activePackBaseUrl.has(packId)) {
+    return activePackBaseUrl.get(packId)!;
+  }
+  const urls = getPackBaseUrls(packId);
+  return urls[0] ?? '';
 }
 
 function itemKeyHash(def: { key: { id: string; meta?: number | string; nbt?: unknown } }): string {
@@ -70,14 +127,25 @@ async function loadManifest(packId: string): Promise<PackManifest> {
   const cached = manifestCache.get(packId);
   if (cached) return cached;
   const task = (async () => {
-  const base = packBaseUrl(packId);
-  const raw = await fetchJson(`${base}/manifest.json`);
-  const manifest = assertPackManifest(raw, '$.manifest');
-  if (manifest.packId !== packId) {
-    throw new Error(`packId mismatch: requested "${packId}", manifest has "${manifest.packId}"`);
-  }
-  return manifest;
-  })().catch((err) => {
+    const baseUrls = getPackBaseUrls(packId);
+    let lastError: unknown;
+
+    for (const base of baseUrls) {
+      try {
+        const raw = await fetchJson(`${base}/manifest.json`, packId);
+        const manifest = assertPackManifest(raw, '$.manifest');
+        if (manifest.packId !== packId) {
+          throw new Error(`packId mismatch: requested "${packId}", manifest has "${manifest.packId}"`);
+        }
+        activePackBaseUrl.set(packId, base);
+        return manifest;
+      } catch (e) {
+        lastError = e;
+        console.warn(`Failed to load manifest from ${base}`, e);
+      }
+    }
+    throw lastError instanceof Error ? lastError : new Error(String(lastError) || `Failed to load manifest for ${packId}`);
+  })().catch((err: unknown) => {
     manifestCache.delete(packId);
     throw err;
   });
@@ -94,7 +162,7 @@ async function loadItems(base: string, manifest: PackManifest): Promise<ItemDef[
     if (!manifest.files.itemsIndex) {
       throw new Error('items directory specified but itemsIndex not defined in manifest');
     }
-    const indexRaw = await fetchJson(`${base}/${manifest.files.itemsIndex}`);
+    const indexRaw = await fetchJson(`${base}/${manifest.files.itemsIndex}`, manifest.packId);
     if (!Array.isArray(indexRaw)) {
       throw new Error('$.itemsIndex: expected array');
     }
@@ -106,7 +174,7 @@ async function loadItems(base: string, manifest: PackManifest): Promise<ItemDef[
         throw new Error(`$.itemsIndex[${i}]: expected string`);
       }
       try {
-        const raw = await fetchJson(`${base}/${itemFile}`);
+        const raw = await fetchJson(`${base}/${itemFile}`, manifest.packId);
         const item = assertItemDef(raw, `$.itemsIndex[${i}]`);
         items.push(item);
       } catch (e) {
@@ -118,7 +186,7 @@ async function loadItems(base: string, manifest: PackManifest): Promise<ItemDef[
   }
 
   // 数组模式：原有的单一 items.json 文件
-  const raw = await fetchJson(`${base}/${manifest.files.items}`);
+  const raw = await fetchJson(`${base}/${manifest.files.items}`, manifest.packId);
   if (!Array.isArray(raw)) {
     throw new Error('$.items: expected array');
   }
@@ -128,7 +196,7 @@ async function loadItems(base: string, manifest: PackManifest): Promise<ItemDef[
 async function loadItemsLite(base: string, manifest: PackManifest): Promise<ItemDef[] | null> {
   const litePath = manifest.files.itemsLite;
   if (!litePath) return null;
-  const raw = await fetchJson(`${base}/${litePath}`);
+  const raw = await fetchJson(`${base}/${litePath}`, manifest.packId);
   if (!Array.isArray(raw)) {
     throw new Error('$.itemsLite: expected array');
   }
@@ -140,7 +208,7 @@ async function loadItemsLite(base: string, manifest: PackManifest): Promise<Item
 }
 
 async function loadRecipeTypes(base: string, manifest: PackManifest): Promise<RecipeTypeDef[]> {
-  const raw = await fetchJson(`${base}/${manifest.files.recipeTypes}`);
+  const raw = await fetchJson(`${base}/${manifest.files.recipeTypes}`, manifest.packId);
   if (!Array.isArray(raw)) {
     throw new Error('$.recipeTypes: expected array');
   }
@@ -148,7 +216,7 @@ async function loadRecipeTypes(base: string, manifest: PackManifest): Promise<Re
 }
 
 async function loadRecipes(base: string, manifest: PackManifest): Promise<Recipe[]> {
-  const raw = await fetchJson(`${base}/${manifest.files.recipes}`);
+  const raw = await fetchJson(`${base}/${manifest.files.recipes}`, manifest.packId);
   if (!Array.isArray(raw)) {
     throw new Error('$.recipes: expected array');
   }
@@ -157,7 +225,7 @@ async function loadRecipes(base: string, manifest: PackManifest): Promise<Recipe
 
 async function loadTags(base: string, manifest: PackManifest): Promise<PackTags | undefined> {
   if (!manifest.files.tags) return undefined;
-  const raw = await fetchJson(`${base}/${manifest.files.tags}`);
+  const raw = await fetchJson(`${base}/${manifest.files.tags}`, manifest.packId);
   return assertPackTags(raw, '$.tags');
 }
 
@@ -324,8 +392,8 @@ export async function loadRuntimePack(packIdOrLocal: string): Promise<RuntimePac
 }
 
 export async function loadPack(packId: string): Promise<PackData> {
-  const base = packBaseUrl(packId);
   const manifest = await loadManifest(packId);
+  const base = packBaseUrl(packId);
   const itemsPromise = manifest.files.itemsLite
     ? loadItemsLite(base, manifest)
     : loadItems(base, manifest);
@@ -371,7 +439,7 @@ export async function loadPackItemDetail(packId: string, detailPath: string): Pr
     const cacheKey = `${packId}:${sourcePath}`;
     let arrayPromise = jsonArrayCache.get(cacheKey);
     if (!arrayPromise) {
-      arrayPromise = fetchJson(`${base}/${sourcePath}`);
+      arrayPromise = fetchJson(`${base}/${sourcePath}`, packId);
       jsonArrayCache.set(cacheKey, arrayPromise);
     }
     const arr = await arrayPromise;
@@ -383,7 +451,7 @@ export async function loadPackItemDetail(packId: string, detailPath: string): Pr
       throw new Error(`Failed to load item detail from ${sourcePath}: index ${idx} out of range`);
     }
   } else {
-    raw = await fetchJson(`${base}/${sourcePath}`);
+    raw = await fetchJson(`${base}/${sourcePath}`, packId);
   }
 
   const item = assertItemDef(raw, '$.itemDetail');

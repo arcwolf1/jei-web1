@@ -195,14 +195,21 @@
       @update:pack-image-proxy-framework-token="
         settingsStore.setPackImageProxyFrameworkToken($event)
       "
+      :custom-pack-sources="
+        settingsStore.customPackSources.map((s) => ({
+          packId: s.packId,
+          url: s.mirrors?.[0] || '',
+          label: s.label,
+        }))
+      "
+      @add-custom-source="onAddCustomSource"
+      @remove-custom-source="onRemoveCustomSource"
+      @refresh-pack-cache="onRefreshPackCache"
       @open-keybindings="keybindingsOpen = true"
     />
 
     <!-- 快捷键设置对话框 -->
-    <key-bindings-dialog
-      :open="keybindingsOpen"
-      @update:open="keybindingsOpen = $event"
-    />
+    <key-bindings-dialog :open="keybindingsOpen" @update:open="keybindingsOpen = $event" />
 
     <pre v-if="settingsStore.debugLayout" class="jei-debug-overlay">{{ debugText }}</pre>
 
@@ -263,7 +270,12 @@ import { useRoute, useRouter } from 'vue-router';
 import { useI18n } from 'vue-i18n';
 import type { ItemDef, ItemKey, PackData, Recipe } from 'src/jei/types';
 import { useDialogManager } from 'src/stores/dialogManager';
-import { loadPackItemDetail, loadRuntimePack } from 'src/jei/pack/loader';
+import {
+  clearPackRuntimeCache,
+  loadPackItemDetail,
+  loadRuntimePack,
+  registerPackSource,
+} from 'src/jei/pack/loader';
 import { applyImageProxyToPack, ensurePackImageProxyTokens } from 'src/jei/pack/imageProxy';
 import {
   buildJeiIndex,
@@ -311,12 +323,12 @@ function detectPcUserAgent(): boolean {
 
   // 检测常见的 PC UA 特征
   const pcPatterns = [
-    'Windows',           // Windows
-    'Macintosh',         // macOS
-    'Linux x86_64',      // Linux 桌面
-    'Linux i686',        // Linux 32位
-    'CrOS',              // Chrome OS
-    'X11',               // X Window System (Unix 桌面)
+    'Windows', // Windows
+    'Macintosh', // macOS
+    'Linux x86_64', // Linux 桌面
+    'Linux i686', // Linux 32位
+    'CrOS', // Chrome OS
+    'X11', // X Window System (Unix 桌面)
   ];
 
   for (const pattern of pcPatterns) {
@@ -1136,7 +1148,9 @@ const paddedHistoryItems = computed(() => {
 onMounted(async () => {
   try {
     loading.value = true;
-    await Promise.all([loadPacksIndex(), reloadPack(activePackId.value)]);
+    // 必须先加载索引（注册数据源），再加载当前包，否则可能会导致使用了错误的源（如本地源代替了远程源）
+    await loadPacksIndex();
+    await reloadPack(activePackId.value);
   } catch (e) {
     error.value = e instanceof Error ? e.message : String(e);
   } finally {
@@ -1336,16 +1350,41 @@ async function reloadPack(packId: string) {
 
 async function loadPacksIndex() {
   const local = await loadLocalPackOptions();
+
+  // 1. 先定义 custom 列表（用于UI选项），但暂不注册
+  // 这样我们可以控制注册顺序
+  const custom = settingsStore.customPackSources.map((s) => ({
+    label: s.label || s.packId,
+    value: s.packId,
+  }));
+
   try {
     const res = await fetch('/packs/index.json');
     if (!res.ok) {
-      packOptions.value = [...packOptions.value, ...local];
+      // 失败时，注册自定义源并返回
+      registerCustomSources();
+      packOptions.value = [...custom, ...packOptions.value, ...local];
       return;
     }
-    const data = (await res.json()) as { packs?: Array<{ packId: string; label: string }> };
+    const data = (await res.json()) as {
+      packs?: Array<{ packId: string; label: string; mirrors?: string[] }>;
+    };
     if (Array.isArray(data.packs)) {
-      const remote = data.packs.map((p) => ({ label: p.label, value: p.packId }));
-      packOptions.value = [...remote, ...local];
+      const remote = data.packs.map((p) => {
+        if (p.mirrors?.length) {
+          registerPackSource({
+            packId: p.packId,
+            label: p.label,
+            mirrors: p.mirrors,
+          });
+        }
+        return { label: p.label, value: p.packId };
+      });
+
+      // 2. 注册自定义源（覆盖远程同名源）
+      registerCustomSources();
+
+      packOptions.value = [...remote, ...custom, ...local];
 
       // 如果 store 中的 packId 不在新列表中，切换到第一个
       if (!packOptions.value.some((o) => o.value === settingsStore.selectedPack)) {
@@ -1353,7 +1392,50 @@ async function loadPacksIndex() {
       }
     }
   } catch {
-    packOptions.value = [...packOptions.value, ...local];
+    registerCustomSources();
+    packOptions.value = [...custom, ...packOptions.value, ...local];
+  }
+}
+
+function registerCustomSources() {
+  settingsStore.customPackSources.forEach((s) => {
+    const mirrors = s.mirrors && s.mirrors.length ? s.mirrors : [''];
+    registerPackSource({
+      packId: s.packId,
+      label: s.label || s.packId,
+      mirrors: mirrors,
+    });
+  });
+}
+
+function onAddCustomSource(source: { packId: string; url: string; label?: string }) {
+  settingsStore.addCustomPackSource({
+    packId: source.packId,
+    label: source.label || source.packId,
+    mirrors: [source.url],
+  });
+  void loadPacksIndex();
+}
+
+function onRemoveCustomSource(packId: string) {
+  settingsStore.removeCustomPackSource(packId);
+  void loadPacksIndex();
+}
+
+async function onRefreshPackCache() {
+  try {
+    clearPackRuntimeCache(activePackId.value);
+    await reloadPack(activePackId.value);
+    $q.notify({
+      type: 'positive',
+      message: t('packCacheRefreshed'),
+    });
+  } catch (e) {
+    $q.notify({
+      type: 'negative',
+      message: t('packCacheRefreshFailed'),
+      caption: e instanceof Error ? e.message : String(e),
+    });
   }
 }
 
@@ -1876,9 +1958,7 @@ function plansStorageKey(packId: string) {
 
 async function loadPlans(packId: string): Promise<SavedPlan[]> {
   const key = plansStorageKey(packId);
-  const raw = storage.isUsingJEIStorage()
-    ? await storage.getItem(key)
-    : localStorage.getItem(key);
+  const raw = storage.isUsingJEIStorage() ? await storage.getItem(key) : localStorage.getItem(key);
   if (!raw) return [];
   try {
     const parsed = JSON.parse(raw) as unknown;
@@ -2025,9 +2105,7 @@ function deleteSavedPlan(id: string) {
 
 async function loadFavorites(packId: string): Promise<Set<string>> {
   const key = favoritesStorageKey(packId);
-  const raw = storage.isUsingJEIStorage()
-    ? await storage.getItem(key)
-    : localStorage.getItem(key);
+  const raw = storage.isUsingJEIStorage() ? await storage.getItem(key) : localStorage.getItem(key);
   if (!raw) return new Set();
   try {
     const parsed = JSON.parse(raw) as unknown;

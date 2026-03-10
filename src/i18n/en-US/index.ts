@@ -76,6 +76,9 @@ export default {
   packImageProxyAccessToken: 'Access Token',
   packImageProxyAnonymousToken: 'Anonymous Token',
   packImageProxyFrameworkToken: 'Framework Token',
+  refreshPackCache: 'Refresh current pack cache',
+  packCacheRefreshed: 'Cleared cache and reloaded current pack',
+  packCacheRefreshFailed: 'Failed to refresh pack cache',
   close: 'Close',
 
   // Context Menu
@@ -247,4 +250,13 @@ export default {
   keybindingCircuitDelete: 'Delete',
   pressKeyToBind: 'Press a key to bind',
   resetToDefaults: 'Reset to Defaults',
+
+  // Custom Sources
+  customDataSources: 'Custom Data Sources',
+  noCustomSources: 'No custom data sources',
+  packId: 'Pack ID',
+  packUrl: 'Pack URL (Mirror)',
+  packLabel: 'Display Name',
+  addSource: 'Add Source',
+  optional: 'Optional',
 } as const;
