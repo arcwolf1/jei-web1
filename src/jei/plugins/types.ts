@@ -143,3 +143,14 @@ export interface PluginApiRuntime {
   label: string;
   run: (signal: AbortSignal) => Promise<PluginApiResult>;
 }
+
+export interface HostApiCall {
+  api: string;
+  args?: Record<string, unknown>;
+}
+
+export type HostApiHandler = (
+  pluginId: string,
+  api: string,
+  args: Record<string, unknown>,
+) => Promise<unknown>;

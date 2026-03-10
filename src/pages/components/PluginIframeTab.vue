@@ -41,8 +41,8 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
-import type { PluginItemContext } from 'src/jei/plugins/types';
+import { computed, onBeforeUnmount, onMounted, ref, watch, inject } from 'vue';
+import type { PluginItemContext, HostApiHandler } from 'src/jei/plugins/types';
 
 type MessageEnvelope = {
   channel?: string;
@@ -66,6 +66,7 @@ const services = ref<string[]>([]);
 const lastResult = ref('');
 const pendingServiceRequests = new Map<string, string>();
 const defaultSandbox = 'allow-scripts allow-same-origin';
+const hostApi = inject<HostApiHandler>('pluginHostApi');
 
 const statusText = computed(() => {
   if (!props.src) return 'iframe 未配置';
@@ -101,14 +102,16 @@ function pushContext(): void {
       packId: props.context.pack?.manifest.packId ?? '',
       gameId: props.context.pack?.manifest.gameId ?? '',
       activeTab: props.context.activeTab,
+      settings: props.context.pluginSettingsById[props.pluginId] ?? {},
     },
   });
 }
 
-function handleHostApiCall(data: MessageEnvelope): void {
+async function handleHostApiCall(data: MessageEnvelope): Promise<void> {
   if (!data.requestId) return;
-  const payload = data.payload as { api?: string } | undefined;
+  const payload = data.payload as { api?: string; args?: unknown } | undefined;
   const api = payload?.api;
+
   if (api === 'getItemContext') {
     postMessage({
       type: 'hostApiResponse',
@@ -120,11 +123,43 @@ function handleHostApiCall(data: MessageEnvelope): void {
           itemName: props.context.itemDef?.name ?? '',
           packId: props.context.pack?.manifest.packId ?? '',
           gameId: props.context.pack?.manifest.gameId ?? '',
+          settings: props.context.pluginSettingsById[props.pluginId] ?? {},
         },
       },
     });
     return;
   }
+
+  if (hostApi && api) {
+    try {
+      const result = await hostApi(
+        props.pluginId,
+        api,
+        (payload?.args as Record<string, unknown>) ?? {},
+      );
+      postMessage({
+        type: 'hostApiResponse',
+        requestId: data.requestId,
+        payload: {
+          ok: true,
+          value: result,
+        },
+      });
+      return;
+    } catch (e: unknown) {
+      const message = e instanceof Error ? e.message : typeof e === 'string' ? e : 'Host API error';
+      postMessage({
+        type: 'hostApiResponse',
+        requestId: data.requestId,
+        payload: {
+          ok: false,
+          error: message,
+        },
+      });
+      return;
+    }
+  }
+
   postMessage({
     type: 'hostApiResponse',
     requestId: data.requestId,
@@ -150,7 +185,7 @@ function onMessage(event: MessageEvent): void {
     return;
   }
   if (data.type === 'hostApiCall') {
-    handleHostApiCall(data);
+    void handleHostApiCall(data);
     return;
   }
   if (data.type === 'serviceResponse' && data.requestId) {

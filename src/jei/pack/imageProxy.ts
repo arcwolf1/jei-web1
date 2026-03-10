@@ -378,3 +378,8 @@ export function applyImageProxyToItem(item: Record<string, unknown>, manifest: P
   const ctx = resolveEffectiveProxy(manifest);
   rewriteImageUrlsDeep(item, ctx);
 }
+
+export function resolveImageUrl(url: string, manifest: PackManifest): string {
+  const ctx = resolveEffectiveProxy(manifest);
+  return rewriteImageUrl(url, ctx);
+}

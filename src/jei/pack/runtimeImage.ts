@@ -44,6 +44,7 @@ export function useRuntimeImageUrl(
         resolved.value = '';
         return;
       }
+      // But first let's see if we can import resolveImageUrl.
       resolved.value = isProxyImageUrl(nextUrl) ? normalizeProxyUrl(nextUrl) : nextUrl;
     },
     { immediate: true },

@@ -283,7 +283,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue';
+import { computed, nextTick, onMounted, onUnmounted, ref, watch, provide } from 'vue';
 import { useQuasar } from 'quasar';
 import { useRoute, useRouter } from 'vue-router';
 import { useI18n } from 'vue-i18n';
@@ -298,7 +298,11 @@ import {
   registerPackSource,
   setPackMirrorPreference,
 } from 'src/jei/pack/loader';
-import { applyImageProxyToPack, ensurePackImageProxyTokens } from 'src/jei/pack/imageProxy';
+import {
+  applyImageProxyToPack,
+  ensurePackImageProxyTokens,
+  resolveImageUrl,
+} from 'src/jei/pack/imageProxy';
 import {
   buildJeiIndex,
   recipesConsumingItem,
@@ -325,6 +329,7 @@ import { autoPlanSelections } from 'src/jei/planner/planner';
 import { builtinPlugins } from 'src/jei/plugins/builtin';
 import { PluginManager } from 'src/jei/plugins/runtime';
 import type {
+  HostApiHandler,
   PluginApiResult,
   PluginCenterTabRuntime,
   PluginItemContext,
@@ -2201,6 +2206,76 @@ function openMachineItem(machineItemId: string) {
   const firstKeyHash = keyHashes[0];
   if (firstKeyHash) openDialogByKeyHash(firstKeyHash);
 }
+
+const handlePluginHostApi: HostApiHandler = async (pluginId, api, args) => {
+  await Promise.resolve(); // make it async
+  if (api === 'navigateToItem') {
+    const itemId = args.itemId as string;
+    const newStack = args.newStack as boolean;
+    if (!itemId) return false;
+
+    const keyHashes = index.value?.itemKeyHashesByItemId.get(itemId);
+    if (keyHashes && keyHashes.length > 0) {
+      const keyHash = keyHashes[0] as string;
+      const def = index.value?.itemsByKeyHash.get(keyHash);
+      if (def) {
+        if (newStack) {
+          openDialogByKeyHash(keyHash);
+        } else {
+          openDialogByItemKey(def.key);
+        }
+        return true;
+      }
+    }
+    return false;
+  }
+  if (api === 'toggleBookmark') {
+    const itemId = args.itemId as string;
+    const favorite = args.favorite as boolean | undefined;
+    if (!itemId) return false;
+
+    const keyHashes = index.value?.itemKeyHashesByItemId.get(itemId);
+    if (keyHashes && keyHashes.length > 0) {
+      const keyHash = keyHashes[0] as string;
+      const isFav = isFavorite(keyHash);
+      if (favorite === undefined) {
+        toggleFavorite(keyHash);
+      } else if (favorite && !isFav) {
+        toggleFavorite(keyHash);
+      } else if (!favorite && isFav) {
+        toggleFavorite(keyHash);
+      }
+      return isFavorite(keyHash);
+    }
+    return false;
+  }
+  if (api === 'getItemImage') {
+    const itemId = args.itemId as string;
+    if (!itemId) return null;
+
+    const keyHashes = index.value?.itemKeyHashesByItemId.get(itemId);
+    if (keyHashes && keyHashes.length > 0) {
+      const keyHash = keyHashes[0] as string;
+      const def = index.value?.itemsByKeyHash.get(keyHash);
+      if (def && pack.value) {
+        return resolveImageUrl(def.icon ?? '', pack.value.manifest);
+      }
+    }
+    return null;
+  }
+  if (api === 'getHostSettings') {
+    return {
+      theme: settingsStore.darkMode ? 'dark' : 'light',
+      language: settingsStore.language,
+      recipeViewMode: settingsStore.recipeViewMode,
+      favoritesCollapsed: settingsStore.favoritesCollapsed,
+      panelCollapsed: settingsStore.panelCollapsed,
+    };
+  }
+  throw new Error(`Unknown API: ${api}`);
+};
+
+provide('pluginHostApi', handlePluginHostApi);
 
 function goBackInDialog() {
   if (navStack.value.length <= 1) return;
