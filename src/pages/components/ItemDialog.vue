@@ -28,6 +28,12 @@
           <q-tab name="wiki" :label="wikiTabLabel" />
           <q-tab name="icon" :label="iconTabLabel" />
           <q-tab name="planner" :label="plannerTabLabel" />
+          <q-tab
+            v-for="tab in pluginTabs"
+            :key="tab.tabKey"
+            :name="tab.tabKey"
+            :label="tab.tabLabel"
+          />
         </q-tabs>
         <div class="jei-dialog__hint text-caption">{{ keyHint }}</div>
       </div>
@@ -50,6 +56,9 @@
           :recipe-types-by-key="recipeTypesByKey"
           :planner-initial-state="plannerInitialState"
           :planner-tab="plannerTab"
+          :plugin-context="pluginContext"
+          :plugin-tabs="pluginTabs"
+          :resolve-plugin-api="resolvePluginApi"
           @item-click="$emit('item-click', $event)"
           @wiki-item-click="$emit('wiki-item-click', $event)"
           @machine-item-click="$emit('machine-item-click', $event)"
@@ -72,6 +81,11 @@ import { useI18n } from 'vue-i18n';
 import type { PackData, ItemDef, ItemKey } from 'src/jei/types';
 import type { JeiIndex } from 'src/jei/indexing/buildIndex';
 import type { PlannerInitialState, PlannerLiveState } from 'src/jei/planner/plannerUi';
+import type {
+  PluginApiResult,
+  PluginItemContext,
+  PluginTabRuntime,
+} from 'src/jei/plugins/types';
 import RecipeContentView from './RecipeContentView.vue';
 import {
   useKeyBindingsStore,
@@ -122,7 +136,7 @@ defineProps<{
   currentItemDef: ItemDef | null;
   itemDefsByKeyHash: Record<string, ItemDef>;
   renderedDescription: string;
-  activeTab: 'recipes' | 'uses' | 'wiki' | 'icon' | 'planner';
+  activeTab: string;
   activeTypeKey: string;
   activeRecipeGroups: RecipeGroup[];
   allRecipeGroups: RecipeGroup[];
@@ -131,11 +145,18 @@ defineProps<{
   recipeTypesByKey: Map<string, any>; // eslint-disable-line @typescript-eslint/no-explicit-any
   plannerInitialState: PlannerInitialState | null;
   plannerTab: 'tree' | 'graph' | 'line' | 'calc';
+  pluginContext: PluginItemContext;
+  pluginTabs: PluginTabRuntime[];
+  resolvePluginApi: (
+    pluginId: string,
+    queryId: string,
+    signal: AbortSignal,
+  ) => Promise<PluginApiResult | null>;
 }>();
 
 defineEmits<{
   'update:open': [value: boolean];
-  'update:active-tab': [tab: 'recipes' | 'uses' | 'wiki' | 'icon' | 'planner'];
+  'update:active-tab': [tab: string];
   'update:active-type-key': [typeKey: string];
   close: [];
   'item-click': [keyHash: ItemKey];

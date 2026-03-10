@@ -1,0 +1,106 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>JEI Iframe Plugin Demo</title>
+  <style>
+    body {
+      margin: 0;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      color: #1f2937;
+      background: #f8fafc;
+    }
+    .wrap {
+      padding: 12px;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+    .card {
+      background: #fff;
+      border: 1px solid #e5e7eb;
+      border-radius: 8px;
+      padding: 10px;
+    }
+    .muted {
+      font-size: 12px;
+      color: #6b7280;
+    }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="card">
+      <div id="title">Iframe 插件已加载</div>
+      <div id="meta" class="muted"></div>
+    </div>
+    <div class="card">
+      <div id="context">等待宿主上下文...</div>
+    </div>
+    <div class="card">
+      <div id="hostApi">等待 Host API 调用...</div>
+    </div>
+  </div>
+  <script>
+    const state = {
+      context: null,
+    };
+
+    function post(type, payload, requestId) {
+      window.parent.postMessage(
+        {
+          channel: 'jei-plugin',
+          type,
+          requestId,
+          payload,
+        },
+        '*',
+      );
+    }
+
+    function byId(id) {
+      return document.getElementById(id);
+    }
+
+    function updateContextView() {
+      const ctx = state.context;
+      if (!ctx) return;
+      byId('context').textContent = `itemId: ${ctx.itemId || '(empty)'} | pack: ${ctx.packId || '(empty)'}`;
+    }
+
+    window.addEventListener('message', (event) => {
+      const data = event.data || {};
+      if (data.channel !== 'jei-plugin') return;
+      if (data.type === 'hostContext') {
+        state.context = data.payload || null;
+        updateContextView();
+      }
+      if (data.type === 'callService') {
+        const payload = data.payload || {};
+        if (payload.service === 'describeItem') {
+          post(
+            'serviceResponse',
+            {
+              ok: true,
+              text: `来自 iframe 的服务响应: ${payload.args?.itemId || ''}`,
+            },
+            data.requestId,
+          );
+        } else {
+          post('serviceResponse', { ok: false, error: 'unknown service' }, data.requestId);
+        }
+      }
+      if (data.type === 'hostApiResponse') {
+        byId('hostApi').textContent = `Host API 响应: ${JSON.stringify(data.payload || null)}`;
+      }
+    });
+
+    const params = new URLSearchParams(window.location.search);
+    byId('meta').textContent = `query.itemId=${params.get('itemId') || ''} query.gameId=${params.get('gameId') || ''}`;
+    post('pluginReady', { protocolVersion: 1 });
+    post('registerServices', { services: ['describeItem'] });
+    post('hostApiCall', { api: 'getItemContext' }, `ctx-${Date.now()}`);
+  </script>
+</body>
+</html>

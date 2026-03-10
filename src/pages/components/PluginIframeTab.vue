@@ -1,0 +1,215 @@
+<template>
+  <div class="plugin-iframe-tab column q-gutter-sm">
+    <div class="row items-center q-gutter-sm">
+      <q-btn
+        dense
+        flat
+        size="sm"
+        color="primary"
+        icon="open_in_new"
+        label="在外部打开"
+        :href="src"
+        target="_blank"
+        rel="noopener noreferrer"
+      />
+      <q-chip v-if="!noApi" dense outline color="primary">{{ statusText }}</q-chip>
+      <q-chip v-for="service in services" :key="service" dense outline color="secondary">
+        {{ service }}
+      </q-chip>
+      <q-space />
+      <q-btn
+        v-if="services.length"
+        dense
+        flat
+        icon="play_arrow"
+        label="调用服务"
+        @click="callFirstService"
+      />
+    </div>
+    <div class="plugin-iframe-tab__frame-wrap">
+      <iframe
+        ref="iframeRef"
+        class="plugin-iframe-tab__frame"
+        :src="src || undefined"
+        :sandbox="sandbox || defaultSandbox"
+      />
+    </div>
+    <q-banner v-if="lastResult" dense class="bg-grey-2 text-grey-9">
+      {{ lastResult }}
+    </q-banner>
+  </div>
+</template>
+
+<script setup lang="ts">
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
+import type { PluginItemContext } from 'src/jei/plugins/types';
+
+type MessageEnvelope = {
+  channel?: string;
+  type?: string;
+  requestId?: string;
+  payload?: unknown;
+};
+
+const props = defineProps<{
+  pluginId: string;
+  src: string;
+  allowedOrigins: string[];
+  sandbox?: string;
+  noApi?: boolean;
+  context: PluginItemContext;
+}>();
+
+const iframeRef = ref<HTMLIFrameElement | null>(null);
+const ready = ref(false);
+const services = ref<string[]>([]);
+const lastResult = ref('');
+const pendingServiceRequests = new Map<string, string>();
+const defaultSandbox = 'allow-scripts allow-same-origin';
+
+const statusText = computed(() => {
+  if (!props.src) return 'iframe 未配置';
+  if (!ready.value) return 'iframe 连接中';
+  return 'iframe 已连接';
+});
+
+function originAllowed(origin: string): boolean {
+  if (!origin) return false;
+  if (props.allowedOrigins.includes('*')) return true;
+  return props.allowedOrigins.includes(origin);
+}
+
+function postMessage(message: MessageEnvelope): void {
+  const win = iframeRef.value?.contentWindow;
+  if (!win) return;
+  win.postMessage(
+    {
+      channel: 'jei-plugin',
+      ...message,
+    },
+    '*',
+  );
+}
+
+function pushContext(): void {
+  postMessage({
+    type: 'hostContext',
+    payload: {
+      pluginId: props.pluginId,
+      itemId: props.context.itemDef?.key.id ?? '',
+      itemName: props.context.itemDef?.name ?? '',
+      packId: props.context.pack?.manifest.packId ?? '',
+      gameId: props.context.pack?.manifest.gameId ?? '',
+      activeTab: props.context.activeTab,
+    },
+  });
+}
+
+function handleHostApiCall(data: MessageEnvelope): void {
+  if (!data.requestId) return;
+  const payload = data.payload as { api?: string } | undefined;
+  const api = payload?.api;
+  if (api === 'getItemContext') {
+    postMessage({
+      type: 'hostApiResponse',
+      requestId: data.requestId,
+      payload: {
+        ok: true,
+        value: {
+          itemId: props.context.itemDef?.key.id ?? '',
+          itemName: props.context.itemDef?.name ?? '',
+          packId: props.context.pack?.manifest.packId ?? '',
+          gameId: props.context.pack?.manifest.gameId ?? '',
+        },
+      },
+    });
+    return;
+  }
+  postMessage({
+    type: 'hostApiResponse',
+    requestId: data.requestId,
+    payload: {
+      ok: false,
+      error: 'unsupported api',
+    },
+  });
+}
+
+function onMessage(event: MessageEvent): void {
+  const data = event.data as MessageEnvelope;
+  if (!data || data.channel !== 'jei-plugin') return;
+  if (!originAllowed(event.origin)) return;
+  if (data.type === 'pluginReady') {
+    ready.value = true;
+    pushContext();
+    return;
+  }
+  if (data.type === 'registerServices') {
+    const payload = data.payload as { services?: string[] } | undefined;
+    services.value = Array.isArray(payload?.services) ? payload.services.filter(Boolean) : [];
+    return;
+  }
+  if (data.type === 'hostApiCall') {
+    handleHostApiCall(data);
+    return;
+  }
+  if (data.type === 'serviceResponse' && data.requestId) {
+    const service = pendingServiceRequests.get(data.requestId) ?? 'unknown';
+    pendingServiceRequests.delete(data.requestId);
+    lastResult.value = `${service}: ${JSON.stringify(data.payload ?? null)}`;
+  }
+}
+
+function callFirstService(): void {
+  const name = services.value[0];
+  if (!name) return;
+  const requestId = `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+  pendingServiceRequests.set(requestId, name);
+  postMessage({
+    type: 'callService',
+    requestId,
+    payload: {
+      service: name,
+      args: {
+        itemId: props.context.itemDef?.key.id ?? '',
+      },
+    },
+  });
+}
+
+watch(
+  () => [props.context.itemDef?.key.id, props.context.activeTab, props.src] as const,
+  () => {
+    if (!ready.value) return;
+    pushContext();
+  },
+);
+
+onMounted(() => {
+  window.addEventListener('message', onMessage);
+});
+
+onBeforeUnmount(() => {
+  window.removeEventListener('message', onMessage);
+});
+</script>
+
+<style scoped>
+.plugin-iframe-tab {
+  height: 100%;
+}
+
+.plugin-iframe-tab__frame-wrap {
+  flex: 1 1 auto;
+  min-height: 320px;
+  border: 1px solid rgba(0, 0, 0, 0.08);
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.plugin-iframe-tab__frame {
+  width: 100%;
+  height: 100%;
+  border: 0;
+}
+</style>

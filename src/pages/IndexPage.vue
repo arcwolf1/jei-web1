@@ -70,6 +70,11 @@
         :recipe-types-by-key="recipeTypesByKey ?? new Map()"
         :planner-initial-state="plannerInitialState"
         :planner-tab="plannerTab ?? 'tree'"
+        :plugin-context="pluginContext"
+        :plugin-query-actions="pluginQueryActions"
+        :plugin-tabs="pluginTabs"
+        :center-plugin-tabs="centerPluginTabs"
+        :resolve-plugin-api="resolvePluginApi"
         @update:collapsed="settingsStore.setPanelCollapsed($event)"
         @update:center-tab="centerTab = $event"
         @update:active-tab="activeTab = $event"
@@ -195,6 +200,9 @@
       @update:pack-image-proxy-framework-token="
         settingsStore.setPackImageProxyFrameworkToken($event)
       "
+      :plugin-entries="pluginEntries"
+      :plugin-setting-sections="pluginSettingSections"
+      :keybinding-groups="keybindingSettingGroups"
       :custom-pack-sources="
         settingsStore.customPackSources.map((s) => ({
           packId: s.packId,
@@ -211,12 +219,12 @@
       @refresh-pack-cache="onRefreshPackCache"
       @update:pack-mirror-selection-mode="onUpdatePackMirrorSelectionMode"
       @update:pack-manual-mirror="onUpdatePackManualMirror"
+      @update:plugin-enabled="onPluginEnabledChange"
+      @update:plugin-setting="onPluginSettingChange"
+      @update:keybinding="onKeybindingChange"
+      @reset:keybindings="onResetKeybindings"
       @refresh-mirror-latency="refreshActivePackMirrorLatency"
-      @open-keybindings="keybindingsOpen = true"
     />
-
-    <!-- 快捷键设置对话框 -->
-    <key-bindings-dialog :open="keybindingsOpen" @update:open="keybindingsOpen = $event" />
 
     <pre v-if="settingsStore.debugLayout" class="jei-debug-overlay">{{ debugText }}</pre>
 
@@ -244,6 +252,9 @@
       :recipe-types-by-key="recipeTypesByKey"
       :planner-initial-state="plannerInitialState"
       :planner-tab="plannerTab"
+      :plugin-context="pluginContext"
+      :plugin-tabs="pluginTabs"
+      :resolve-plugin-api="resolvePluginApi"
       @item-click="openDialogByItemKey"
       @wiki-item-click="(key) => openDialogByItemKey(key, 'wiki')"
       @machine-item-click="openMachineItem"
@@ -299,7 +310,6 @@ import ItemListPanel from './components/ItemListPanel.vue';
 import CenterPanel from './components/CenterPanel.vue';
 import BottomBar from './components/BottomBar.vue';
 import SettingsDialog from './components/SettingsDialog.vue';
-import KeyBindingsDialog from './components/KeyBindingsDialog.vue';
 import ItemDialog from './components/ItemDialog.vue';
 import ItemContextMenu from './components/ItemContextMenu.vue';
 import DebugPanel from './components/DebugPanel.vue';
@@ -312,14 +322,33 @@ import type {
 } from 'src/jei/planner/plannerUi';
 import { itemKeyHash } from 'src/jei/indexing/key';
 import { autoPlanSelections } from 'src/jei/planner/planner';
+import { builtinPlugins } from 'src/jei/plugins/builtin';
+import { PluginManager } from 'src/jei/plugins/runtime';
+import type {
+  PluginApiResult,
+  PluginCenterTabRuntime,
+  PluginItemContext,
+  PluginSettingDefinition,
+  PluginSettingValue,
+  PluginTabRuntime,
+} from 'src/jei/plugins/types';
 import { useSettingsStore } from 'src/stores/settings';
-import { useKeyBindingsStore, eventMatchesBinding } from 'src/stores/keybindings';
+import {
+  useKeyBindingsStore,
+  eventMatchesBinding,
+  type KeyBinding,
+  type KeyAction,
+} from 'src/stores/keybindings';
 import { storage } from 'src/utils/storage';
 
 const settingsStore = useSettingsStore();
 const keyBindingsStore = useKeyBindingsStore();
 const dialogManager = useDialogManager();
 const { t } = useI18n();
+const pluginManager = new PluginManager();
+for (const plugin of builtinPlugins) {
+  pluginManager.register(plugin);
+}
 const contextMenuTarget = ref<HTMLElement | null>(null);
 const $q = useQuasar();
 
@@ -463,7 +492,6 @@ const gridColumns = 2;
 const pageSize = ref(120);
 
 const settingsOpen = ref(false);
-const keybindingsOpen = ref(false);
 const mirrorLatencyByUrl = ref<Record<string, number | null>>({});
 const mirrorLatencyLoading = ref(false);
 const dialogOpen = ref(false);
@@ -553,8 +581,8 @@ watch(
   },
 );
 
-const centerTab = ref<'recipe' | 'advanced'>('recipe');
-const activeTab = ref<'recipes' | 'uses' | 'wiki' | 'icon' | 'planner'>('recipes');
+const centerTab = ref<string>('recipe');
+const activeTab = ref<string>('recipes');
 const lastRecipeTab = ref<'recipes' | 'uses'>('recipes');
 const activeRecipesTypeKey = ref('');
 const activeUsesTypeKey = ref('');
@@ -598,6 +626,252 @@ const currentItemTitle = computed(() => {
   if (!key) return '';
   return key.id;
 });
+
+const pluginContext = computed<PluginItemContext>(() => ({
+  pack: pack.value,
+  index: index.value,
+  itemKey: currentItemKey.value,
+  itemDef: currentItemDef.value,
+  activeTab: activeTab.value,
+  language: settingsStore.language,
+  pluginSettingsById: settingsStore.pluginSettingsById,
+}));
+
+const pluginQueryActions = computed(() =>
+  pluginManager.getActions(settingsStore.pluginEnabledById, pluginContext.value),
+);
+
+const pluginTabs = computed<PluginTabRuntime[]>(() =>
+  pluginManager.getTabs(settingsStore.pluginEnabledById, pluginContext.value),
+);
+
+const centerPluginTabs = computed<
+  Array<{
+    tabKey: string;
+    tabLabel: string;
+    src: string;
+    sandbox?: string;
+    noApi?: boolean;
+  }>
+>(() =>
+  pluginManager
+    .getCenterTabs(settingsStore.pluginEnabledById, pluginContext.value)
+    .map((tab: PluginCenterTabRuntime) => {
+      const sandbox = tab.iframe.sandbox;
+      return {
+        tabKey: tab.tabKey,
+        tabLabel: tab.tabLabel,
+        src: tab.iframe.src(pluginContext.value) ?? '',
+        ...(typeof sandbox === 'string' ? { sandbox } : {}),
+        ...(typeof tab.iframe.noApi === 'boolean' ? { noApi: tab.iframe.noApi } : {}),
+      };
+    })
+    .filter((tab) => !!tab.src),
+);
+
+const pluginEntries = computed(() =>
+  pluginManager.list().map((plugin) => {
+    const configured = settingsStore.pluginEnabledById[plugin.id];
+    return {
+      id: plugin.id,
+      name: plugin.name,
+      enabled: typeof configured === 'boolean' ? configured : plugin.enabledByDefault !== false,
+    };
+  }),
+);
+
+const pluginSettingSections = computed<
+  Array<{
+    pluginId: string;
+    pluginName: string;
+    settings: Array<PluginSettingDefinition & { value: PluginSettingValue }>;
+  }>
+>(() =>
+  pluginManager.getSettingDefinitions().map((entry) => ({
+    pluginId: entry.pluginId,
+    pluginName: entry.pluginName,
+    settings: entry.settings.map((setting) => {
+      const raw = settingsStore.pluginSettingsById[entry.pluginId]?.[setting.key];
+      const value =
+        typeof raw === 'string' || typeof raw === 'number' || typeof raw === 'boolean'
+          ? raw
+          : setting.defaultValue;
+      return { ...setting, value };
+    }),
+  })),
+);
+
+const keybindingSettingGroups = computed<
+  Array<{
+    id: string;
+    label: string;
+    actions: Array<{ id: KeyAction; label: string; description: string; binding: KeyBinding }>;
+  }>
+>(() => [
+  {
+    id: 'navigation',
+    label: t('keybindingGroupNavigation'),
+    actions: [
+      {
+        id: 'closeDialog',
+        label: t('keybindingCloseDialog'),
+        description: '',
+        binding: keyBindingsStore.getBinding('closeDialog'),
+      },
+      {
+        id: 'goBack',
+        label: t('keybindingGoBack'),
+        description: '',
+        binding: keyBindingsStore.getBinding('goBack'),
+      },
+    ],
+  },
+  {
+    id: 'view',
+    label: t('keybindingGroupView'),
+    actions: [
+      {
+        id: 'viewRecipes',
+        label: t('keybindingViewRecipes'),
+        description: '',
+        binding: keyBindingsStore.getBinding('viewRecipes'),
+      },
+      {
+        id: 'viewUses',
+        label: t('keybindingViewUses'),
+        description: '',
+        binding: keyBindingsStore.getBinding('viewUses'),
+      },
+      {
+        id: 'viewWiki',
+        label: t('keybindingViewWiki'),
+        description: '',
+        binding: keyBindingsStore.getBinding('viewWiki'),
+      },
+      {
+        id: 'viewIcon',
+        label: t('keybindingViewIcon'),
+        description: '',
+        binding: keyBindingsStore.getBinding('viewIcon'),
+      },
+      {
+        id: 'viewPlanner',
+        label: t('keybindingViewPlanner'),
+        description: '',
+        binding: keyBindingsStore.getBinding('viewPlanner'),
+      },
+    ],
+  },
+  {
+    id: 'planner',
+    label: t('keybindingGroupPlanner'),
+    actions: [
+      {
+        id: 'plannerTree',
+        label: t('keybindingPlannerTree'),
+        description: '',
+        binding: keyBindingsStore.getBinding('plannerTree'),
+      },
+      {
+        id: 'plannerGraph',
+        label: t('keybindingPlannerGraph'),
+        description: '',
+        binding: keyBindingsStore.getBinding('plannerGraph'),
+      },
+      {
+        id: 'plannerLine',
+        label: t('keybindingPlannerLine'),
+        description: '',
+        binding: keyBindingsStore.getBinding('plannerLine'),
+      },
+      {
+        id: 'plannerCalc',
+        label: t('keybindingPlannerCalc'),
+        description: '',
+        binding: keyBindingsStore.getBinding('plannerCalc'),
+      },
+    ],
+  },
+  {
+    id: 'item',
+    label: t('keybindingGroupItem'),
+    actions: [
+      {
+        id: 'toggleFavorite',
+        label: t('keybindingToggleFavorite'),
+        description: '',
+        binding: keyBindingsStore.getBinding('toggleFavorite'),
+      },
+      {
+        id: 'addToAdvanced',
+        label: t('keybindingAddToAdvanced'),
+        description: '',
+        binding: keyBindingsStore.getBinding('addToAdvanced'),
+      },
+    ],
+  },
+  {
+    id: 'circuit',
+    label: t('keybindingGroupCircuit'),
+    actions: [
+      {
+        id: 'circuitRotate',
+        label: t('keybindingCircuitRotate'),
+        description: '',
+        binding: keyBindingsStore.getBinding('circuitRotate'),
+      },
+      {
+        id: 'circuitRun',
+        label: t('keybindingCircuitRun'),
+        description: '',
+        binding: keyBindingsStore.getBinding('circuitRun'),
+      },
+      {
+        id: 'circuitDeselect',
+        label: t('keybindingCircuitDeselect'),
+        description: '',
+        binding: keyBindingsStore.getBinding('circuitDeselect'),
+      },
+      {
+        id: 'circuitDelete',
+        label: t('keybindingCircuitDelete'),
+        description: '',
+        binding: keyBindingsStore.getBinding('circuitDelete'),
+      },
+    ],
+  },
+]);
+
+async function resolvePluginApi(
+  pluginId: string,
+  queryId: string,
+  signal: AbortSignal,
+): Promise<PluginApiResult | null> {
+  const runtime = pluginManager.getApiQuery(
+    settingsStore.pluginEnabledById,
+    pluginContext.value,
+    pluginId,
+    queryId,
+  );
+  if (!runtime) return null;
+  return runtime.run(signal);
+}
+
+function onPluginEnabledChange(pluginId: string, enabled: boolean) {
+  settingsStore.setPluginEnabled(pluginId, enabled);
+}
+
+function onPluginSettingChange(pluginId: string, key: string, value: PluginSettingValue) {
+  settingsStore.setPluginSetting(pluginId, key, value);
+}
+
+function onKeybindingChange(action: KeyAction, binding: KeyBinding) {
+  keyBindingsStore.setBinding(action, binding);
+}
+
+function onResetKeybindings() {
+  keyBindingsStore.resetToDefaults();
+}
 
 // 更新网页标题
 watch(
@@ -875,11 +1149,12 @@ const pageCount = computed(() => {
 });
 
 const validTabs = new Set(['recipes', 'uses', 'wiki', 'icon', 'planner'] as const);
-type JeiTab = 'recipes' | 'uses' | 'wiki' | 'icon' | 'planner';
+type JeiTab = string;
 
 function parseTab(v: unknown): JeiTab | null {
   if (typeof v !== 'string') return null;
-  return validTabs.has(v as JeiTab) ? (v as JeiTab) : null;
+  if (v.startsWith('plugin:')) return v;
+  return validTabs.has(v as 'recipes' | 'uses' | 'wiki' | 'icon' | 'planner') ? v : null;
 }
 
 function routeKeyHash(): string | null {
@@ -1855,8 +2130,8 @@ function openDialogByKeyHash(
   const def = index.value?.itemsByKeyHash.get(keyHash);
   if (!def) return;
 
-  // 如果当前在高级计划器，切换到资料查看器
-  if (centerTab.value === 'advanced') {
+  // 如果当前不在资料查看器，切换到资料查看器
+  if (centerTab.value !== 'recipe') {
     centerTab.value = 'recipe';
   }
 
@@ -1874,8 +2149,8 @@ function openDialogByItemKey(
   key: ItemKey,
   tab: 'recipes' | 'uses' | 'wiki' | 'icon' | 'planner' = 'recipes',
 ) {
-  // 如果当前在高级计划器，切换到资料查看器
-  if (centerTab.value === 'advanced') {
+  // 如果当前不在资料查看器，切换到资料查看器
+  if (centerTab.value !== 'recipe') {
     centerTab.value = 'recipe';
   }
 

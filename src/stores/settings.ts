@@ -84,6 +84,8 @@ export const useSettingsStore = defineStore('settings', {
       customPackSources: [] as Array<{ packId: string; label: string; mirrors: string[] }>,
       packMirrorSelectionModeByPack: {} as Record<string, 'auto' | 'manual'>,
       packManualMirrorByPack: {} as Record<string, string>,
+      pluginEnabledById: {} as Record<string, boolean>,
+      pluginSettingsById: {} as Record<string, Record<string, string | number | boolean>>,
     };
     try {
       const raw = getSettingsJSON();
@@ -237,6 +239,33 @@ export const useSettingsStore = defineStore('settings', {
               ),
             )
             : defaults.packManualMirrorByPack,
+        pluginEnabledById:
+          parsed.pluginEnabledById && typeof parsed.pluginEnabledById === 'object'
+            ? Object.fromEntries(
+              Object.entries(parsed.pluginEnabledById).filter(
+                (entry): entry is [string, boolean] => typeof entry[1] === 'boolean',
+              ),
+            )
+            : defaults.pluginEnabledById,
+        pluginSettingsById:
+          parsed.pluginSettingsById && typeof parsed.pluginSettingsById === 'object'
+            ? Object.fromEntries(
+              Object.entries(parsed.pluginSettingsById).filter(
+                (entry): entry is [string, Record<string, string | number | boolean>] =>
+                  typeof entry[1] === 'object' && !!entry[1],
+              ).map(([pluginId, values]) => [
+                pluginId,
+                Object.fromEntries(
+                  Object.entries(values).filter(
+                    (valueEntry): valueEntry is [string, string | number | boolean] =>
+                      typeof valueEntry[1] === 'string'
+                      || typeof valueEntry[1] === 'number'
+                      || typeof valueEntry[1] === 'boolean',
+                  ),
+                ),
+              ]),
+            )
+            : defaults.pluginSettingsById,
       };
       syncProxyTokensToStorage(restored);
       return restored;
@@ -404,6 +433,24 @@ export const useSettingsStore = defineStore('settings', {
       };
       void this.save();
     },
+    setPluginEnabled(pluginId: string, enabled: boolean) {
+      this.pluginEnabledById = {
+        ...this.pluginEnabledById,
+        [pluginId]: enabled,
+      };
+      void this.save();
+    },
+    setPluginSetting(pluginId: string, key: string, value: string | number | boolean) {
+      const current = this.pluginSettingsById[pluginId] ?? {};
+      this.pluginSettingsById = {
+        ...this.pluginSettingsById,
+        [pluginId]: {
+          ...current,
+          [key]: value,
+        },
+      };
+      void this.save();
+    },
     async save() {
       const json = JSON.stringify({
         historyLimit: this.historyLimit,
@@ -438,6 +485,8 @@ export const useSettingsStore = defineStore('settings', {
         customPackSources: this.customPackSources,
         packMirrorSelectionModeByPack: this.packMirrorSelectionModeByPack,
         packManualMirrorByPack: this.packManualMirrorByPack,
+        pluginEnabledById: this.pluginEnabledById,
+        pluginSettingsById: this.pluginSettingsById,
       });
       await saveSettingsJSON(json);
     },
@@ -505,6 +554,31 @@ export const useSettingsStore = defineStore('settings', {
           Object.entries(parsed.packManualMirrorByPack).filter(
             (entry): entry is [string, string] => typeof entry[1] === 'string',
           ),
+        );
+      }
+      if (parsed.pluginEnabledById && typeof parsed.pluginEnabledById === 'object') {
+        this.pluginEnabledById = Object.fromEntries(
+          Object.entries(parsed.pluginEnabledById).filter(
+            (entry): entry is [string, boolean] => typeof entry[1] === 'boolean',
+          ),
+        );
+      }
+      if (parsed.pluginSettingsById && typeof parsed.pluginSettingsById === 'object') {
+        this.pluginSettingsById = Object.fromEntries(
+          Object.entries(parsed.pluginSettingsById).filter(
+            (entry): entry is [string, Record<string, string | number | boolean>] =>
+              typeof entry[1] === 'object' && !!entry[1],
+          ).map(([pluginId, values]) => [
+            pluginId,
+            Object.fromEntries(
+              Object.entries(values).filter(
+                (valueEntry): valueEntry is [string, string | number | boolean] =>
+                  typeof valueEntry[1] === 'string'
+                  || typeof valueEntry[1] === 'number'
+                  || typeof valueEntry[1] === 'boolean',
+              ),
+            ),
+          ]),
         );
       }
     },

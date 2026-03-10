@@ -1,10 +1,10 @@
 <template>
-  <div>
+  <div class="fit column">
     <!-- Planner 标签页 -->
     <crafting-planner-view
       v-if="pack && index && currentItemKey"
       v-show="activeTab === 'planner'"
-      class="q-pa-md"
+      class="col overflow-auto q-pa-md"
       :pack="pack"
       :index="index"
       :root-item-key="currentItemKey"
@@ -19,7 +19,7 @@
     />
 
     <!-- Wiki 标签页内容 -->
-    <div v-if="activeTab === 'wiki'" class="q-pa-md">
+    <div v-show="activeTab === 'wiki'" class="col overflow-auto q-pa-md">
       <div v-if="currentItemDef" class="column q-gutter-md">
         <div class="text-h5">{{ currentItemDef.name }}</div>
         <q-separator />
@@ -110,7 +110,7 @@
     </div>
 
     <!-- Icon 标签页内容 -->
-    <div v-if="activeTab === 'icon'" class="q-pa-md">
+    <div v-show="activeTab === 'icon'" class="col overflow-auto q-pa-md">
       <div v-if="currentItemDef" class="column q-gutter-md">
         <div class="text-h6">{{ t('tabsIcon') }}</div>
         <div v-if="iconViewerSrc" class="icon-tab-viewer">
@@ -122,20 +122,10 @@
           <q-chip dense outline color="primary">
             {{ iconSourceLabel }}
           </q-chip>
-          <q-chip
-            v-if="currentItemDef.iconSprite?.position"
-            dense
-            outline
-            color="grey-7"
-          >
+          <q-chip v-if="currentItemDef.iconSprite?.position" dense outline color="grey-7">
             sprite: {{ currentItemDef.iconSprite.position }}
           </q-chip>
-          <q-chip
-            v-if="currentItemDef.iconSprite?.size"
-            dense
-            outline
-            color="grey-7"
-          >
+          <q-chip v-if="currentItemDef.iconSprite?.size" dense outline color="grey-7">
             size: {{ currentItemDef.iconSprite.size }}
           </q-chip>
           <q-btn
@@ -147,10 +137,7 @@
           />
         </div>
 
-        <div
-          v-if="currentItemDef.iconSprite && iconSpriteSrc"
-          class="icon-tab-sprite-preview"
-        >
+        <div v-if="currentItemDef.iconSprite && iconSpriteSrc" class="icon-tab-sprite-preview">
           <div class="icon-tab-sprite" :style="iconSpritePreviewStyle">
             <div class="icon-tab-sprite-image" :style="iconSpritePreviewImageStyle" />
           </div>
@@ -172,8 +159,71 @@
       </q-card>
     </q-dialog>
 
+    <template v-for="tab in pluginTabs" :key="tab.tabKey">
+      <div v-if="tab.iframe" v-show="activeTab === tab.tabKey" class="col column">
+        <plugin-iframe-tab
+          class="col"
+          :plugin-id="tab.pluginId"
+          :src="tab.iframe.src(pluginContext) ?? ''"
+          :allowed-origins="tab.iframe.allowedOrigins"
+          v-bind="{
+            ...(tab.iframe.sandbox ? { sandbox: tab.iframe.sandbox } : {}),
+            ...(tab.iframe.noApi ? { noApi: true } : {}),
+          }"
+          :context="pluginContext"
+        />
+      </div>
+
+      <div v-else-if="tab.api" v-show="activeTab === tab.tabKey" class="col overflow-auto q-pa-md">
+        <div v-if="pluginApiState.loading" class="row items-center q-gutter-sm">
+          <q-spinner size="18px" />
+          <span>插件 API 查询中...</span>
+        </div>
+        <q-banner v-else-if="pluginApiState.error" dense class="bg-red-1 text-negative">
+          {{ pluginApiState.error }}
+        </q-banner>
+        <div v-else-if="pluginApiState.result" class="column q-gutter-sm">
+          <div class="text-subtitle2">{{ pluginApiState.result.title }}</div>
+          <div v-if="pluginApiState.result.summary" class="text-caption text-grey-8">
+            {{ pluginApiState.result.summary }}
+          </div>
+          <q-list
+            v-if="pluginApiState.result.blocks?.length"
+            dense
+            bordered
+            separator
+            class="rounded-borders"
+          >
+            <q-item v-for="block in pluginApiState.result.blocks" :key="block.label">
+              <q-item-section>{{ block.label }}</q-item-section>
+              <q-item-section side>{{ block.value }}</q-item-section>
+            </q-item>
+          </q-list>
+          <div v-if="pluginApiState.result.links?.length" class="row q-gutter-sm">
+            <q-btn
+              v-for="link in pluginApiState.result.links"
+              :key="link.url"
+              dense
+              flat
+              color="primary"
+              icon="open_in_new"
+              :label="link.label"
+              :href="link.url"
+              target="_blank"
+              rel="noopener noreferrer"
+            />
+          </div>
+        </div>
+        <div v-else class="text-caption text-grey-7">当前插件标签页没有可展示内容</div>
+      </div>
+    </template>
+
     <!-- Recipes/Uses 标签页 -->
-    <div v-show="activeTab === 'recipes' || activeTab === 'uses'" :class="containerClass">
+    <div
+      v-show="activeTab === 'recipes' || activeTab === 'uses'"
+      class="col overflow-auto"
+      :class="containerClass"
+    >
       <div v-if="activeRecipeGroups.length" class="jei-type-layout">
         <div v-if="typeMachineIcons.length" class="jei-type-sidebar">
           <q-btn
@@ -311,12 +361,13 @@
 </template>
 
 <script setup lang="ts">
-import { computed, provide, ref } from 'vue';
+import { computed, onBeforeUnmount, provide, ref, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
 import type { PackData, ItemDef, ItemKey } from 'src/jei/types';
 import type { JeiIndex } from 'src/jei/indexing/buildIndex';
 import { itemKeyHash } from 'src/jei/indexing/key';
 import type { PlannerInitialState, PlannerLiveState } from 'src/jei/planner/plannerUi';
+import type { PluginApiResult, PluginItemContext, PluginTabRuntime } from 'src/jei/plugins/types';
 import { useSettingsStore } from 'src/stores/settings';
 import StackView from 'src/jei/components/StackView.vue';
 import RecipeViewer from 'src/jei/components/RecipeViewer.vue';
@@ -324,6 +375,7 @@ import CraftingPlannerView from 'src/jei/components/CraftingPlannerView.vue';
 import WikiDocument from 'src/components/wiki/WikiDocument.vue';
 import WikiChapterGroup from 'src/components/wiki/layout/WikiChapterGroup.vue';
 import InlineImageViewer from 'src/components/InlineImageViewer.vue';
+import PluginIframeTab from './PluginIframeTab.vue';
 import { useCachedImageUrl, useRuntimeImageUrl } from 'src/jei/pack/runtimeImage';
 import type {
   ChapterGroup,
@@ -356,7 +408,7 @@ const props = defineProps<{
   currentItemDef: ItemDef | null;
   itemDefsByKeyHash: Record<string, ItemDef>;
   renderedDescription: string;
-  activeTab: 'recipes' | 'uses' | 'wiki' | 'icon' | 'planner';
+  activeTab: string;
   activeTypeKey: string;
   activeRecipeGroups: RecipeGroup[];
   allRecipeGroups: RecipeGroup[];
@@ -365,6 +417,13 @@ const props = defineProps<{
   recipeTypesByKey: Map<string, any>; // eslint-disable-line @typescript-eslint/no-explicit-any
   plannerInitialState: PlannerInitialState | null;
   plannerTab: 'tree' | 'graph' | 'line' | 'calc';
+  pluginContext: PluginItemContext;
+  pluginTabs: PluginTabRuntime[];
+  resolvePluginApi: (
+    pluginId: string,
+    queryId: string,
+    signal: AbortSignal,
+  ) => Promise<PluginApiResult | null>;
   containerClass?: string;
   panelClass?: string;
 }>();
@@ -443,10 +502,26 @@ const iconSpriteSrcRaw = computed(() => props.currentItemDef?.iconSprite?.url ??
 const iconSpriteSrc = useCachedImageUrl(useRuntimeImageUrl(iconSpriteSrcRaw));
 const iconViewerSrc = computed(() => iconSrc.value || iconSpriteSrc.value || '');
 const iconViewerName = computed(() => props.currentItemDef?.name ?? '');
-const iconSourceLabel = computed(() => (iconSrc.value ? t('iconSourceIcon') : t('iconSourceSprite')));
+const iconSourceLabel = computed(() =>
+  iconSrc.value ? t('iconSourceIcon') : t('iconSourceSprite'),
+);
 const viewerOpen = ref(false);
 const viewerSrc = ref('');
 const viewerName = ref('');
+const pluginApiState = ref<{
+  loading: boolean;
+  error: string;
+  result: PluginApiResult | null;
+}>({
+  loading: false,
+  error: '',
+  result: null,
+});
+let pluginAbortController: AbortController | null = null;
+
+const pluginTabRuntime = computed(
+  () => props.pluginTabs.find((it) => it.tabKey === props.activeTab) ?? null,
+);
 
 const iconSpritePreviewStyle = computed(() => {
   const sprite = props.currentItemDef?.iconSprite;
@@ -518,6 +593,58 @@ function handleWikiDescriptionClick(event: MouseEvent) {
   if (!src) return;
   openViewer(src, target.alt || target.title || '');
 }
+
+async function loadPluginApiForTab(): Promise<void> {
+  if (pluginAbortController) pluginAbortController.abort();
+  pluginAbortController = null;
+  pluginApiState.value = {
+    loading: false,
+    error: '',
+    result: null,
+  };
+  const runtime = pluginTabRuntime.value;
+  if (!runtime?.api) return;
+  const controller = new AbortController();
+  pluginAbortController = controller;
+  pluginApiState.value.loading = true;
+  try {
+    const result = await props.resolvePluginApi(
+      runtime.pluginId,
+      runtime.api.queryId,
+      controller.signal,
+    );
+    if (controller.signal.aborted) return;
+    if (!result) {
+      pluginApiState.value.error = '插件 API 未返回结果';
+      return;
+    }
+    pluginApiState.value.result = result;
+  } catch (error) {
+    if (controller.signal.aborted) return;
+    pluginApiState.value.error = error instanceof Error ? error.message : '插件 API 查询失败';
+  } finally {
+    if (!controller.signal.aborted) {
+      pluginApiState.value.loading = false;
+    }
+  }
+}
+
+watch(
+  () =>
+    [
+      props.activeTab,
+      props.pluginContext.itemDef?.key.id,
+      props.pluginContext.pack?.manifest.packId,
+    ] as const,
+  () => {
+    void loadPluginApiForTab();
+  },
+  { immediate: true },
+);
+
+onBeforeUnmount(() => {
+  if (pluginAbortController) pluginAbortController.abort();
+});
 
 provide('wikiCatalogMap', wikiCatalogMap);
 provide('wikiImageUseProxy', imageUseProxy);

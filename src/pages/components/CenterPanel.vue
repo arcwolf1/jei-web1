@@ -57,15 +57,45 @@
       >
         <q-tab name="recipe" :label="t('recipeViewer')" />
         <q-tab name="advanced" :label="t('advancedPlanner')" />
+        <q-tab
+          v-for="tab in centerPluginTabs"
+          :key="tab.tabKey"
+          :name="tab.tabKey"
+          :label="tab.tabLabel"
+        />
       </q-tabs>
 
       <q-separator />
+      <div
+        v-if="centerTab === 'recipe' && navStackLength && pluginQueryActions.length"
+        class="row q-gutter-xs q-pa-sm"
+      >
+        <q-btn
+          v-for="action in pluginQueryActions"
+          :key="`${action.pluginId}:${action.actionId}`"
+          dense
+          flat
+          color="primary"
+          :icon="action.icon || 'open_in_new'"
+          :label="action.label"
+          :href="action.url"
+          :target="action.openInNewTab ? '_blank' : undefined"
+          rel="noopener noreferrer"
+        />
+      </div>
+      <q-separator v-if="centerTab === 'recipe' && navStackLength && pluginQueryActions.length" />
 
       <!-- 内容区域 - 使用 keep-alive 保持组件状态 -->
       <div class="col jei-panel__body">
-        <q-tab-panels :model-value="centerTab" animated keep-alive class="jei-panel__tab-panels">
+        <q-tab-panels
+          v-show="!isCenterPluginTabActive"
+          :model-value="mainPanelTab"
+          animated
+          keep-alive
+          class="jei-panel__tab-panels fit"
+        >
           <!-- 资料查看器面板 -->
-          <q-tab-panel name="recipe" class="q-pa-none jei-panel__tab-panel">
+          <q-tab-panel name="recipe" class="q-pa-none jei-panel__tab-panel column">
             <div v-if="navStackLength" class="jei-panel__tabs col-auto">
               <q-tabs
                 :model-value="activeTab"
@@ -81,11 +111,18 @@
                 <q-tab name="wiki" :label="wikiTabLabel" />
                 <q-tab name="icon" :label="iconTabLabel" />
                 <q-tab name="planner" :label="plannerTabLabel" />
+                <q-tab
+                  v-for="tab in pluginTabs"
+                  :key="tab.tabKey"
+                  :name="tab.tabKey"
+                  :label="tab.tabLabel"
+                />
               </q-tabs>
             </div>
             <q-separator v-if="navStackLength" />
-            <div v-show="navStackLength" class="jei-panel__content">
+            <div v-show="navStackLength" class="jei-panel__content col column">
               <recipe-content-view
+                class="col"
                 v-if="navStackLength"
                 :pack="pack ?? null"
                 :index="index ?? null"
@@ -103,6 +140,9 @@
                 :recipe-types-by-key="recipeTypesByKey ?? new Map()"
                 :planner-initial-state="plannerInitialState ?? null"
                 :planner-tab="plannerTab ?? 'tree'"
+                :plugin-context="pluginContext"
+                :plugin-tabs="pluginTabs"
+                :resolve-plugin-api="resolvePluginApi"
                 panel-class="jei-panel__panels"
                 @item-click="$emit('item-click', $event)"
                 @wiki-item-click="$emit('wiki-item-click', $event)"
@@ -121,8 +161,9 @@
           </q-tab-panel>
 
           <!-- 高级计划器面板 -->
-          <q-tab-panel name="advanced" class="q-pa-none jei-panel__tab-panel">
+          <q-tab-panel name="advanced" class="q-pa-none jei-panel__tab-panel column">
             <advanced-planner
+              class="col"
               ref="advancedPlannerRef"
               :pack="pack ?? null"
               :index="index ?? null"
@@ -131,6 +172,36 @@
             />
           </q-tab-panel>
         </q-tab-panels>
+        <div
+          v-for="tab in centerPluginTabs"
+          :key="`center-plugin-wrap:${tab.tabKey}`"
+          v-show="centerTab === tab.tabKey"
+          class="jei-panel__terminal-wrap"
+        >
+          <iframe
+            v-if="isCenterPluginTabMounted(tab.tabKey)"
+            class="jei-terminal-iframe"
+            :src="tab.src"
+            :title="tab.tabLabel"
+            referrerpolicy="no-referrer"
+            :sandbox="tab.sandbox || 'allow-scripts allow-same-origin allow-forms allow-popups'"
+          />
+          <div
+            v-if="!tab.noApi && isCenterPluginTabMounted(tab.tabKey)"
+            class="absolute-top-right q-ma-sm"
+          >
+            <q-btn
+              dense
+              flat
+              round
+              color="primary"
+              icon="open_in_new"
+              :href="tab.src"
+              target="_blank"
+              rel="noopener noreferrer"
+            />
+          </div>
+        </div>
       </div>
     </template>
     <template v-else-if="!collapsed">
@@ -141,20 +212,22 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed } from 'vue';
+import { ref, computed, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
 import type { PackData, ItemDef, ItemKey } from 'src/jei/types';
 import type { JeiIndex } from 'src/jei/indexing/buildIndex';
+import type {
+  PluginActionRuntime,
+  PluginApiResult,
+  PluginItemContext,
+  PluginTabRuntime,
+} from 'src/jei/plugins/types';
 import type {
   PlannerInitialState,
   PlannerLiveState,
   PlannerSavePayload,
 } from 'src/jei/planner/plannerUi';
-import {
-  useKeyBindingsStore,
-  keyBindingToString,
-  type KeyAction,
-} from 'src/stores/keybindings';
+import { useKeyBindingsStore, keyBindingToString, type KeyAction } from 'src/stores/keybindings';
 import RecipeContentView from './RecipeContentView.vue';
 import AdvancedPlanner from './AdvancedPlanner.vue';
 
@@ -179,10 +252,10 @@ const props = defineProps<{
   mobileTab: string;
   collapsed: boolean;
   recipeViewMode: 'dialog' | 'panel';
-  centerTab?: 'recipe' | 'advanced';
+  centerTab?: string;
   navStackLength: number;
   currentItemTitle: string;
-  activeTab: 'recipes' | 'uses' | 'wiki' | 'icon' | 'planner';
+  activeTab: string;
   pack?: PackData | null;
   index?: JeiIndex | null;
   currentItemKey?: ItemKey | null;
@@ -197,12 +270,27 @@ const props = defineProps<{
   recipeTypesByKey?: Map<string, any>; // eslint-disable-line @typescript-eslint/no-explicit-any
   plannerInitialState?: PlannerInitialState | null;
   plannerTab?: 'tree' | 'graph' | 'line' | 'calc';
+  pluginContext: PluginItemContext;
+  pluginQueryActions: PluginActionRuntime[];
+  pluginTabs: PluginTabRuntime[];
+  centerPluginTabs: Array<{
+    tabKey: string;
+    tabLabel: string;
+    src: string;
+    sandbox?: string;
+    noApi?: boolean;
+  }>;
+  resolvePluginApi: (
+    pluginId: string,
+    queryId: string,
+    signal: AbortSignal,
+  ) => Promise<PluginApiResult | null>;
 }>();
 
 defineEmits<{
   'update:collapsed': [value: boolean];
-  'update:center-tab': [value: 'recipe' | 'advanced'];
-  'update:active-tab': [value: 'recipes' | 'uses' | 'wiki' | 'icon' | 'planner'];
+  'update:center-tab': [value: string];
+  'update:active-tab': [value: string];
   'update:active-type-key': [typeKey: string];
   'go-back': [];
   close: [];
@@ -218,13 +306,47 @@ defineEmits<{
 }>();
 
 const advancedPlannerRef = ref<InstanceType<typeof AdvancedPlanner>>();
+const mountedCenterPluginTabs = ref<Record<string, boolean>>({});
+
+watch(
+  () => [props.centerTab, props.centerPluginTabs] as const,
+  ([tab, tabs]) => {
+    if (tab && tabs.some((it) => it.tabKey === tab)) {
+      mountedCenterPluginTabs.value = {
+        ...mountedCenterPluginTabs.value,
+        [tab]: true,
+      };
+    }
+    const validKeys = new Set(tabs.map((it) => it.tabKey));
+    mountedCenterPluginTabs.value = Object.fromEntries(
+      Object.entries(mountedCenterPluginTabs.value).filter(([key]) => validKeys.has(key)),
+    );
+  },
+  { immediate: true },
+);
+
+const mainPanelTab = computed<'recipe' | 'advanced'>(() =>
+  props.centerTab === 'advanced' ? 'advanced' : 'recipe',
+);
+
+const isCenterPluginTabActive = computed(() =>
+  props.centerPluginTabs.some((tab) => tab.tabKey === props.centerTab),
+);
 
 const currentViewTitle = computed(() => {
   if (props.centerTab === 'advanced') {
     return '高级计划器';
   }
+  const centerPluginTab = props.centerPluginTabs.find((tab) => tab.tabKey === props.centerTab);
+  if (centerPluginTab) {
+    return centerPluginTab.tabLabel;
+  }
   return props.navStackLength ? props.currentItemTitle : '中间区域';
 });
+
+function isCenterPluginTabMounted(tabKey: string): boolean {
+  return !!mountedCenterPluginTabs.value[tabKey];
+}
 
 function labelWithShortcut(label: string, action: KeyAction) {
   return `${label} (${keyBindingToString(keyBindingsStore.getBinding(action))})`;
@@ -323,10 +445,23 @@ defineExpose({
 .jei-panel__content {
   flex: 1;
   min-height: 0;
-  overflow: auto;
+  overflow: hidden;
 }
 
 .jei-panel__panels {
   min-height: 0;
+}
+
+.jei-panel__terminal-wrap {
+  flex: 1 1 auto;
+  min-height: 0;
+  position: relative;
+}
+
+.jei-terminal-iframe {
+  width: 100%;
+  height: 100%;
+  border: 0;
+  display: block;
 }
 </style>
