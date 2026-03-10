@@ -1,10 +1,11 @@
 <template>
   <div
+    ref="rootEl"
     class="wiki-image-loader"
     :class="[variantClass, { 'is-loading': isLoading, 'has-error': hasError }]"
   >
     <img
-      v-if="!hasError && effectiveUrl"
+      v-if="isVisible && !hasError && effectiveUrl"
       :src="effectiveUrl"
       :alt="alt"
       :style="imageStyle"
@@ -12,7 +13,7 @@
       @load="onLoad"
       @error="onError"
     />
-    <div v-else class="image-error">
+    <div v-else-if="isVisible" class="image-error">
       <q-icon name="broken_image" size="48px" color="grey-5" />
       <div class="error-text">图片加载失败</div>
       <div class="error-url">{{ originalUrl }}</div>
@@ -27,14 +28,14 @@
       />
       <a v-else :href="originalUrl" target="_blank" class="open-link"> 在新标签页打开 </a>
     </div>
-    <div v-if="isLoading" class="image-loading">
+    <div v-if="isVisible && isLoading" class="image-loading">
       <q-spinner-dots color="primary" size="40px" />
     </div>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, computed, watch } from 'vue';
+import { ref, computed, watch, onMounted, onBeforeUnmount } from 'vue';
 import { useRuntimeImageUrl } from 'src/jei/pack/runtimeImage';
 
 const props = defineProps<{
@@ -45,6 +46,31 @@ const props = defineProps<{
   proxyUrl?: string;
   variant?: 'inline' | 'block';
 }>();
+
+const rootEl = ref<HTMLElement | null>(null);
+const isVisible = ref(false);
+let observer: IntersectionObserver | null = null;
+
+onMounted(() => {
+  if (rootEl.value) {
+    observer = new IntersectionObserver((entries) => {
+      const entry = entries[0];
+      if (entry && entry.isIntersecting) {
+        isVisible.value = true;
+        observer?.disconnect();
+        observer = null;
+      }
+    });
+    observer.observe(rootEl.value);
+  }
+});
+
+onBeforeUnmount(() => {
+  if (observer) {
+    observer.disconnect();
+    observer = null;
+  }
+});
 
 const isLoading = ref(true);
 const hasError = ref(false);
