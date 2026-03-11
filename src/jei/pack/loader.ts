@@ -68,11 +68,128 @@ const packRegistry = new Map<string, PackSource>();
 const activePackBaseUrl = new Map<string, string>();
 const packMirrorMode = new Map<string, 'auto' | 'manual'>();
 const packManualMirror = new Map<string, string>();
+const mirrorLatencyCache = new Map<string, { latencyMs: number | null; measuredAt: number }>();
+const mirrorLatencyWarmupTask = new Map<string, Promise<void>>();
+
+const MIRROR_LATENCY_TIMEOUT_MS = 4500;
+const MIRROR_LATENCY_CACHE_TTL_MS = 2 * 60 * 1000;
+
+function mirrorLatencyCacheKey(packId: string, url: string): string {
+  return `${packId}::${url.replace(/\/+$/, '')}`;
+}
+
+function clearMirrorLatencyCache(packId?: string): void {
+  if (!packId) {
+    mirrorLatencyCache.clear();
+    return;
+  }
+  const prefix = `${packId}::`;
+  for (const key of mirrorLatencyCache.keys()) {
+    if (key.startsWith(prefix)) mirrorLatencyCache.delete(key);
+  }
+}
+
+function readCachedMirrorLatency(packId: string, url: string): number | null | undefined {
+  const key = mirrorLatencyCacheKey(packId, url);
+  const cached = mirrorLatencyCache.get(key);
+  if (!cached) return undefined;
+  if (Date.now() - cached.measuredAt > MIRROR_LATENCY_CACHE_TTL_MS) {
+    mirrorLatencyCache.delete(key);
+    return undefined;
+  }
+  return cached.latencyMs;
+}
+
+function writeCachedMirrorLatency(packId: string, url: string, latencyMs: number | null): void {
+  mirrorLatencyCache.set(mirrorLatencyCacheKey(packId, url), {
+    latencyMs,
+    measuredAt: Date.now(),
+  });
+}
+
+export function setPackMirrorLatencyHint(
+  packId: string,
+  baseUrl: string,
+  latencyMs: number | null,
+): void {
+  writeCachedMirrorLatency(packId, baseUrl, latencyMs);
+}
+
+async function probeMirrorLatency(packId: string, baseUrl: string): Promise<number | null> {
+  if (typeof window === 'undefined') return null;
+  const endpoint = withRefreshToken(
+    `${baseUrl.replace(/\/+$/, '')}/manifest.json?__probe=${Date.now()}`,
+    packId,
+  );
+  const controller = new AbortController();
+  const timeout = window.setTimeout(() => controller.abort(), MIRROR_LATENCY_TIMEOUT_MS);
+  const t0 = performance.now();
+  try {
+    const res = await fetch(endpoint, {
+      method: 'GET',
+      cache: 'no-store',
+      headers: { Accept: 'application/json' },
+      signal: controller.signal,
+    });
+    if (!res.ok) return null;
+    return performance.now() - t0;
+  } catch {
+    return null;
+  } finally {
+    window.clearTimeout(timeout);
+  }
+}
+
+function rankPackBaseUrlsForAutoMode(packId: string, baseUrls: string[]): string[] {
+  if (baseUrls.length <= 1) return baseUrls;
+  return baseUrls
+    .map((url, idx) => ({
+      url,
+      idx,
+      latencyMs: readCachedMirrorLatency(packId, url),
+    }))
+    .sort((a, b) => {
+      if (typeof a.latencyMs === 'number' && typeof b.latencyMs === 'number') {
+        const delta = a.latencyMs - b.latencyMs;
+        // Keep host-proximity order when RTT is effectively tied.
+        if (Math.abs(delta) > 20) return delta;
+      }
+      const aOk = typeof a.latencyMs === 'number';
+      const bOk = typeof b.latencyMs === 'number';
+      if (aOk !== bOk) return aOk ? -1 : 1;
+      const aDead = a.latencyMs === null;
+      const bDead = b.latencyMs === null;
+      if (aDead !== bDead) return aDead ? 1 : -1;
+      return a.idx - b.idx;
+    })
+    .map((it) => it.url);
+}
+
+function scheduleMirrorLatencyWarmup(packId: string, baseUrls: string[]): void {
+  if (typeof window === 'undefined' || baseUrls.length <= 1) return;
+  if (mirrorLatencyWarmupTask.has(packId)) return;
+  const task = (async () => {
+    await Promise.allSettled(
+      baseUrls.map(async (baseUrl) => {
+        if (readCachedMirrorLatency(packId, baseUrl) !== undefined) return;
+        const measured = await probeMirrorLatency(packId, baseUrl);
+        writeCachedMirrorLatency(packId, baseUrl, measured);
+      }),
+    );
+  })()
+    .catch(() => undefined)
+    .finally(() => {
+      mirrorLatencyWarmupTask.delete(packId);
+    });
+  mirrorLatencyWarmupTask.set(packId, task);
+}
 
 export function clearPackRuntimeCache(packId?: string) {
   if (packId) {
     manifestCache.delete(packId);
     activePackBaseUrl.delete(packId);
+    clearMirrorLatencyCache(packId);
+    mirrorLatencyWarmupTask.delete(packId);
     packRefreshToken.set(packId, `${Date.now()}`);
     for (const key of jsonArrayCache.keys()) {
       if (key.startsWith(`${packId}:`)) {
@@ -85,6 +202,8 @@ export function clearPackRuntimeCache(packId?: string) {
   }
   manifestCache.clear();
   activePackBaseUrl.clear();
+  clearMirrorLatencyCache();
+  mirrorLatencyWarmupTask.clear();
   jsonArrayCache.clear();
   packRefreshToken.clear();
   // 异步清除所有 IndexedDB 缓存
@@ -149,10 +268,16 @@ function scoreMirrorUrlByHostProximity(url: string, current: URL): number {
   return score;
 }
 
-function getPackBaseUrls(packId: string): string[] {
+export function getPackBaseUrls(packId: string): string[] {
   const source = packRegistry.get(packId);
   if (source?.mirrors?.length) {
-    const mirrors = source.mirrors.map((m) => m.replace(/\/+$/, ''));
+    const mirrors = Array.from(
+      new Set(source.mirrors.map((m) => m.replace(/\/+$/, '')).filter((m) => m.length > 0)),
+    );
+    if (!mirrors.length) {
+      const safe = encodeURIComponent(packId);
+      return [`/packs/${safe}`];
+    }
     const mode = packMirrorMode.get(packId) ?? 'auto';
     const manual = packManualMirror.get(packId);
     if (mode === 'manual' && manual && mirrors.includes(manual)) {
@@ -179,6 +304,10 @@ export function packBaseUrl(packId: string): string {
   }
   const urls = getPackBaseUrls(packId);
   return urls[0] ?? '';
+}
+
+export function getActivePackBaseUrl(packId: string): string | null {
+  return activePackBaseUrl.get(packId) ?? null;
 }
 
 function itemKeyHash(def: { key: { id: string; meta?: number | string; nbt?: unknown } }): string {
@@ -225,35 +354,122 @@ function extractWikiData(items: ItemDef[]): Record<string, Record<string, unknow
   return wikiMap;
 }
 
+type ManifestLoadResult = {
+  baseUrl: string;
+  manifest: PackManifest;
+};
+
+async function fetchManifestFromMirror(packId: string, baseUrl: string): Promise<ManifestLoadResult> {
+  const t0 = typeof performance !== 'undefined' ? performance.now() : Date.now();
+  try {
+    const raw = await fetchJson(`${baseUrl}/manifest.json`, packId);
+    const elapsed = (typeof performance !== 'undefined' ? performance.now() : Date.now()) - t0;
+    writeCachedMirrorLatency(packId, baseUrl, elapsed);
+    const manifest = assertPackManifest(raw, '$.manifest');
+    if (manifest.packId !== packId) {
+      throw new Error(`packId mismatch: requested "${packId}", manifest has "${manifest.packId}"`);
+    }
+    return { baseUrl, manifest };
+  } catch (e) {
+    writeCachedMirrorLatency(packId, baseUrl, null);
+    throw e;
+  }
+}
+
+function buildManifestLoadError(
+  packId: string,
+  failures: Array<{ baseUrl: string; error: unknown }>,
+): Error {
+  if (!failures.length) {
+    return new Error(`Failed to load manifest for ${packId}`);
+  }
+  const details = failures
+    .slice(0, 3)
+    .map(({ baseUrl, error }) => `${baseUrl}: ${error instanceof Error ? error.message : String(error)}`)
+    .join(' | ');
+  const suffix = failures.length > 3 ? ` (+${failures.length - 3} more)` : '';
+  return new Error(`Failed to load manifest for ${packId}. ${details}${suffix}`);
+}
+
+async function loadManifestByRace(packId: string, baseUrls: string[]): Promise<ManifestLoadResult> {
+  if (!baseUrls.length) {
+    throw new Error(`No mirror base URLs for pack ${packId}`);
+  }
+  if (baseUrls.length === 1) {
+    return fetchManifestFromMirror(packId, baseUrls[0]!);
+  }
+
+  return new Promise<ManifestLoadResult>((resolve, reject) => {
+    let settled = false;
+    let pending = baseUrls.length;
+    const failures: Array<{ baseUrl: string; error: unknown }> = [];
+
+    baseUrls.forEach((baseUrl) => {
+      void fetchManifestFromMirror(packId, baseUrl)
+        .then((result) => {
+          pending -= 1;
+          if (settled) return;
+          settled = true;
+          resolve(result);
+        })
+        .catch((error) => {
+          pending -= 1;
+          failures.push({ baseUrl, error });
+          if (!settled && pending === 0) {
+            failures.forEach(({ baseUrl: failedBase, error: failedError }) => {
+              console.warn(`Failed to load manifest from ${failedBase}`, failedError);
+            });
+            reject(buildManifestLoadError(packId, failures));
+          }
+        });
+    });
+  });
+}
+
 async function loadManifest(packId: string): Promise<PackManifest> {
   const cached = manifestCache.get(packId);
   if (cached) return cached;
   const task = (async () => {
-    const baseUrls = getPackBaseUrls(packId);
-    let lastError: unknown;
+    const initialBaseUrls = getPackBaseUrls(packId);
+    const mode = packMirrorMode.get(packId) ?? 'auto';
+    const baseUrls =
+      mode === 'auto' ? rankPackBaseUrlsForAutoMode(packId, initialBaseUrls) : initialBaseUrls;
 
-    for (const base of baseUrls) {
-      try {
-        const raw = await fetchJson(`${base}/manifest.json`, packId);
-        const manifest = assertPackManifest(raw, '$.manifest');
-        if (manifest.packId !== packId) {
-          throw new Error(`packId mismatch: requested "${packId}", manifest has "${manifest.packId}"`);
+    let selected: ManifestLoadResult | null = null;
+    if (mode === 'auto') {
+      selected = await loadManifestByRace(packId, baseUrls);
+    } else {
+      let lastError: unknown;
+      for (const baseUrl of baseUrls) {
+        try {
+          selected = await fetchManifestFromMirror(packId, baseUrl);
+          break;
+        } catch (e) {
+          lastError = e;
+          console.warn(`Failed to load manifest from ${baseUrl}`, e);
         }
-        activePackBaseUrl.set(packId, base);
-
-        // 尝试从 index.html 获取精确的生成时间戳
-        const timestamp = await tryFetchIndexTimestamp(base, packId);
-        if (timestamp) {
-          manifest.version = `${manifest.version}+${timestamp}`;
-        }
-
-        return manifest;
-      } catch (e) {
-        lastError = e;
-        console.warn(`Failed to load manifest from ${base}`, e);
+      }
+      if (!selected) {
+        throw lastError instanceof Error
+          ? lastError
+          : new Error(String(lastError) || `Failed to load manifest for ${packId}`);
       }
     }
-    throw lastError instanceof Error ? lastError : new Error(String(lastError) || `Failed to load manifest for ${packId}`);
+
+    const { baseUrl, manifest } = selected;
+    activePackBaseUrl.set(packId, baseUrl);
+
+    // 尝试从 index.html 获取精确的生成时间戳
+    const timestamp = await tryFetchIndexTimestamp(baseUrl, packId);
+    if (timestamp) {
+      manifest.version = `${manifest.version}+${timestamp}`;
+    }
+
+    if (mode === 'auto') {
+      scheduleMirrorLatencyWarmup(packId, baseUrls);
+    }
+
+    return manifest;
   })().catch((err: unknown) => {
     manifestCache.delete(packId);
     throw err;

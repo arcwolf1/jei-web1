@@ -1,6 +1,6 @@
 {
   "packs": [
-        {
+    {
       "packId": "aef",
       "label": "Arknights:Endfield"
     },
@@ -9,7 +9,8 @@
       "label": "Arknights:Endfield (Skland)",
       "mirrors": [
         "https://fastjeiskland.sirrus.cc/",
-        "https://jeiskland.sirrus.cc/"
+        "https://jeiskland.sirrus.cc/",
+        "https://skland-data.api.jei.mic.run/"
       ]
     }
   ]

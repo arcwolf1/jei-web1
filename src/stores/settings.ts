@@ -48,6 +48,37 @@ function syncProxyTokensToStorage(state: {
   setStorageItem(PROXY_FRAMEWORK_TOKEN_KEY, state.packImageProxyFrameworkToken);
 }
 
+function normalizeMirrors(value: unknown): string[] {
+  if (!Array.isArray(value)) return [];
+  return Array.from(
+    new Set(
+      value
+        .filter((v): v is string => typeof v === 'string')
+        .map((v) => v.replace(/\/+$/, '').trim())
+        .filter((v) => v.length > 0),
+    ),
+  );
+}
+
+function normalizeCustomPackId(rawId: string): string {
+  const trimmed = rawId.trim();
+  if (!trimmed) return '';
+  return trimmed.startsWith('ext-') ? trimmed : `ext-${trimmed}`;
+}
+
+function normalizeCustomPackSource(value: unknown): { packId: string; label: string; mirrors: string[] } | null {
+  if (!value || typeof value !== 'object') return null;
+  const raw = value as { packId?: unknown; label?: unknown; mirrors?: unknown };
+  if (typeof raw.packId !== 'string' || typeof raw.label !== 'string') return null;
+  const packId = normalizeCustomPackId(raw.packId);
+  if (!packId) return null;
+  return {
+    packId,
+    label: raw.label,
+    mirrors: normalizeMirrors(raw.mirrors),
+  };
+}
+
 export const useSettingsStore = defineStore('settings', {
   state: () => {
     const defaults = {
@@ -218,10 +249,9 @@ export const useSettingsStore = defineStore('settings', {
             ? parsed.detectPcDisableMobile
             : defaults.detectPcDisableMobile,
         customPackSources: Array.isArray(parsed.customPackSources)
-          ? parsed.customPackSources.filter(
-            (x): x is { packId: string; label: string; mirrors: string[] } =>
-              typeof x === 'object' && !!x && typeof x.packId === 'string' && typeof x.label === 'string' && Array.isArray(x.mirrors)
-          )
+          ? parsed.customPackSources
+            .map((x) => normalizeCustomPackSource(x))
+            .filter((x): x is { packId: string; label: string; mirrors: string[] } => x !== null)
           : defaults.customPackSources,
         packMirrorSelectionModeByPack:
           parsed.packMirrorSelectionModeByPack && typeof parsed.packMirrorSelectionModeByPack === 'object'
@@ -410,13 +440,15 @@ export const useSettingsStore = defineStore('settings', {
       void this.save();
     },
     addCustomPackSource(source: { packId: string; label: string; mirrors: string[] }) {
-      // Ensure prefix
-      const safeId = source.packId.startsWith('ext-') ? source.packId : `ext-${source.packId}`;
+      const safeId = normalizeCustomPackId(source.packId);
+      if (!safeId) return;
+      const mirrors = normalizeMirrors(source.mirrors);
+      if (!mirrors.length) return;
       const existing = this.customPackSources.findIndex((s) => s.packId === safeId);
       if (existing >= 0) {
-        this.customPackSources[existing] = { ...source, packId: safeId };
+        this.customPackSources[existing] = { ...source, packId: safeId, mirrors };
       } else {
-        this.customPackSources.push({ ...source, packId: safeId });
+        this.customPackSources.push({ ...source, packId: safeId, mirrors });
       }
       void this.save();
     },
@@ -547,10 +579,9 @@ export const useSettingsStore = defineStore('settings', {
       if (typeof parsed.circuitEditorPiecePanelSplitRatio === 'number') this.circuitEditorPiecePanelSplitRatio = parsed.circuitEditorPiecePanelSplitRatio;
       if (typeof parsed.detectPcDisableMobile === 'boolean') this.detectPcDisableMobile = parsed.detectPcDisableMobile;
       if (Array.isArray(parsed.customPackSources)) {
-        this.customPackSources = parsed.customPackSources.filter(
-          (x): x is { packId: string; label: string; mirrors: string[] } =>
-            typeof x === 'object' && !!x && typeof x.packId === 'string' && typeof x.label === 'string' && Array.isArray(x.mirrors)
-        );
+        this.customPackSources = parsed.customPackSources
+          .map((x) => normalizeCustomPackSource(x))
+          .filter((x): x is { packId: string; label: string; mirrors: string[] } => x !== null);
       }
       if (parsed.packMirrorSelectionModeByPack && typeof parsed.packMirrorSelectionModeByPack === 'object') {
         this.packMirrorSelectionModeByPack = Object.fromEntries(

@@ -1,16 +1,33 @@
 # About
 
 ## Build
-- Version: a460abd-dirty
-- Commit: a460abd (a460abdaadd5db394e0c3e22ae336f680863e35c)
-- Commit count: 117
-- Subject: feat(plugin): 新增插件系统并重构内置插件模块
+- Version: 10ddeb9-dirty
+- Commit: 10ddeb9 (10ddeb9b6333c9f037f27f8f950751c190195426)
+- Commit count: 119
+- Subject: perf(wiki): 图片懒加载以减少初始页面加载开销
 - Author: AndreaFrederica
-- Date: 2026-03-11T06:43:41+08:00
-- Generated at: 2026-03-10T23:19:51.254Z
+- Date: 2026-03-11T07:55:09+08:00
+- Generated at: 2026-03-11T14:53:25.822Z
 - Remote: https://github.com/AndreaFrederica/jei-web.git
 
 ## Version History
+
+### r119 (2026-03-11T07:55:09+08:00)
+- 10ddeb9
+  perf(wiki): 图片懒加载以减少初始页面加载开销
+  
+  通过引入 Intersection Observer API 实现图片懒加载，仅在元素进入视口时开始加载图片资源，从而减少初始页面加载时的网络请求和渲染开销。
+
+### r118 (2026-03-11T07:35:51+08:00)
+- 65d6ae7
+  feat: 添加加载进度遮罩和远程包缓存功能
+  
+  - 新增 JeiLoading 组件，支持全屏遮罩和进度条显示
+  - 在设置中添加“显示加载遮罩动画”开关，允许用户控制加载动画显示
+  - 扩展 IndexedDB 版本至 3，新增远程包缓存存储空间
+  - 实现远程数据缓存机制，支持 items、tags、recipeTypes、recipes 等类型缓存
+  - 在加载过程中显示进度信息，包括当前加载阶段和百分比
+  - 优化包加载流程，支持从缓存读取数据以减少网络请求
 
 ### r117 (2026-03-11T06:43:41+08:00)
 - a460abd

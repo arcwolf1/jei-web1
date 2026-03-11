@@ -85,6 +85,7 @@ export default {
   packMirrorLatencyLabel: '遅延',
   packMirrorLatencyUnknown: '到達不可',
   packMirrorNoMirrors: '現在のソースにはミラーがありません',
+  packMirrorCurrentUsed: '使用中',
   refreshPackCache: '現在のパックキャッシュを更新',
   packCacheRefreshed: 'キャッシュを削除して現在のパックを再読み込みしました',
   packCacheRefreshFailed: 'パックキャッシュの更新に失敗しました',

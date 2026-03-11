@@ -86,6 +86,7 @@ export default {
   packMirrorLatencyLabel: '延迟',
   packMirrorLatencyUnknown: '不可达',
   packMirrorNoMirrors: '当前数据源未配置镜像地址',
+  packMirrorCurrentUsed: '当前使用',
   refreshPackCache: '刷新当前资源包缓存',
   packCacheRefreshed: '已清除缓存并重新加载当前资源包',
   packCacheRefreshFailed: '刷新资源包缓存失败',

@@ -415,6 +415,11 @@
                             {{ t('packMirrorLatencyLabel') }}: {{ formatLatency(mirror.latencyMs) }}
                           </q-item-label>
                         </q-item-section>
+                        <q-item-section side v-if="activePackMirrorUrl && mirror.url === activePackMirrorUrl">
+                          <q-chip dense color="primary" text-color="white">
+                            {{ t('packMirrorCurrentUsed') }}
+                          </q-chip>
+                        </q-item-section>
                       </q-item>
                       <q-item v-if="packMirrors.length === 0">
                         <q-item-section class="text-grey italic">{{
@@ -598,6 +603,7 @@ const props = defineProps<{
   }>;
   customPackSources: Array<{ packId: string; url: string; label?: string }>;
   packMirrors: Array<{ url: string; latencyMs: number | null }>;
+  activePackMirrorUrl: string;
   packMirrorSelectionMode: 'auto' | 'manual';
   packManualMirror: string;
   mirrorLatencyLoading: boolean;

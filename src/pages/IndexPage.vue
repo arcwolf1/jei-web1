@@ -223,6 +223,7 @@
         }))
       "
       :pack-mirrors="activePackMirrorRows"
+      :active-pack-mirror-url="activePackMirrorUrl"
       :pack-mirror-selection-mode="activePackMirrorMode"
       :pack-manual-mirror="activePackManualMirror"
       :mirror-latency-loading="mirrorLatencyLoading"
@@ -303,11 +304,13 @@ import type { ItemDef, ItemKey, PackData, Recipe } from 'src/jei/types';
 import { useDialogManager } from 'src/stores/dialogManager';
 import {
   clearPackRuntimeCache,
-  getPackSource,
+  getActivePackBaseUrl,
+  getPackBaseUrls,
   loadPackItemDetail,
   loadPackRecipeDetail,
   loadRuntimePack,
   registerPackSource,
+  setPackMirrorLatencyHint,
   setPackMirrorPreference,
   type LoadProgress,
 } from 'src/jei/pack/loader';
@@ -358,10 +361,12 @@ import {
   type KeyBinding,
   type KeyAction,
 } from 'src/stores/keybindings';
+import { usePackRoutingRuntimeStore, type PackSourceSnapshot } from 'src/stores/packRoutingRuntime';
 import { storage } from 'src/utils/storage';
 
 const settingsStore = useSettingsStore();
 const keyBindingsStore = useKeyBindingsStore();
+const packRoutingRuntimeStore = usePackRoutingRuntimeStore();
 const dialogManager = useDialogManager();
 const { t } = useI18n();
 const pluginManager = new PluginManager();
@@ -517,7 +522,6 @@ const gridColumns = 2;
 const pageSize = ref(120);
 
 const settingsOpen = ref(false);
-const mirrorLatencyByUrl = ref<Record<string, number | null>>({});
 const mirrorLatencyLoading = ref(false);
 const dialogOpen = ref(false);
 const contextMenuRef = ref();
@@ -529,9 +533,20 @@ const activePackMirrorMode = computed(
   () => settingsStore.packMirrorSelectionModeByPack[activePackId.value] ?? 'auto',
 );
 const activePackMirrors = computed(() => {
-  const source = getPackSource(activePackId.value);
-  if (!source?.mirrors?.length) return [];
-  return source.mirrors.map((m) => m.replace(/\/+$/, ''));
+  const mirrors = packRoutingRuntimeStore.getMirrorsForPack(
+    activePackId.value,
+    activePackMirrorMode.value,
+    settingsStore.packManualMirrorByPack[activePackId.value],
+  );
+  if (mirrors.length) return mirrors;
+  if (activePackId.value.startsWith('local:')) return [];
+  return getPackBaseUrls(activePackId.value);
+});
+const activePackMirrorUrl = computed(() => {
+  const packId = activePackId.value;
+  const runtime = packRoutingRuntimeStore.activeBaseUrlByPack[packId];
+  if (runtime) return runtime.replace(/\/+$/, '');
+  return (getActivePackBaseUrl(packId) ?? '').replace(/\/+$/, '');
 });
 const activePackManualMirror = computed(() => {
   const saved = settingsStore.packManualMirrorByPack[activePackId.value];
@@ -541,7 +556,7 @@ const activePackManualMirror = computed(() => {
 const activePackMirrorRows = computed(() =>
   activePackMirrors.value.map((url) => ({
     url,
-    latencyMs: mirrorLatencyByUrl.value[url] ?? null,
+    latencyMs: packRoutingRuntimeStore.getLatency(activePackId.value, url),
   })),
 );
 
@@ -1680,6 +1695,7 @@ async function reloadPack(packId: string) {
     });
     runtimePackDispose.value = loaded.dispose;
     pack.value = loaded.pack;
+    packRoutingRuntimeStore.setActiveBaseUrl(packId, getActivePackBaseUrl(packId));
 
     const startupDialog = loaded.pack.manifest.startupDialog;
     if (startupDialog && !settingsStore.acceptedStartupDialogs.includes(startupDialog.id)) {
@@ -1738,6 +1754,7 @@ async function reloadPack(packId: string) {
     recomputePageSize();
     applyRouteState();
   } catch (e) {
+    packRoutingRuntimeStore.setActiveBaseUrl(packId, null);
     error.value = e instanceof Error ? e.message : String(e);
     loading.value = false;
   }
@@ -1745,9 +1762,9 @@ async function reloadPack(packId: string) {
 
 async function loadPacksIndex() {
   const local = await loadLocalPackOptions();
+  const reservedIds = new Set(packOptions.value.map((o) => o.value));
+  const knownSources = packRoutingRuntimeStore.sourcesByPack;
 
-  // 1. 先定义 custom 列表（用于UI选项），但暂不注册
-  // 这样我们可以控制注册顺序
   const custom = settingsStore.customPackSources.map((s) => ({
     label: s.label || s.packId,
     value: s.packId,
@@ -1757,7 +1774,8 @@ async function loadPacksIndex() {
     const res = await fetch('/packs/index.json');
     if (!res.ok) {
       // 失败时，注册自定义源并返回
-      registerCustomSources();
+      const nextSources = registerCustomSources(reservedIds, knownSources);
+      packRoutingRuntimeStore.setSources(nextSources);
       applyAllMirrorPreferences();
       packOptions.value = [...custom, ...packOptions.value, ...local];
       return;
@@ -1766,44 +1784,77 @@ async function loadPacksIndex() {
       packs?: Array<{ packId: string; label: string; mirrors?: string[] }>;
     };
     if (Array.isArray(data.packs)) {
+      const remoteIds = new Set(data.packs.map((p) => p.packId));
+      const effectiveCustom = settingsStore.customPackSources
+        .filter((s) => !remoteIds.has(s.packId))
+        .map((s) => ({
+          label: s.label || s.packId,
+          value: s.packId,
+        }));
+      const remoteSources: Record<string, PackSourceSnapshot> = {};
       const remote = data.packs.map((p) => {
-        if (p.mirrors?.length) {
-          registerPackSource({
-            packId: p.packId,
-            label: p.label,
-            mirrors: p.mirrors,
-          });
-        }
+        const mirrors = normalizeMirrorUrls(p.mirrors ?? []);
+        const effectiveMirrors =
+          mirrors.length > 0 ? mirrors : [`/packs/${encodeURIComponent(p.packId)}`];
+        remoteSources[p.packId] = {
+          label: p.label,
+          mirrors: effectiveMirrors,
+        };
+        registerPackSource({
+          packId: p.packId,
+          label: p.label,
+          mirrors: effectiveMirrors,
+        });
         return { label: p.label, value: p.packId };
       });
 
-      // 2. 注册自定义源（覆盖远程同名源）
-      registerCustomSources();
+      // 2. 注册自定义源（仅新增扩展包，不覆盖官方包）
+      const nextSources = registerCustomSources(remoteIds, remoteSources);
+      packRoutingRuntimeStore.setSources(nextSources);
       applyAllMirrorPreferences();
 
-      packOptions.value = [...remote, ...custom, ...local];
+      packOptions.value = [...remote, ...effectiveCustom, ...local];
 
       // 如果 store 中的 packId 不在新列表中，切换到第一个
       if (!packOptions.value.some((o) => o.value === settingsStore.selectedPack)) {
         settingsStore.setSelectedPack(packOptions.value[0]?.value ?? '');
       }
+      return;
     }
+    const nextSources = registerCustomSources(reservedIds, knownSources);
+    packRoutingRuntimeStore.setSources(nextSources);
   } catch {
-    registerCustomSources();
+    const nextSources = registerCustomSources(reservedIds, knownSources);
+    packRoutingRuntimeStore.setSources(nextSources);
     applyAllMirrorPreferences();
     packOptions.value = [...custom, ...packOptions.value, ...local];
   }
 }
 
-function registerCustomSources() {
+function normalizeMirrorUrls(raw: string[]): string[] {
+  return Array.from(new Set(raw.map((m) => m.replace(/\/+$/, '').trim()).filter((m) => m.length > 0)));
+}
+
+function registerCustomSources(
+  remotePackIds: Set<string>,
+  baseSources: Record<string, PackSourceSnapshot>,
+): Record<string, PackSourceSnapshot> {
+  const nextSources = { ...baseSources };
   settingsStore.customPackSources.forEach((s) => {
-    const mirrors = s.mirrors && s.mirrors.length ? s.mirrors : [''];
+    if (remotePackIds.has(s.packId)) return;
+    const mirrors = normalizeMirrorUrls(s.mirrors ?? []);
+    if (!mirrors.length) return;
+    nextSources[s.packId] = {
+      label: s.label || s.packId,
+      mirrors,
+    };
     registerPackSource({
       packId: s.packId,
       label: s.label || s.packId,
       mirrors: mirrors,
     });
   });
+  return nextSources;
 }
 
 function onAddCustomSource(source: { packId: string; url: string; label?: string }) {
@@ -1853,17 +1904,19 @@ async function measureMirrorLatency(url: string): Promise<number | null> {
 }
 
 async function refreshActivePackMirrorLatency() {
+  const packId = activePackId.value;
   const mirrors = activePackMirrors.value;
-  if (!mirrors.length) {
-    mirrorLatencyByUrl.value = {};
-    return;
-  }
+  if (!mirrors.length) return;
   mirrorLatencyLoading.value = true;
   try {
-    const entries = await Promise.all(
-      mirrors.map(async (url) => [url, await measureMirrorLatency(url)] as const),
+    await Promise.allSettled(
+      mirrors.map(async (url) => {
+        const latency = await measureMirrorLatency(url);
+        // Incremental update: each mirror writes back immediately when finished.
+        packRoutingRuntimeStore.setLatency(packId, url, latency);
+        setPackMirrorLatencyHint(packId, url, latency);
+      }),
     );
-    mirrorLatencyByUrl.value = Object.fromEntries(entries);
   } finally {
     mirrorLatencyLoading.value = false;
   }

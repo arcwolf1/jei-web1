@@ -86,6 +86,7 @@ export default {
   packMirrorLatencyLabel: 'Latency',
   packMirrorLatencyUnknown: 'Unreachable',
   packMirrorNoMirrors: 'No mirrors configured for current source',
+  packMirrorCurrentUsed: 'In use',
   refreshPackCache: 'Refresh current pack cache',
   packCacheRefreshed: 'Cleared cache and reloaded current pack',
   packCacheRefreshFailed: 'Failed to refresh pack cache',

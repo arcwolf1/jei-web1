@@ -8,6 +8,10 @@
   >
     <div class="jei-list__head col-auto">
       <div class="text-subtitle2">{{ t('itemList') }}</div>
+      <div class="jei-list__head-center text-caption text-grey-7">
+        <span>{{ t('totalItems', { count: totalCount }) }}</span>
+        <span>{{ t('itemsPerPage', { size: pageSize }) }}</span>
+      </div>
       <div class="text-caption">pack: {{ packId }}</div>
     </div>
 
@@ -117,18 +121,17 @@
     </div>
 
     <div class="jei-list__pager col-auto">
-      <div class="text-caption text-grey-7">{{ t('totalItems', { count: totalCount }) }}</div>
-      <div class="text-caption text-grey-7">{{ t('itemsPerPage', { size: pageSize }) }}</div>
-      <q-space />
-      <q-pagination
-        :model-value="page"
-        @update:model-value="$emit('update:page', $event)"
-        :max="pageCount"
-        max-pages="7"
-        boundary-numbers
-        direction-links
-        dense
-      />
+      <div class="jei-list__pager-pagination">
+        <q-pagination
+          :model-value="page"
+          @update:model-value="$emit('update:page', $event)"
+          :max="pageCount"
+          max-pages="7"
+          boundary-numbers
+          direction-links
+          dense
+        />
+      </div>
     </div>
 
     <div ref="historyEl" class="jei-list__history col-auto">
@@ -234,9 +237,25 @@ defineExpose({
 .jei-list__head {
   padding: 12px;
   display: flex;
-  align-items: baseline;
+  align-items: center;
   justify-content: space-between;
   gap: 10px;
+}
+
+.jei-list__head-center {
+  flex: 1 1 auto;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  min-width: 0;
+  text-align: center;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.jei-list__head-center span {
+  white-space: nowrap;
 }
 
 .jei-list__scroll {
@@ -248,9 +267,25 @@ defineExpose({
 .jei-list__pager {
   padding: 10px;
   display: flex;
-  align-items: center;
+  flex-direction: column;
+  align-items: stretch;
   gap: 10px;
   border-top: 1px solid rgba(0, 0, 0, 0.08);
+}
+
+.jei-list__pager-pagination {
+  display: flex;
+  justify-content: center;
+  width: 100%;
+  max-width: 100%;
+  overflow-x: auto;
+  overflow-y: hidden;
+}
+
+.jei-list__pager-pagination :deep(.q-pagination) {
+  min-width: max-content;
+  flex-wrap: nowrap;
+  margin: 0 auto;
 }
 
 .jei-panel {
