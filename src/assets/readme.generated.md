@@ -195,6 +195,35 @@ npm run format
 }
 ```
 
+### 虚拟聚合源（多源平级聚合）
+
+当同一游戏有多个平级数据源且各自不完整时，可以在 `index.json` 增加一个虚拟源，并通过描述文件定义聚合优先级：
+
+```json
+{
+  "packId": "your-aggregated-pack",
+  "label": "Your Game (Aggregated)",
+  "aggregateDescriptor": "aggregates/your-aggregated-pack.json"
+}
+```
+
+描述文件示例（`public/packs/aggregates/your-aggregated-pack.json`）：
+
+```json
+{
+  "displayName": "Your Game (Aggregated)",
+  "gameId": "your-game",
+  "sources": [
+    { "packId": "source-a", "priority": 10, "matchByName": true },
+    { "packId": "source-b", "priority": 20, "matchByName": true }
+  ]
+}
+```
+
+- `sources` 按 `priority` 从小到大决定展示顺序（仅排序，不做覆盖裁决）
+- `matchByName: true` 会按物品名称将不同源的同名物品映射到统一 ID
+- 聚合后的结果会影响配方收集、用途查询和自动合成规划
+
 ## 编辑器：静态资源与导出
 
 ### 添加图片资源

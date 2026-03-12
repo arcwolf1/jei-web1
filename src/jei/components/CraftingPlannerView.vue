@@ -12,6 +12,7 @@
           :disable="!!decisions.length"
           @click="openSaveDialog"
         />
+        <q-toggle v-model="useProductRecovery" dense label="使用产物回收" />
         <q-space />
         <q-badge v-if="decisions.length" color="warning"
           >{{ t('pendingChoices') }}{{ decisions.length }}</q-badge
@@ -260,7 +261,40 @@
                       <div class="planner__tree-name-sub text-caption text-grey-7">
                         {{ formatAmount(nodeDisplayAmount(row.node)) }}
                       </div>
+                      <div
+                        v-if="row.node.kind === 'item' && row.node.recovery"
+                        class="planner__tree-name-sub text-caption text-positive"
+                      >
+                        {{ recoverySourceText(row.node) }}
+                      </div>
+                      <div
+                        v-if="
+                          row.node.kind === 'item' &&
+                          (recoveryProducedByNodeId.get(row.node.nodeId)?.length ?? 0) > 0
+                        "
+                        class="planner__tree-name-sub text-caption text-teal-8"
+                      >
+                        回收产出：{{ recoveryProducedText(row.node.nodeId) }}
+                      </div>
                     </div>
+                    <q-badge
+                      v-if="row.node.kind === 'item' && row.node.recovery"
+                      color="teal"
+                      class="q-ml-sm"
+                    >
+                      recovery
+                    </q-badge>
+                    <q-badge
+                      v-if="
+                        row.node.kind === 'item' &&
+                        (recoveryProducedByNodeId.get(row.node.nodeId)?.length ?? 0) > 0
+                      "
+                      color="teal-6"
+                      class="q-ml-sm"
+                    >
+                      回收产出
+                      <q-tooltip>{{ recoveryProducedText(row.node.nodeId) }}</q-tooltip>
+                    </q-badge>
                     <q-badge
                       v-if="row.node.kind === 'item' && row.node.cycle"
                       :color="row.node.cycleSeed ? 'positive' : 'negative'"
@@ -376,6 +410,25 @@
                     @item-mouseenter="emit('item-mouseenter', $event)"
                     @item-mouseleave="emit('item-mouseleave')"
                   />
+                  <q-badge
+                    v-if="row.node.kind === 'item' && row.node.recovery"
+                    color="teal"
+                    class="q-ml-sm"
+                  >
+                    recovery
+                    <q-tooltip>{{ recoverySourceText(row.node) }}</q-tooltip>
+                  </q-badge>
+                  <q-badge
+                    v-if="
+                      row.node.kind === 'item' &&
+                      (recoveryProducedByNodeId.get(row.node.nodeId)?.length ?? 0) > 0
+                    "
+                    color="teal-6"
+                    class="q-ml-sm"
+                  >
+                    回收产出
+                    <q-tooltip>{{ recoveryProducedText(row.node.nodeId) }}</q-tooltip>
+                  </q-badge>
                   <q-badge
                     v-if="row.node.kind === 'item' && row.node.cycle"
                     :color="row.node.cycleSeed ? 'positive' : 'negative'"
@@ -506,7 +559,10 @@
                 <template #node-itemNode="p">
                   <div
                     class="planner__flow-node"
-                    :class="{ 'planner__flow-node--selected': selectedGraphNodeId === p.id }"
+                    :class="{
+                      'planner__flow-node--selected': selectedGraphNodeId === p.id,
+                      'planner__flow-node--recovery': p.data.recovery,
+                    }"
                     @click.stop="selectedGraphNodeId = p.id"
                   >
                     <div
@@ -541,6 +597,10 @@
                         {{ p.data.subtitle }}
                         <q-badge v-if="p.data.machineCount" color="accent" class="q-ml-xs">
                           x{{ p.data.machineCount }}
+                        </q-badge>
+                        <q-badge v-if="p.data.recovery" color="teal" class="q-ml-xs">
+                          recovery
+                          <q-tooltip v-if="p.data.recoverySource">{{ p.data.recoverySource }}</q-tooltip>
                         </q-badge>
                         <q-badge
                           v-if="p.data.cycle"
@@ -636,7 +696,7 @@
               <q-toggle v-model="lineCollapseIntermediate" dense :label="t('hideIntermediate')" />
               <q-toggle v-model="lineWidthByRate" dense :label="t('lineWidthByRate')" />
               <q-toggle
-                v-if="selectedLineItemData && !selectedLineItemData.isRoot"
+                v-if="selectedLineItemData && !selectedLineItemData.isRoot && !selectedLineItemData.recovery"
                 :model-value="selectedLineItemForcedRaw"
                 dense
                 color="warning"
@@ -702,7 +762,10 @@
                 <template #node-lineItemNode="p">
                   <div
                     class="planner__flow-node nopan"
-                    :class="{ 'planner__flow-node--selected': selectedLineNodeId === p.id }"
+                    :class="{
+                      'planner__flow-node--selected': selectedLineNodeId === p.id,
+                      'planner__flow-node--recovery': p.data.recovery,
+                    }"
                     @click.stop="selectedLineNodeId = p.id"
                   >
                     <Handle
@@ -755,6 +818,10 @@
                       <div class="planner__flow-node-sub">
                         {{ p.data.subtitle }}
                         <q-badge v-if="p.data.isRoot" color="primary" class="q-ml-xs">目标</q-badge>
+                        <q-badge v-if="p.data.recovery" color="teal" class="q-ml-xs">
+                          回收
+                          <q-tooltip v-if="p.data.recoverySource">{{ p.data.recoverySource }}</q-tooltip>
+                        </q-badge>
                         <q-badge v-if="p.data.forcedRaw" color="warning" class="q-ml-xs">
                           原料
                         </q-badge>
@@ -1217,6 +1284,7 @@ import type {
 } from 'src/jei/planner/plannerUi';
 import { DEFAULT_BELT_SPEED } from 'src/jei/planner/units';
 import {
+  autoPlanSelections,
   buildRequirementTree,
   buildEnhancedRequirementTree,
   computePlannerDecisions,
@@ -1284,6 +1352,8 @@ const lineWidthByRate = ref(false);
 const lineWidthCurveDialogOpen = ref(false);
 const lineWidthCurveConfig = ref<LineWidthCurveConfig>(createDefaultLineWidthCurveConfig());
 const forcedRawItemKeyHashes = ref<Set<string>>(new Set());
+const useProductRecovery = ref(false);
+const hasManualSelectionOverride = ref(false);
 const graphPageFull = ref(false);
 const linePageFull = ref(false);
 const graphShowFluids = ref(true);
@@ -1384,6 +1454,7 @@ function mapToRecord<V extends string>(m: Map<string, V>): Record<string, V> {
 function emitLiveState() {
   emit('state-change', {
     targetAmount: targetAmount.value,
+    useProductRecovery: useProductRecovery.value,
     selectedRecipeIdByItemKeyHash: mapToRecord(selectedRecipeIdByItemKeyHash.value),
     selectedItemIdByTagId: mapToRecord(selectedItemIdByTagId.value as Map<string, ItemId>),
   });
@@ -1397,6 +1468,8 @@ function applyInitialState() {
     );
     selectedItemIdByTagId.value = new Map(Object.entries(st.selectedItemIdByTagId ?? {}));
     targetAmount.value = Number(st.targetAmount) || 1;
+    useProductRecovery.value = st.useProductRecovery === true;
+    hasManualSelectionOverride.value = !st.loadKey.startsWith('auto:');
     activeTab.value = props.initialTab ?? 'tree';
     treeDisplayMode.value = 'list';
     collapsed.value = new Set();
@@ -1407,6 +1480,8 @@ function applyInitialState() {
   selectedRecipeIdByItemKeyHash.value = new Map();
   selectedItemIdByTagId.value = new Map();
   targetAmount.value = 1;
+  useProductRecovery.value = false;
+  hasManualSelectionOverride.value = false;
   activeTab.value = props.initialTab ?? 'tree';
   treeDisplayMode.value = 'list';
   collapsed.value = new Set();
@@ -1430,6 +1505,21 @@ watch(
 
 watch(targetAmount, () => emitLiveState());
 watch(targetUnit, () => emitLiveState());
+watch(useProductRecovery, () => {
+  if (!hasManualSelectionOverride.value) {
+    const auto = autoPlanSelections({
+      pack: props.pack,
+      index: props.index,
+      rootItemKey: props.rootItemKey,
+      useProductRecovery: useProductRecovery.value,
+    });
+    selectedRecipeIdByItemKeyHash.value = new Map(
+      Object.entries(auto.selectedRecipeIdByItemKeyHash),
+    );
+    selectedItemIdByTagId.value = new Map(Object.entries(auto.selectedItemIdByTagId));
+  }
+  emitLiveState();
+});
 
 const decisions = computed(() =>
   computePlannerDecisions({
@@ -1452,6 +1542,7 @@ const treeResult = computed(() => {
     targetUnit: targetUnit.value,
     selectedRecipeIdByItemKeyHash: selectedRecipeIdByItemKeyHash.value,
     selectedItemIdByTagId: selectedItemIdByTagId.value,
+    useProductRecovery: useProductRecovery.value,
     forcedRawItemKeyHashes: forcedRawItemKeyHashes.value,
   });
 });
@@ -1466,6 +1557,7 @@ const enhancedTreeResult = computed(() => {
     targetAmount: targetAmount.value,
     selectedRecipeIdByItemKeyHash: selectedRecipeIdByItemKeyHash.value,
     selectedItemIdByTagId: selectedItemIdByTagId.value,
+    useProductRecovery: useProductRecovery.value,
     forcedRawItemKeyHashes: forcedRawItemKeyHashes.value,
     targetUnit: targetUnit.value,
   });
@@ -1479,6 +1571,21 @@ function decisionKey(d: PlannerDecision) {
 function itemName(key: ItemKey) {
   const def = props.itemDefsByKeyHash[itemKeyHash(key)];
   return def?.name ?? key.id;
+}
+
+function recoverySourceText(node: {
+  recovery?: boolean;
+  recoverySourceItemKey?: ItemKey;
+  recoverySourceRecipeId?: string;
+  recoverySourceRecipeTypeKey?: string;
+}): string {
+  if (!node.recovery) return '';
+  const sourceItem = node.recoverySourceItemKey ? itemName(node.recoverySourceItemKey) : '';
+  const sourceRecipe = node.recoverySourceRecipeTypeKey ?? node.recoverySourceRecipeId ?? '';
+  if (sourceItem && sourceRecipe) return `回收自 ${sourceItem} (${sourceRecipe})`;
+  if (sourceItem) return `回收自 ${sourceItem}`;
+  if (sourceRecipe) return `回收自 ${sourceRecipe}`;
+  return '回收';
 }
 
 function isForcedRawKey(key: ItemKey): boolean {
@@ -1548,6 +1655,7 @@ function setRecipeChoice(itemKeyHash: string, recipeId: string) {
   const next = new Map(selectedRecipeIdByItemKeyHash.value);
   next.set(itemKeyHash, recipeId);
   selectedRecipeIdByItemKeyHash.value = next;
+  hasManualSelectionOverride.value = true;
   emitLiveState();
 }
 
@@ -1555,6 +1663,7 @@ function setTagChoice(tagId: string, itemId: ItemId) {
   const next = new Map(selectedItemIdByTagId.value);
   next.set(tagId, itemId);
   selectedItemIdByTagId.value = next;
+  hasManualSelectionOverride.value = true;
   emitLiveState();
 }
 
@@ -1562,6 +1671,8 @@ function resetPlanner() {
   selectedRecipeIdByItemKeyHash.value = new Map();
   selectedItemIdByTagId.value = new Map();
   forcedRawItemKeyHashes.value = new Set();
+  useProductRecovery.value = false;
+  hasManualSelectionOverride.value = false;
   targetAmount.value = 1;
   activeTab.value = 'tree';
   treeDisplayMode.value = 'list';
@@ -1583,6 +1694,7 @@ function confirmSave() {
     name: saveName.value.trim(),
     rootItemKey: props.rootItemKey,
     targetAmount: targetAmount.value,
+    useProductRecovery: useProductRecovery.value,
     selectedRecipeIdByItemKeyHash: mapToRecord(selectedRecipeIdByItemKeyHash.value),
     selectedItemIdByTagId: mapToRecord(selectedItemIdByTagId.value as Map<string, ItemId>),
   };
@@ -1635,6 +1747,41 @@ const treeListRows = computed<TreeListRow[]>(() => {
   walk(result.root as unknown as RequirementNode, []);
   return rows;
 });
+
+const recoveryProducedByNodeId = computed(() => {
+  const result = enhancedTreeResult.value || treeResult.value;
+  const out = new Map<string, Array<{ itemKey: ItemKey; amount: number }>>();
+  if (!result) return out;
+
+  const byNodeAndItem = new Map<string, Map<string, { itemKey: ItemKey; amount: number }>>();
+  const walk = (node: RequirementNode) => {
+    if (node.kind !== 'item') return;
+    if (node.recovery && node.recoverySourceNodeId) {
+      const sourceNodeId = node.recoverySourceNodeId;
+      const itemHash = itemKeyHash(node.itemKey);
+      const bucket = byNodeAndItem.get(sourceNodeId) ?? new Map<string, { itemKey: ItemKey; amount: number }>();
+      const prev = bucket.get(itemHash);
+      if (prev) prev.amount += finiteOr(node.amount, 0);
+      else bucket.set(itemHash, { itemKey: node.itemKey, amount: finiteOr(node.amount, 0) });
+      byNodeAndItem.set(sourceNodeId, bucket);
+    }
+    node.children.forEach((c) => walk(c));
+  };
+
+  walk(result.root as unknown as RequirementNode);
+  byNodeAndItem.forEach((bucket, nodeId) => {
+    out.set(nodeId, Array.from(bucket.values()));
+  });
+  return out;
+});
+
+function recoveryProducedText(nodeId: string): string {
+  const entries = recoveryProducedByNodeId.value.get(nodeId) ?? [];
+  if (!entries.length) return '';
+  return entries
+    .map((entry) => `${itemName(entry.itemKey)} x${formatAmount(entry.amount)}`)
+    .join('、');
+}
 
 const rateColumnLabel = computed(() => {
   if (targetUnit.value === 'items') return '数量';
@@ -1741,6 +1888,8 @@ type FlowItemData = {
   subtitle: string;
   cycle: boolean;
   cycleSeed: boolean;
+  recovery?: boolean;
+  recoverySource?: string;
   machineItemId?: string;
   machineName?: string;
   machineCount?: number;
@@ -1816,6 +1965,7 @@ const flow = computed(() => {
       const subtitle = unitSuffix
         ? `${formatAmount(nodeDisplayRate(node))}${unitSuffix}`
         : `${formatAmount(nodeDisplayAmount(node))}`;
+      const recoverySource = node.recovery ? recoverySourceText(node) : '';
       nodes.push({
         id: node.nodeId,
         type: 'itemNode',
@@ -1828,6 +1978,7 @@ const flow = computed(() => {
           subtitle,
           cycle: node.cycle,
           cycleSeed: !!node.cycleSeed,
+          ...(node.recovery ? { recovery: true, recoverySource } : {}),
           ...(node.machineItemId ? { machineItemId: node.machineItemId } : {}),
           ...(node.machineName ? { machineName: node.machineName } : {}),
           ...(machineCount > 0 ? { machineCount } : {}),
@@ -1848,7 +1999,25 @@ const flow = computed(() => {
     }
   });
 
+  const recoverySourceKey = (recipeId: string, sourceItemKey: ItemKey, recipeTypeKey?: string) =>
+    `${recipeId}|${itemKeyHash(sourceItemKey)}|${recipeTypeKey ?? ''}`;
+  const sourceNodeIdsByRecoveryKey = new Map<string, string[]>();
+  const collectRecoverySources = (node: FlowNode) => {
+    if (node.kind !== 'item') return;
+    if (!node.recovery && node.recipeIdUsed) {
+      const key = recoverySourceKey(node.recipeIdUsed, node.itemKey, node.recipeTypeKeyUsed);
+      const bucket = sourceNodeIdsByRecoveryKey.get(key) ?? [];
+      bucket.push(node.nodeId);
+      sourceNodeIdsByRecoveryKey.set(key, bucket);
+    }
+    node.children.forEach((child) => {
+      if (child.kind === 'item') collectRecoverySources(child);
+    });
+  };
+  collectRecoverySources(root);
+
   const edges: Edge[] = [];
+  const recoveryEdgeKeys = new Set<string>();
   const walkEdges = (node: FlowNode) => {
     if (node.kind !== 'item') return;
     node.children.forEach((c: FlowNode, idx: number) => {
@@ -1861,6 +2030,41 @@ const flow = computed(() => {
         zIndex: 2000,
         type: 'smoothstep',
       });
+      if (
+        c.kind === 'item' &&
+        c.recovery &&
+        c.recoverySourceRecipeId &&
+        c.recoverySourceItemKey
+      ) {
+        const key = recoverySourceKey(
+          c.recoverySourceRecipeId,
+          c.recoverySourceItemKey,
+          c.recoverySourceRecipeTypeKey,
+        );
+        const sourceCandidates = sourceNodeIdsByRecoveryKey.get(key) ?? [];
+        const sourceNodeId = sourceCandidates.find((id) => id !== node.nodeId);
+        if (sourceNodeId && sourceNodeId !== c.nodeId) {
+          const recoveryEdgeKey = `${sourceNodeId}->${c.nodeId}`;
+          if (!recoveryEdgeKeys.has(recoveryEdgeKey)) {
+            recoveryEdgeKeys.add(recoveryEdgeKey);
+            edges.push({
+              id: `recovery:${recoveryEdgeKey}`,
+              source: sourceNodeId,
+              target: c.nodeId,
+              zIndex: 1999,
+              type: 'smoothstep',
+              animated: true,
+              style: {
+                stroke: '#26a69a',
+                strokeDasharray: '6 4',
+              },
+              label: 'recovery',
+              labelBgPadding: [4, 2],
+              labelBgBorderRadius: 4,
+            });
+          }
+        }
+      }
       walkEdges(c);
     });
   };
@@ -2058,6 +2262,8 @@ type LineFlowItemData = {
   subtitle: string;
   isRoot: boolean;
   forcedRaw: boolean;
+  recovery?: boolean;
+  recoverySource?: string;
   inPorts: number;
   outPorts: number;
 };
@@ -2098,6 +2304,7 @@ const lineFlow = computed(() => {
           : '';
       const subtitle = `${base}${seed}`;
       const title = itemName(n.itemKey);
+      const recoverySource = n.recovery ? recoverySourceText(n) : '';
       titleById.set(n.nodeId, title);
       return {
         id: n.nodeId,
@@ -2110,7 +2317,8 @@ const lineFlow = computed(() => {
           title,
           subtitle,
           isRoot: !!n.isRoot,
-          forcedRaw: isForcedRawKey(n.itemKey),
+          forcedRaw: !n.recovery && isForcedRawKey(n.itemKey),
+          ...(n.recovery ? { recovery: true, recoverySource } : {}),
           inPorts: 0,
           outPorts: 0,
         } satisfies LineFlowItemData,
@@ -2157,7 +2365,8 @@ const lineFlow = computed(() => {
   });
 
   const edges: Edge[] = model.edges.map((e) => {
-    const label = `${formatAmount(displayRateFromAmount(e.amount))}${unitSuffix()}`;
+    const recovery = e.kind === 'item' && e.recovery;
+    const label = `${formatAmount(displayRateFromAmount(e.amount))}${unitSuffix()}${recovery ? ' ♻' : ''}`;
     return {
       id: e.id,
       source: e.source,
@@ -2170,6 +2379,7 @@ const lineFlow = computed(() => {
       labelBgBorderRadius: 6,
       style: {
         strokeWidth: lineEdgeBaseWidthFromRate(e.amount),
+        ...(recovery ? { stroke: '#26a69a', strokeDasharray: '6 4' } : {}),
       },
       markerEnd: {
         type: MarkerType.ArrowClosed,
@@ -3230,6 +3440,11 @@ const flowBackgroundPatternColor = computed(() =>
 .planner__flow-node--selected {
   border-color: var(--q-primary);
   box-shadow: 0 0 0 2px rgba(25, 118, 210, 0.25);
+}
+
+.planner__flow-node--recovery {
+  border-color: #26a69a;
+  box-shadow: 0 0 0 1px rgba(38, 166, 154, 0.3);
 }
 
 .planner__flow-node--fluid {

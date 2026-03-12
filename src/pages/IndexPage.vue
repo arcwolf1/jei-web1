@@ -491,6 +491,7 @@ type SavedPlan = {
   rootItemKey: ItemKey;
   rootKeyHash: string;
   targetAmount: number;
+  useProductRecovery?: boolean;
   selectedRecipeIdByItemKeyHash: Record<string, string>;
   selectedItemIdByTagId: Record<string, string>;
   createdAt: number;
@@ -505,11 +506,16 @@ type SavedPlan = {
 
 const savedPlans = ref<SavedPlan[]>([]);
 const plannerInitialState = ref<PlannerInitialState | null>(null);
-const plannerLiveState = ref<PlannerLiveState>({
-  targetAmount: 1,
-  selectedRecipeIdByItemKeyHash: {},
-  selectedItemIdByTagId: {},
-});
+function createDefaultPlannerLiveState(): PlannerLiveState {
+  return {
+    targetAmount: 1,
+    useProductRecovery: false,
+    selectedRecipeIdByItemKeyHash: {},
+    selectedItemIdByTagId: {},
+  };
+}
+
+const plannerLiveState = ref<PlannerLiveState>(createDefaultPlannerLiveState());
 const plannerTab = ref<'tree' | 'graph' | 'line' | 'calc'>('tree');
 const historyKeyHashes = ref<string[]>([]);
 
@@ -1290,10 +1296,12 @@ function applyRouteState() {
         pack: pack.value,
         index: index.value,
         rootItemKey: def.key,
+        useProductRecovery: plannerLiveState.value.useProductRecovery === true,
       });
       plannerInitialState.value = {
         loadKey: `auto:${itemKeyHash(def.key)}:${Date.now()}`,
         targetAmount: 1,
+        useProductRecovery: plannerLiveState.value.useProductRecovery === true,
         selectedRecipeIdByItemKeyHash: auto.selectedRecipeIdByItemKeyHash,
         selectedItemIdByTagId: auto.selectedItemIdByTagId,
       };
@@ -1773,6 +1781,7 @@ async function reloadPack(packId: string) {
     index.value = buildJeiIndex(loaded.pack);
     favorites.value = await loadFavorites(loaded.pack.manifest.packId);
     savedPlans.value = await loadPlans(loaded.pack.manifest.packId);
+    plannerLiveState.value = await loadPlannerLiveState(loaded.pack.manifest.packId);
     plannerInitialState.value = null;
     selectedKeyHash.value = filteredItems.value[0]?.keyHash ?? null;
 
@@ -2058,10 +2067,16 @@ watch(
     const idx = index.value;
     const key = currentItemKey.value;
     if (!p || !idx || !key) return;
-    const auto = autoPlanSelections({ pack: p, index: idx, rootItemKey: key });
+    const auto = autoPlanSelections({
+      pack: p,
+      index: idx,
+      rootItemKey: key,
+      useProductRecovery: plannerLiveState.value.useProductRecovery === true,
+    });
     plannerInitialState.value = {
       loadKey: `auto:${itemKeyHash(key)}:${Date.now()}`,
       targetAmount: 1,
+      useProductRecovery: plannerLiveState.value.useProductRecovery === true,
       selectedRecipeIdByItemKeyHash: auto.selectedRecipeIdByItemKeyHash,
       selectedItemIdByTagId: auto.selectedItemIdByTagId,
     };
@@ -2231,10 +2246,12 @@ function buildAutoPlannerInitialState(rootItemKey: ItemKey): PlannerInitialState
   const p = pack.value;
   const idx = index.value;
   if (!p || !idx) return null;
-  const auto = autoPlanSelections({ pack: p, index: idx, rootItemKey });
+  const useProductRecovery = plannerLiveState.value.useProductRecovery === true;
+  const auto = autoPlanSelections({ pack: p, index: idx, rootItemKey, useProductRecovery });
   return {
     loadKey: `auto:${itemKeyHash(rootItemKey)}:${Date.now()}`,
     targetAmount: 1,
+    useProductRecovery,
     selectedRecipeIdByItemKeyHash: auto.selectedRecipeIdByItemKeyHash,
     selectedItemIdByTagId: auto.selectedItemIdByTagId,
   };
@@ -2587,6 +2604,54 @@ function plansStorageKey(packId: string) {
   return `jei.plans.${packId}`;
 }
 
+function plannerLiveStorageKey(packId: string) {
+  return `jei.planner.live.${packId}`;
+}
+
+function normalizeStringRecord(v: unknown): Record<string, string> {
+  if (!v || typeof v !== 'object') return {};
+  const out: Record<string, string> = {};
+  Object.entries(v as Record<string, unknown>).forEach(([k, val]) => {
+    if (typeof val === 'string') out[k] = val;
+  });
+  return out;
+}
+
+function normalizePlannerLiveState(v: unknown): PlannerLiveState {
+  if (!v || typeof v !== 'object') return createDefaultPlannerLiveState();
+  const obj = v as Record<string, unknown>;
+  const targetAmountRaw =
+    typeof obj.targetAmount === 'number' ? obj.targetAmount : Number(obj.targetAmount);
+  return {
+    targetAmount: Number.isFinite(targetAmountRaw) && targetAmountRaw > 0 ? targetAmountRaw : 1,
+    useProductRecovery: obj.useProductRecovery === true,
+    selectedRecipeIdByItemKeyHash: normalizeStringRecord(obj.selectedRecipeIdByItemKeyHash),
+    selectedItemIdByTagId: normalizeStringRecord(obj.selectedItemIdByTagId),
+  };
+}
+
+async function loadPlannerLiveState(packId: string): Promise<PlannerLiveState> {
+  const key = plannerLiveStorageKey(packId);
+  const raw = storage.isUsingJEIStorage() ? await storage.getItem(key) : localStorage.getItem(key);
+  if (!raw) return createDefaultPlannerLiveState();
+  try {
+    return normalizePlannerLiveState(JSON.parse(raw) as unknown);
+  } catch {
+    return createDefaultPlannerLiveState();
+  }
+}
+
+function savePlannerLiveState(packId: string, state: PlannerLiveState): void {
+  const key = plannerLiveStorageKey(packId);
+  const normalized = normalizePlannerLiveState(state);
+  const value = JSON.stringify(normalized);
+  if (storage.isUsingJEIStorage()) {
+    void storage.setItem(key, value);
+  } else {
+    localStorage.setItem(key, value);
+  }
+}
+
 async function loadPlans(packId: string): Promise<SavedPlan[]> {
   const key = plansStorageKey(packId);
   const raw = storage.isUsingJEIStorage() ? await storage.getItem(key) : localStorage.getItem(key);
@@ -2608,6 +2673,7 @@ async function loadPlans(packId: string): Promise<SavedPlan[]> {
           (obj.selectedRecipeIdByItemKeyHash as Record<string, string> | undefined) ?? {};
         const selectedItemIdByTagId =
           (obj.selectedItemIdByTagId as Record<string, string> | undefined) ?? {};
+        const useProductRecovery = obj.useProductRecovery === true;
         const createdAt = typeof obj.createdAt === 'number' ? obj.createdAt : 0;
         const kind = obj.kind === 'advanced' ? 'advanced' : undefined;
         const targetsRaw = Array.isArray(obj.targets)
@@ -2638,18 +2704,20 @@ async function loadPlans(packId: string): Promise<SavedPlan[]> {
           .filter((t): t is NonNullable<typeof t> => !!t);
         if (!id || !name || !rootItemKey?.id || !rootKeyHash || !Number.isFinite(targetAmount))
           return null;
-        return {
+        const plan: SavedPlan = {
           id,
           name,
           rootItemKey,
           rootKeyHash,
           targetAmount,
+          useProductRecovery,
           selectedRecipeIdByItemKeyHash,
           selectedItemIdByTagId,
           createdAt,
           ...(kind ? { kind } : {}),
           ...(targets.length ? { targets } : {}),
-        } satisfies SavedPlan;
+        };
+        return plan;
       })
       .filter((p): p is SavedPlan => p !== null)
       .sort((a, b) => b.createdAt - a.createdAt);
@@ -2675,7 +2743,10 @@ function newPlanId() {
 }
 
 function onPlannerStateChange(s: PlannerLiveState) {
-  plannerLiveState.value = s;
+  const normalized = normalizePlannerLiveState(s);
+  plannerLiveState.value = normalized;
+  const packId = pack.value?.manifest.packId;
+  if (packId) savePlannerLiveState(packId, normalized);
 }
 
 function savePlannerPlan(payload: PlannerSavePayload) {
@@ -2686,6 +2757,7 @@ function savePlannerPlan(payload: PlannerSavePayload) {
     rootItemKey: payload.rootItemKey,
     rootKeyHash: itemKeyHash(payload.rootItemKey),
     targetAmount: payload.targetAmount,
+    useProductRecovery: payload.useProductRecovery === true,
     selectedRecipeIdByItemKeyHash: payload.selectedRecipeIdByItemKeyHash,
     selectedItemIdByTagId: payload.selectedItemIdByTagId,
     createdAt: Date.now(),
@@ -2704,6 +2776,7 @@ function openSavedPlan(p: SavedPlan) {
       name: p.name,
       rootItemKey: p.rootItemKey,
       targetAmount: p.targetAmount,
+      useProductRecovery: p.useProductRecovery === true,
       selectedRecipeIdByItemKeyHash: p.selectedRecipeIdByItemKeyHash,
       selectedItemIdByTagId: p.selectedItemIdByTagId,
       kind: 'advanced',
@@ -2720,6 +2793,7 @@ function openSavedPlan(p: SavedPlan) {
   plannerInitialState.value = {
     loadKey: `${p.id}:${Date.now()}`,
     targetAmount: p.targetAmount,
+    useProductRecovery: p.useProductRecovery === true,
     selectedRecipeIdByItemKeyHash: p.selectedRecipeIdByItemKeyHash,
     selectedItemIdByTagId: p.selectedItemIdByTagId,
   };

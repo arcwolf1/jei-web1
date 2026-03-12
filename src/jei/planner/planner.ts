@@ -24,6 +24,11 @@ export type RequirementNode =
     itemKey: ItemKey;
     amount: number;
     unit?: string;
+    recovery?: boolean;
+    recoverySourceItemKey?: ItemKey;
+    recoverySourceRecipeId?: string;
+    recoverySourceRecipeTypeKey?: string;
+    recoverySourceNodeId?: string;
     recipeIdUsed?: string;
     recipeTypeKeyUsed?: string;
     machineItemId?: ItemId;
@@ -301,6 +306,7 @@ export function autoPlanSelections(args: {
   pack: PackData;
   index: JeiIndex;
   rootItemKey: ItemKey;
+  useProductRecovery?: boolean;
   maxDepth?: number;
 }): {
   selectedRecipeIdByItemKeyHash: Record<string, string>;
@@ -308,6 +314,7 @@ export function autoPlanSelections(args: {
 } {
   const { pack, index, rootItemKey } = args;
   const maxDepth = args.maxDepth ?? 20;
+  const useProductRecovery = args.useProductRecovery === true;
   const defaultNs = pack.manifest.gameId;
 
   const selectedRecipeIdByItemKeyHash = new Map<string, string>();
@@ -326,22 +333,28 @@ export function autoPlanSelections(args: {
     return { chosenRecipeId, recipe, recipeType };
   };
 
-  const isGrowthCycle = (cycleStartHash: string) => {
+  const cycleFactorFor = (cycleStartHash: string): number => {
     const cycleStart = stackHashes.indexOf(cycleStartHash);
     const cycleKeys = cycleStart >= 0 ? stackKeys.slice(cycleStart) : [];
-    if (!cycleKeys.length) return false;
+    if (!cycleKeys.length) return 0;
     let factor = 1;
     for (let i = 0; i < cycleKeys.length; i += 1) {
       const fromKey = cycleKeys[i]!;
       const toKey = (i + 1 < cycleKeys.length ? cycleKeys[i + 1] : cycleKeys[0])!;
       const chosen = getChosenRecipe(fromKey);
-      if (!chosen) return false;
+      if (!chosen) return 0;
       const out = perCraftOutputAmountFor(chosen.recipe, chosen.recipeType, fromKey);
       const inp = perCraftInputAmountFor(chosen.recipe, chosen.recipeType, toKey);
-      if (out <= 0 || inp <= 0) return false;
+      if (out <= 0 || inp <= 0) return 0;
       factor *= out / inp;
     }
-    return factor > 1.000001;
+    return factor;
+  };
+
+  const isAcceptableCycle = (cycleStartHash: string): boolean => {
+    const factor = cycleFactorFor(cycleStartHash);
+    if (factor > 1.000001) return true;
+    return useProductRecovery && factor > 0 && factor < 0.999999;
   };
 
   type Op =
@@ -374,8 +387,8 @@ export function autoPlanSelections(args: {
     if (depth > maxDepth) return true;
     const h = itemKeyHash(key);
     if (stackHashes.includes(h)) {
-      // Found a cycle - check if it's a growth cycle
-      return isGrowthCycle(h);
+      // Found a cycle - allow growth cycles and, optionally, dissipative recovery cycles.
+      return isAcceptableCycle(h);
     }
 
     stackHashes.push(h);
@@ -465,11 +478,13 @@ export function buildRequirementTree(args: {
   targetUnit?: 'items' | 'per_second' | 'per_minute' | 'per_hour';
   selectedRecipeIdByItemKeyHash: Map<string, string>;
   selectedItemIdByTagId: Map<string, ItemId>;
+  useProductRecovery?: boolean;
   forcedRawItemKeyHashes?: ReadonlySet<string>;
   maxDepth?: number;
 }): BuildTreeResult {
   const { pack, index, rootItemKey, selectedRecipeIdByItemKeyHash, selectedItemIdByTagId } = args;
   const maxDepth = args.maxDepth ?? 20;
+  const useProductRecovery = args.useProductRecovery === true;
   const rawTargetAmount = finiteNumberOr(args.targetAmount, 1);
   const targetUnit = args.targetUnit ?? 'items';
   const targetAmount =
@@ -480,10 +495,20 @@ export function buildRequirementTree(args: {
         : rawTargetAmount;
   const defaultNs = pack.manifest.gameId;
 
+  type RecoveryItemCredit = {
+    sourceItemKey: ItemKey;
+    sourceRecipeId?: string;
+    sourceRecipeTypeKey?: string;
+    sourceNodeId?: string;
+    amount: number;
+  };
+
   let seq = 0;
   const leafItemTotals = new Map<ItemId, number>();
   const leafFluidTotals = new Map<string, number>();
   const catalysts = new Map<ItemId, number>();
+  const recoveryItemCreditsByKeyHash = new Map<string, RecoveryItemCredit[]>();
+  const recoveryFluidCreditsById = new Map<string, number>();
 
   const addLeafItem = (itemId: ItemId, amount: number) => {
     const prev = leafItemTotals.get(itemId) ?? 0;
@@ -496,6 +521,84 @@ export function buildRequirementTree(args: {
   const addCatalyst = (itemId: ItemId, amount: number) => {
     const prev = catalysts.get(itemId) ?? 0;
     catalysts.set(itemId, Math.max(prev, amount));
+  };
+  const addRecoveryItemCredit = (
+    key: ItemKey,
+    amount: number,
+    source: {
+      sourceItemKey: ItemKey;
+      sourceRecipeId?: string;
+      sourceRecipeTypeKey?: string;
+      sourceNodeId?: string;
+    },
+  ) => {
+    if (amount <= 0) return;
+    const h = itemKeyHash(key);
+    const bucket = recoveryItemCreditsByKeyHash.get(h) ?? [];
+    const sourceHash = itemKeyHash(source.sourceItemKey);
+    const same = bucket.find(
+      (entry) =>
+        itemKeyHash(entry.sourceItemKey) === sourceHash
+        && entry.sourceRecipeId === source.sourceRecipeId
+        && entry.sourceRecipeTypeKey === source.sourceRecipeTypeKey
+        && entry.sourceNodeId === source.sourceNodeId,
+    );
+    if (same) {
+      same.amount += amount;
+    } else {
+      bucket.push({
+        sourceItemKey: source.sourceItemKey,
+        ...(source.sourceRecipeId ? { sourceRecipeId: source.sourceRecipeId } : {}),
+        ...(source.sourceRecipeTypeKey ? { sourceRecipeTypeKey: source.sourceRecipeTypeKey } : {}),
+        ...(source.sourceNodeId ? { sourceNodeId: source.sourceNodeId } : {}),
+        amount,
+      });
+    }
+    recoveryItemCreditsByKeyHash.set(h, bucket);
+  };
+  const consumeRecoveryItemCredit = (key: ItemKey, amount: number): RecoveryItemCredit[] => {
+    if (amount <= 0) return [];
+    const h = itemKeyHash(key);
+    const bucket = recoveryItemCreditsByKeyHash.get(h);
+    if (!bucket?.length) return [];
+    const usedChunks: RecoveryItemCredit[] = [];
+    let remain = amount;
+    while (remain > 1e-9 && bucket.length > 0) {
+      const credit = bucket[0]!;
+      if (credit.amount <= 1e-9) {
+        bucket.shift();
+        continue;
+      }
+      const used = Math.min(credit.amount, remain);
+      usedChunks.push({
+        sourceItemKey: credit.sourceItemKey,
+        ...(credit.sourceRecipeId ? { sourceRecipeId: credit.sourceRecipeId } : {}),
+        ...(credit.sourceRecipeTypeKey ? { sourceRecipeTypeKey: credit.sourceRecipeTypeKey } : {}),
+        ...(credit.sourceNodeId ? { sourceNodeId: credit.sourceNodeId } : {}),
+        amount: used,
+      });
+      credit.amount -= used;
+      remain -= used;
+      if (credit.amount <= 1e-9) bucket.shift();
+    }
+    if (!bucket.length) recoveryItemCreditsByKeyHash.delete(h);
+    else recoveryItemCreditsByKeyHash.set(h, bucket);
+    return usedChunks;
+  };
+  const addRecoveryFluidCredit = (fluidId: string, amount: number) => {
+    if (amount <= 0) return;
+    const prev = recoveryFluidCreditsById.get(fluidId) ?? 0;
+    recoveryFluidCreditsById.set(fluidId, prev + amount);
+  };
+  const consumeRecoveryFluidCredit = (fluidId: string, amount: number): number => {
+    if (amount <= 0) return 0;
+    const prev = recoveryFluidCreditsById.get(fluidId) ?? 0;
+    if (prev <= 0) return 0;
+    const used = Math.min(prev, amount);
+    const next = prev - used;
+    if (next <= 1e-9) recoveryFluidCreditsById.delete(fluidId);
+    else recoveryFluidCreditsById.set(fluidId, next);
+    return used;
   };
 
   const visiting = new Set<string>();
@@ -564,8 +667,20 @@ export function buildRequirementTree(args: {
       })();
 
       const chosenForNode = getChosenRecipe(key);
-      const seedAmount =
-        growth && seedFromPredecessor > 0 ? seedFromPredecessor : amountNeeded;
+      const recoverySeedAmount =
+        useProductRecovery && cycleFactor > 0 && cycleFactor < 0.999999
+          ? amountNeeded * (1 - cycleFactor)
+          : null;
+      const rawSeedAmount =
+        growth && seedFromPredecessor > 0
+          ? seedFromPredecessor
+          : recoverySeedAmount !== null
+            ? Math.max(recoverySeedAmount, 0)
+            : amountNeeded;
+      const recoveredForSeedChunks =
+        useProductRecovery && rawSeedAmount > 0 ? consumeRecoveryItemCredit(key, rawSeedAmount) : [];
+      const recoveredForSeed = recoveredForSeedChunks.reduce((sum, entry) => sum + entry.amount, 0);
+      const seedAmount = Math.max(rawSeedAmount - recoveredForSeed, 0);
 
       addLeafItem(key.id, seedAmount);
       const machine = chosenForNode?.recipeType?.machine
@@ -619,12 +734,58 @@ export function buildRequirementTree(args: {
     const perCraftYield = perCraftOutputAmountFor(recipe, recipeType, key);
     const multiplier = perCraftYield > 0 ? amountNeeded / perCraftYield : 0;
 
-    const { inputs, catalysts: recipeCatalysts } = extractRecipeStacks(recipe, recipeType);
+    const { inputs, outputs, catalysts: recipeCatalysts } = extractRecipeStacks(recipe, recipeType);
     recipeCatalysts.forEach((c) => addCatalyst(c.id, finiteNumberOr(c.amount, 0)));
+    if (useProductRecovery && multiplier > 0) {
+      for (const output of outputs) {
+        const produced = finiteNumberOr(output.amount, 0) * multiplier;
+        if (produced <= 0) continue;
+        if (output.kind === 'item') {
+          if (stackMatchesKey(output, key)) continue;
+          addRecoveryItemCredit(stackItemToKey(output), produced, {
+            sourceItemKey: key,
+            sourceRecipeId: chosenRecipeId,
+            sourceRecipeTypeKey: recipe.type,
+            sourceNodeId: nodeId,
+          });
+        } else if (output.kind === 'fluid') {
+          addRecoveryFluidCredit(output.id, produced);
+        }
+      }
+    }
 
     const children: RequirementNode[] = [];
     for (const input of inputs) {
-      const needed = finiteNumberOr(input.amount, 0) * multiplier;
+      const grossNeeded = finiteNumberOr(input.amount, 0) * multiplier;
+      let needed = grossNeeded;
+      if (useProductRecovery && grossNeeded > 0) {
+        if (input.kind === 'item') {
+          const coveredChunks = consumeRecoveryItemCredit(stackItemToKey(input), grossNeeded);
+          const covered = coveredChunks.reduce((sum, entry) => sum + entry.amount, 0);
+          needed = Math.max(grossNeeded - covered, 0);
+          coveredChunks.forEach((entry) => {
+            children.push({
+              kind: 'item',
+              nodeId: `n${(seq += 1)}`,
+              itemKey: stackItemToKey(input),
+              amount: entry.amount,
+              recovery: true,
+              recoverySourceItemKey: entry.sourceItemKey,
+              ...(entry.sourceRecipeId ? { recoverySourceRecipeId: entry.sourceRecipeId } : {}),
+              ...(entry.sourceRecipeTypeKey
+                ? { recoverySourceRecipeTypeKey: entry.sourceRecipeTypeKey }
+                : {}),
+              ...(entry.sourceNodeId ? { recoverySourceNodeId: entry.sourceNodeId } : {}),
+              children: [],
+              catalysts: [],
+              cycle: false,
+            });
+          });
+        } else if (input.kind === 'fluid') {
+          const covered = consumeRecoveryFluidCredit(input.id, grossNeeded);
+          needed = Math.max(grossNeeded - covered, 0);
+        }
+      }
       if (needed <= 0) continue;
 
       if (input.kind === 'item') {
@@ -699,6 +860,11 @@ export type EnhancedRequirementNode =
     itemKey: ItemKey;
     amount: number;
     unit?: string;
+    recovery?: boolean;
+    recoverySourceItemKey?: ItemKey;
+    recoverySourceRecipeId?: string;
+    recoverySourceRecipeTypeKey?: string;
+    recoverySourceNodeId?: string;
     recipeIdUsed?: string;
     recipeTypeKeyUsed?: string;
     machineItemId?: ItemId;
@@ -828,6 +994,7 @@ export function buildEnhancedRequirementTree(args: {
   targetAmount: number;
   selectedRecipeIdByItemKeyHash: Map<string, string>;
   selectedItemIdByTagId: Map<string, ItemId>;
+  useProductRecovery?: boolean;
   forcedRawItemKeyHashes?: ReadonlySet<string>;
   maxDepth?: number;
   targetUnit?: 'items' | 'per_second' | 'per_minute' | 'per_hour';

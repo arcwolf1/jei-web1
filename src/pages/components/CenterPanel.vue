@@ -169,6 +169,7 @@
               :index="index ?? null"
               :item-defs-by-key-hash="itemDefsByKeyHash ?? {}"
               @save-plan="$emit('save-plan', $event)"
+              @state-change="$emit('state-change', $event)"
             />
           </q-tab-panel>
         </q-tab-panels>

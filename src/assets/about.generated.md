@@ -1,16 +1,39 @@
 # About
 
 ## Build
-- Version: 10ddeb9-dirty
-- Commit: 10ddeb9 (10ddeb9b6333c9f037f27f8f950751c190195426)
-- Commit count: 119
-- Subject: perf(wiki): 图片懒加载以减少初始页面加载开销
+- Version: 5fc6cd7-dirty
+- Commit: 5fc6cd7 (5fc6cd7fdb401ff8b3486b600b05d3747f022d00)
+- Commit count: 123
+- Subject: feat: 添加虚拟聚合源支持，优化镜像路由和延迟显示
 - Author: AndreaFrederica
-- Date: 2026-03-11T07:55:09+08:00
-- Generated at: 2026-03-11T14:53:25.822Z
+- Date: 2026-03-12T22:18:36+08:00
+- Generated at: 2026-03-12T17:29:35.198Z
 - Remote: https://github.com/AndreaFrederica/jei-web.git
 
 ## Version History
+
+### r123 (2026-03-12T22:18:36+08:00)
+- 5fc6cd7
+  feat: 添加虚拟聚合源支持，优化镜像路由和延迟显示
+
+### r122 (2026-03-12T21:28:27+08:00)
+- 5c53f57
+  feat: 增强决策收集与状态重计算，优化配方选项展示
+
+### r121 (2026-03-12T20:25:25+08:00)
+- 9fa5225
+  feat: 添加资源URL解析功能以支持包资产的正确加载
+
+### r120 (2026-03-12T01:59:36+08:00)
+- 52e350f
+  feat: enhance pack mirror management and latency tracking
+  
+  - Added mirror latency caching and warmup functionality to improve pack loading performance.
+  - Implemented automatic ranking of pack mirrors based on latency for better user experience.
+  - Introduced new UI elements to display current active pack mirror and latency information.
+  - Updated localization files to include new strings related to mirror management.
+  - Refactored settings and pack routing stores to support new mirror handling logic.
+  - Improved the overall structure and readability of the codebase related to pack sources and mirrors.
 
 ### r119 (2026-03-11T07:55:09+08:00)
 - 10ddeb9

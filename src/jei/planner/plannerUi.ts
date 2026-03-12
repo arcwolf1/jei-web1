@@ -4,6 +4,7 @@ export type PlannerSavePayload = {
   name: string;
   rootItemKey: ItemKey;
   targetAmount: number;
+  useProductRecovery?: boolean;
   selectedRecipeIdByItemKeyHash: Record<string, string>;
   selectedItemIdByTagId: Record<string, ItemId>;
   kind?: 'advanced';
@@ -18,12 +19,14 @@ export type PlannerSavePayload = {
 export type PlannerInitialState = {
   loadKey: string;
   targetAmount: number;
+  useProductRecovery?: boolean;
   selectedRecipeIdByItemKeyHash: Record<string, string>;
   selectedItemIdByTagId: Record<string, ItemId>;
 };
 
 export type PlannerLiveState = {
   targetAmount: number;
+  useProductRecovery?: boolean;
   selectedRecipeIdByItemKeyHash: Record<string, string>;
   selectedItemIdByTagId: Record<string, ItemId>;
 };
