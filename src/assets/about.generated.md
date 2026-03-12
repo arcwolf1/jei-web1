@@ -1,16 +1,30 @@
 # About
 
 ## Build
-- Version: 5fc6cd7-dirty
-- Commit: 5fc6cd7 (5fc6cd7fdb401ff8b3486b600b05d3747f022d00)
-- Commit count: 123
-- Subject: feat: 添加虚拟聚合源支持，优化镜像路由和延迟显示
+- Version: abd98d6-dirty
+- Commit: abd98d6 (abd98d654fa86937e39793efe70d72dfd2ddfd94)
+- Commit count: 124
+- Subject: feat(planner): add product recovery feature to planner state and UI
 - Author: AndreaFrederica
-- Date: 2026-03-12T22:18:36+08:00
-- Generated at: 2026-03-12T17:29:35.198Z
+- Date: 2026-03-13T02:26:07+08:00
+- Generated at: 2026-03-12T19:20:02.623Z
 - Remote: https://github.com/AndreaFrederica/jei-web.git
 
 ## Version History
+
+### r124 (2026-03-13T02:26:07+08:00)
+- abd98d6
+  feat(planner): add product recovery feature to planner state and UI
+  
+  - Updated PlannerSavePayload, PlannerInitialState, and PlannerLiveState types to include useProductRecovery.
+  - Enhanced ProductionLineNode and ProductionLineEdge types to support recovery metadata.
+  - Modified buildProductionLineModel function to handle recovery logic and item nodes.
+  - Implemented recovery source handling in the AdvancedPlanner component, including UI updates for displaying recovery information.
+  - Added functionality to save and load planner live state with recovery settings.
+  - Updated IndexPage and related components to manage and reflect product recovery state.
+  - Introduced new computed properties and methods for managing recovery data in the planner.
+  - Enhanced visual representation of recovery in the planner UI with badges and tooltips.
+  - Added tests for new recovery features and ensured compatibility with existing planner functionality.
 
 ### r123 (2026-03-12T22:18:36+08:00)
 - 5fc6cd7

@@ -31,6 +31,7 @@
     "postinstall": "pnpm run gen:about && quasar prepare"
   },
   "dependencies": {
+    "@antv/g6": "^5.0.51",
     "@quasar/extras": "^1.16.4",
     "@vue-flow/background": "^1.3.2",
     "@vue-flow/controls": "^1.1.3",

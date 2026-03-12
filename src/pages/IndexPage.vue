@@ -180,6 +180,8 @@
       @update:debug-nav-panel="settingsStore.setDebugNavPanel($event)"
       :show-loading-overlay="settingsStore.showLoadingOverlay"
       @update:show-loading-overlay="settingsStore.setShowLoadingOverlay($event)"
+      :quant-line-width-scale="settingsStore.quantLineWidthScale"
+      @update:quant-line-width-scale="settingsStore.setQuantLineWidthScale($event)"
       :recipe-view-mode="settingsStore.recipeViewMode"
       @update:recipe-view-mode="settingsStore.setRecipeViewMode($event)"
       :recipe-slot-show-name="settingsStore.recipeSlotShowName"
@@ -516,7 +518,7 @@ function createDefaultPlannerLiveState(): PlannerLiveState {
 }
 
 const plannerLiveState = ref<PlannerLiveState>(createDefaultPlannerLiveState());
-const plannerTab = ref<'tree' | 'graph' | 'line' | 'calc'>('tree');
+const plannerTab = ref<'tree' | 'graph' | 'line' | 'calc' | 'quant'>('tree');
 const historyKeyHashes = ref<string[]>([]);
 
 const filterDisabled = computed(() => loading.value || !!error.value);
@@ -865,6 +867,12 @@ const keybindingSettingGroups = computed<
         label: t('keybindingPlannerCalc'),
         description: '',
         binding: keyBindingsStore.getBinding('plannerCalc'),
+      },
+      {
+        id: 'plannerQuant',
+        label: t('keybindingPlannerQuant'),
+        description: '',
+        binding: keyBindingsStore.getBinding('plannerQuant'),
       },
     ],
   },
@@ -2538,6 +2546,13 @@ function onKeyDown(e: KeyboardEvent) {
       ensurePlannerAutoForCurrentItem();
       return;
     }
+    if (eventMatchesBinding(e, bindings.plannerQuant)) {
+      e.preventDefault();
+      activeTab.value = 'planner';
+      plannerTab.value = 'quant';
+      ensurePlannerAutoForCurrentItem();
+      return;
+    }
     return;
   }
 
@@ -2581,6 +2596,10 @@ function onKeyDown(e: KeyboardEvent) {
   } else if (eventMatchesBinding(e, bindings.plannerCalc)) {
     e.preventDefault();
     plannerTab.value = 'calc';
+    openTarget('planner');
+  } else if (eventMatchesBinding(e, bindings.plannerQuant)) {
+    e.preventDefault();
+    plannerTab.value = 'quant';
     openTarget('planner');
   } else if (eventMatchesBinding(e, bindings.toggleFavorite)) {
     e.preventDefault();

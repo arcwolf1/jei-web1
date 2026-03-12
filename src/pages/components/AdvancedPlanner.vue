@@ -246,6 +246,7 @@
         <q-tab name="tree" :label="t('synthesisTree')" />
         <q-tab name="graph" :label="t('nodeGraph')" />
         <q-tab name="line" :label="t('productionLine')" />
+        <q-tab name="quant" :label="t('quantificationView')" />
         <q-tab name="calc" :label="t('calculator')" />
       </q-tabs>
       <q-separator class="q-my-md" />
@@ -999,6 +1000,63 @@
           </div>
         </q-tab-panel>
 
+        <q-tab-panel name="quant" class="q-pa-none">
+          <div :class="['planner__pagefull', { 'planner__pagefull--active': quantPageFull }]">
+            <div class="row items-center q-gutter-sm">
+              <div class="text-caption text-grey-8">显示单位</div>
+              <q-select
+                dense
+                filled
+                emit-value
+                map-options
+                popup-content-class="planner__select-menu"
+                style="min-width: 120px"
+                :options="rateUnitOptions"
+                :model-value="quantDisplayUnit"
+                @update:model-value="(v) => (quantDisplayUnit = v)"
+              />
+              <q-toggle v-model="quantShowFluids" dense :label="t('showFluids')" />
+              <q-toggle v-model="quantWidthByRate" dense :label="t('lineWidthByRate')" />
+              <q-space />
+              <q-btn
+                flat
+                dense
+                round
+                :icon="quantPageFull ? 'close_fullscreen' : 'fit_screen'"
+                @click="quantPageFull = !quantPageFull"
+              >
+                <q-tooltip>{{ quantPageFull ? '退出页面内全屏' : '页面内全屏' }}</q-tooltip>
+              </q-btn>
+              <q-btn
+                flat
+                dense
+                round
+                :icon="quantFullscreen ? 'fullscreen_exit' : 'fullscreen'"
+                @click="toggleQuantFullscreen"
+              >
+                <q-tooltip>{{ quantFullscreen ? '退出全屏' : '全屏' }}</q-tooltip>
+              </q-btn>
+            </div>
+            <div
+              v-if="quantModel.nodes.length"
+              class="planner__flow"
+              :class="{ 'planner__flow--fullscreen': quantFullscreen }"
+              ref="quantFlowWrapEl"
+            >
+              <quant-flow-g6-view
+                :model="quantModel"
+                :item-defs-by-key-hash="itemDefsByKeyHash"
+                :display-unit="quantDisplayUnit"
+                :width-by-rate="quantWidthByRate"
+                :belt-speed="beltSpeed"
+                :line-width-curve-config="lineWidthCurveConfig"
+                :line-width-scale="settingsStore.quantLineWidthScale"
+              />
+            </div>
+            <div v-else class="text-center text-grey q-pa-lg">暂无节点</div>
+          </div>
+        </q-tab-panel>
+
         <!-- 计算器视图 -->
         <q-tab-panel name="calc" class="q-pa-none">
           <div class="column q-gutter-md">
@@ -1288,7 +1346,9 @@ import {
 import StackView from 'src/jei/components/StackView.vue';
 import RecipeViewer from 'src/jei/components/RecipeViewer.vue';
 import LineWidthCurveEditor from 'src/jei/components/LineWidthCurveEditor.vue';
+import QuantFlowG6View from 'src/jei/components/QuantFlowG6View.vue';
 import { buildProductionLineModel } from 'src/jei/planner/productionLine';
+import { buildQuantFlowModel } from 'src/jei/planner/quantFlow';
 import {
   convertAmountPerMinuteToUnitValue,
   createDefaultLineWidthCurveConfig,
@@ -1296,6 +1356,7 @@ import {
   type LineWidthCurveConfig,
 } from 'src/jei/planner/lineWidthCurve';
 import type { PlannerLiveState, PlannerSavePayload } from 'src/jei/planner/plannerUi';
+import { useSettingsStore } from 'src/stores/settings';
 import { Background } from '@vue-flow/background';
 import { Controls } from '@vue-flow/controls';
 import { VueFlow, type Edge, type Node, Handle, MarkerType, Position } from '@vue-flow/core';
@@ -1306,6 +1367,7 @@ import '@vue-flow/controls/dist/style.css';
 import '@vue-flow/minimap/dist/style.css';
 
 const { t } = useI18n();
+const settingsStore = useSettingsStore();
 
 interface Target {
   itemKey: ItemKey;
@@ -1345,7 +1407,7 @@ const emit = defineEmits<{
 const $q = useQuasar();
 
 const targets = ref<Target[]>([]);
-const activeTab = ref<'summary' | 'tree' | 'graph' | 'line' | 'calc'>('summary');
+const activeTab = ref<'summary' | 'tree' | 'graph' | 'line' | 'quant' | 'calc'>('summary');
 const allDecisions = ref<PlannerDecision[]>([]);
 const selectedRecipeIdByItemKeyHash = ref<Map<string, string>>(new Map());
 const selectedItemIdByTagId = ref<Map<string, ItemId>>(new Map());
@@ -1371,8 +1433,11 @@ const lineDisplayUnit = ref<'per_second' | 'per_minute' | 'per_hour'>('per_minut
 const lineCollapseIntermediate = ref(true);
 const lineIncludeCycleSeeds = ref(true);
 const lineWidthByRate = ref(false);
+const quantWidthByRate = ref(true);
 const lineWidthCurveDialogOpen = ref(false);
 const lineWidthCurveConfig = ref<LineWidthCurveConfig>(createDefaultLineWidthCurveConfig());
+const quantDisplayUnit = ref<'per_second' | 'per_minute' | 'per_hour'>('per_minute');
+const quantShowFluids = ref(true);
 const forcedRawItemKeyHashes = ref<Set<string>>(new Set());
 const useProductRecovery = ref(false);
 const selectedLineNodeId = ref<string | null>(null);
@@ -1381,10 +1446,13 @@ const calcDisplayUnit = ref<'per_second' | 'per_minute' | 'per_hour'>('per_minut
 
 const graphPageFull = ref(false);
 const linePageFull = ref(false);
+const quantPageFull = ref(false);
 const graphFullscreen = ref(false);
 const lineFullscreen = ref(false);
+const quantFullscreen = ref(false);
 const graphFlowWrapEl = ref<HTMLElement | null>(null);
 const lineFlowWrapEl = ref<HTMLElement | null>(null);
+const quantFlowWrapEl = ref<HTMLElement | null>(null);
 
 const saveDialogOpen = ref(false);
 const saveName = ref('');
@@ -1935,6 +2003,13 @@ function toggleLineFullscreen() {
   $q.fullscreen.toggle(el).catch(() => undefined);
 }
 
+function toggleQuantFullscreen() {
+  if (!$q.fullscreen.isCapable) return;
+  const el = quantFlowWrapEl.value;
+  if (!el) return;
+  $q.fullscreen.toggle(el).catch(() => undefined);
+}
+
 function onLineNodeDragStop(evt: { node: Node }) {
   const next = new Map(lineNodePositions.value);
   next.set(evt.node.id, { ...evt.node.position });
@@ -1951,6 +2026,7 @@ function handleFullscreenChange() {
   const activeEl = document.fullscreenElement;
   graphFullscreen.value = activeEl !== null && activeEl === graphFlowWrapEl.value;
   lineFullscreen.value = activeEl !== null && activeEl === lineFlowWrapEl.value;
+  quantFullscreen.value = activeEl !== null && activeEl === quantFlowWrapEl.value;
 }
 
 onMounted(() => {
@@ -3268,6 +3344,72 @@ const lineFlowEdgesStyled = computed(() => {
   });
 });
 
+const quantModel = computed<ReturnType<typeof buildQuantFlowModel>>(() => {
+  if (!mergedTree.value) return { nodes: [], edges: [] };
+
+  const roots =
+    mergedTree.value.root.kind === 'item' && mergedTree.value.root.itemKey.id === '__multi_target__'
+      ? mergedTree.value.root.children
+      : [mergedTree.value.root];
+
+  const mergedNodeById = new Map<string, ReturnType<typeof buildQuantFlowModel>['nodes'][number]>();
+  const mergedEdgeById = new Map<string, ReturnType<typeof buildQuantFlowModel>['edges'][number]>();
+
+  roots.forEach((root) => {
+    const params: Parameters<typeof buildQuantFlowModel>[0] = {
+      root: root as RequirementNode,
+      includeFluids: quantShowFluids.value,
+    };
+    if (root.kind === 'item') {
+      params.rootItemKey = root.itemKey;
+    }
+    const model = buildQuantFlowModel(params);
+
+    model.nodes.forEach((n) => {
+      const prev = mergedNodeById.get(n.nodeId);
+      if (!prev) {
+        mergedNodeById.set(n.nodeId, { ...n });
+        return;
+      }
+
+      if (n.kind === 'item' && prev.kind === 'item') {
+        prev.amount += n.amount;
+        if (n.isRoot) prev.isRoot = true;
+        if (n.recovery) prev.recovery = true;
+        if (n.machineItemId && !prev.machineItemId) prev.machineItemId = n.machineItemId;
+        if (n.machineName && !prev.machineName) prev.machineName = n.machineName;
+        if (n.machineCount !== undefined) {
+          prev.machineCount = (prev.machineCount ?? 0) + n.machineCount;
+        }
+      } else if (n.kind === 'fluid' && prev.kind === 'fluid') {
+        prev.amount += n.amount;
+      }
+    });
+
+    model.edges.forEach((e) => {
+      const prev = mergedEdgeById.get(e.id);
+      if (!prev) {
+        mergedEdgeById.set(e.id, { ...e });
+        return;
+      }
+      prev.amount += e.amount;
+      if (e.machineItemId && !prev.machineItemId) prev.machineItemId = e.machineItemId;
+      if (e.machineName && !prev.machineName) prev.machineName = e.machineName;
+      if (e.machineCount !== undefined) {
+        prev.machineCount = (prev.machineCount ?? 0) + e.machineCount;
+      }
+    });
+  });
+
+  mergedNodeById.forEach((n) => {
+    if (n.kind !== 'item') return;
+    const hash = itemKeyHash(n.itemKey);
+    if (targetRootHashes.value.has(hash) && !n.recovery) n.isRoot = true;
+  });
+
+  return { nodes: Array.from(mergedNodeById.values()), edges: Array.from(mergedEdgeById.values()) };
+});
+
 const calcTotals = computed(() => mergedTree.value?.totals ?? null);
 
 const calcMachineRows = computed(() => {
@@ -3690,6 +3832,86 @@ defineExpose({
   min-width: 180px;
 }
 
+.planner__quant-node {
+  position: relative;
+  width: 112px;
+  min-height: 112px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+}
+
+.planner__quant-node--fluid {
+  width: 96px;
+  min-height: 96px;
+}
+
+.planner__quant-node-circle {
+  width: 72px;
+  height: 72px;
+  border-radius: 50%;
+  border: 1px solid rgba(0, 0, 0, 0.22);
+  background: radial-gradient(circle at 35% 30%, rgba(255, 255, 255, 0.95), rgba(236, 243, 255, 0.94) 60%, rgba(220, 232, 248, 0.92));
+  box-shadow: 0 8px 18px rgba(0, 0, 0, 0.14);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+}
+
+.planner__quant-node-circle--fluid {
+  background: radial-gradient(circle at 35% 30%, rgba(222, 250, 255, 0.95), rgba(186, 236, 245, 0.92) 62%, rgba(151, 208, 219, 0.9));
+}
+
+.planner__quant-fluid-symbol {
+  font-size: 26px;
+  font-weight: 700;
+  color: rgba(0, 0, 0, 0.58);
+}
+
+.planner__quant-node-label {
+  text-align: center;
+}
+
+.planner__quant-node-title {
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1.2;
+}
+
+.planner__quant-node-sub {
+  margin-top: 2px;
+  font-size: 11px;
+  color: rgba(0, 0, 0, 0.68);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+}
+
+.planner__quant-node--selected .planner__quant-node-circle {
+  border-color: var(--q-primary);
+  box-shadow: 0 0 0 2px rgba(25, 118, 210, 0.25), 0 8px 18px rgba(0, 0, 0, 0.14);
+}
+
+.planner__quant-node--recovery .planner__quant-node-circle {
+  border-color: #26a69a;
+}
+
+.planner__quant-node--root .planner__quant-node-circle {
+  border-color: var(--q-primary);
+}
+
+.planner__quant-handle {
+  width: 1px !important;
+  height: 1px !important;
+  opacity: 0 !important;
+  background: transparent !important;
+  border: none !important;
+  pointer-events: none !important;
+}
+
 .planner__flow-node--machine {
   justify-content: space-between;
   gap: 10px;
@@ -3799,6 +4021,19 @@ defineExpose({
 
 .body--dark .planner__flow-node-sub {
   color: rgba(255, 255, 255, 0.68);
+}
+
+.body--dark .planner__quant-node-circle {
+  border-color: rgba(255, 255, 255, 0.24);
+  background: radial-gradient(circle at 35% 30%, rgba(255, 255, 255, 0.2), rgba(94, 120, 150, 0.34) 62%, rgba(62, 88, 117, 0.44));
+}
+
+.body--dark .planner__quant-node-circle--fluid {
+  background: radial-gradient(circle at 35% 30%, rgba(196, 243, 250, 0.26), rgba(82, 145, 157, 0.42) 62%, rgba(54, 109, 123, 0.5));
+}
+
+.body--dark .planner__quant-node-sub {
+  color: rgba(255, 255, 255, 0.72);
 }
 
 .body--dark .decision-card {

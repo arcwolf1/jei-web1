@@ -417,7 +417,7 @@ const props = defineProps<{
   recipesById: Map<string, any>; // eslint-disable-line @typescript-eslint/no-explicit-any
   recipeTypesByKey: Map<string, any>; // eslint-disable-line @typescript-eslint/no-explicit-any
   plannerInitialState: PlannerInitialState | null;
-  plannerTab: 'tree' | 'graph' | 'line' | 'calc';
+  plannerTab: 'tree' | 'graph' | 'line' | 'calc' | 'quant';
   pluginContext: PluginItemContext;
   pluginTabs: PluginTabRuntime[];
   resolvePluginApi: (

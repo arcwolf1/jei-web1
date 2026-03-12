@@ -102,6 +102,7 @@ const bindingGroups = computed<BindingGroup[]>(() => [
       { id: 'plannerGraph', label: t('keybindingPlannerGraph'), description: '' },
       { id: 'plannerLine', label: t('keybindingPlannerLine'), description: '' },
       { id: 'plannerCalc', label: t('keybindingPlannerCalc'), description: '' },
+      { id: 'plannerQuant', label: t('keybindingPlannerQuant'), description: '' },
     ],
   },
   {

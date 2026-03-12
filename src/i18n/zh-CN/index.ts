@@ -147,6 +147,7 @@ export default {
   plannerTabGraph: '节点图 (G)',
   plannerTabLine: '生产线 (L)',
   plannerTabCalc: '计算器 (C)',
+  plannerTabQuant: '量化视图 (Q)',
 
   // Advanced Planner Tabs
   startPlanning: '开始规划',
@@ -215,6 +216,7 @@ export default {
   // Planner Details
   target: '目标',
   treeStructure: '树结构',
+  quantificationView: '量化视图',
   conveyorBelt: '传送带',
   equipment: '设备',
   power: '电量',
@@ -253,6 +255,7 @@ export default {
   keybindingPlannerGraph: '规划器节点图',
   keybindingPlannerLine: '规划器生产线',
   keybindingPlannerCalc: '规划器计算器',
+  keybindingPlannerQuant: '规划器量化视图',
   keybindingToggleFavorite: '收藏/取消收藏',
   keybindingAddToAdvanced: '添加到高级计划器',
   keybindingCircuitRotate: '旋转',

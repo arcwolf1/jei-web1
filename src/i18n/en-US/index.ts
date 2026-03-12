@@ -147,6 +147,7 @@ export default {
   plannerTabGraph: 'Graph (G)',
   plannerTabLine: 'Line (L)',
   plannerTabCalc: 'Calc (C)',
+  plannerTabQuant: 'Quant (Q)',
 
   // Advanced Planner Tabs
   startPlanning: 'Start Planning',
@@ -215,6 +216,7 @@ export default {
   // Planner Details
   target: 'Target',
   treeStructure: 'Tree Structure',
+  quantificationView: 'Quant View',
   conveyorBelt: 'Conveyor Belt',
   equipment: 'Equipment',
   power: 'Power',
@@ -253,6 +255,7 @@ export default {
   keybindingPlannerGraph: 'Planner Graph',
   keybindingPlannerLine: 'Planner Line',
   keybindingPlannerCalc: 'Planner Calc',
+  keybindingPlannerQuant: 'Planner Quant View',
   keybindingToggleFavorite: 'Toggle Favorite',
   keybindingAddToAdvanced: 'Add to Advanced Planner',
   keybindingCircuitRotate: 'Rotate',

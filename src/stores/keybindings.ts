@@ -14,6 +14,7 @@ export type KeyAction =
   | 'plannerGraph'       // G/2 - 节点图
   | 'plannerLine'        // L/3 - 生产线
   | 'plannerCalc'        // C/4 - 计算器
+  | 'plannerQuant'       // Q/5 - 量化视图
   | 'toggleFavorite'     // A - 收藏/取消收藏
   | 'addToAdvanced'      // D - 添加到高级计划器
   // CircuitPuzzle 快捷键
@@ -46,6 +47,7 @@ const defaultKeyBindings: KeyBindingsConfig = {
   plannerGraph: { key: 'g' },
   plannerLine: { key: 'l' },
   plannerCalc: { key: 'c' },
+  plannerQuant: { key: 'q' },
   toggleFavorite: { key: 'a' },
   addToAdvanced: { key: 'd' },
   circuitRotate: { key: 'r' },

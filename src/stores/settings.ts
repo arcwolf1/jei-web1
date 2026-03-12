@@ -116,6 +116,7 @@ export const useSettingsStore = defineStore('settings', {
       packMirrorSelectionModeByPack: {} as Record<string, 'auto' | 'manual'>,
       packManualMirrorByPack: {} as Record<string, string>,
       showLoadingOverlay: true,
+      quantLineWidthScale: 4,
       pluginEnabledById: {} as Record<string, boolean>,
       pluginSettingsById: {} as Record<string, Record<string, string | number | boolean>>,
     };
@@ -274,6 +275,12 @@ export const useSettingsStore = defineStore('settings', {
           typeof parsed.showLoadingOverlay === 'boolean'
             ? parsed.showLoadingOverlay
             : defaults.showLoadingOverlay,
+        quantLineWidthScale:
+          typeof parsed.quantLineWidthScale === 'number'
+            && Number.isFinite(parsed.quantLineWidthScale)
+            && parsed.quantLineWidthScale > 0
+            ? parsed.quantLineWidthScale
+            : defaults.quantLineWidthScale,
         pluginEnabledById:
           parsed.pluginEnabledById && typeof parsed.pluginEnabledById === 'object'
             ? Object.fromEntries(
@@ -474,6 +481,12 @@ export const useSettingsStore = defineStore('settings', {
       this.showLoadingOverlay = value;
       void this.save();
     },
+    setQuantLineWidthScale(value: number) {
+      const n = Number(value);
+      if (!Number.isFinite(n) || n <= 0) return;
+      this.quantLineWidthScale = n;
+      void this.save();
+    },
     setPluginEnabled(pluginId: string, enabled: boolean) {
       this.pluginEnabledById = {
         ...this.pluginEnabledById,
@@ -527,6 +540,7 @@ export const useSettingsStore = defineStore('settings', {
         packMirrorSelectionModeByPack: this.packMirrorSelectionModeByPack,
         packManualMirrorByPack: this.packManualMirrorByPack,
         showLoadingOverlay: this.showLoadingOverlay,
+        quantLineWidthScale: this.quantLineWidthScale,
         pluginEnabledById: this.pluginEnabledById,
         pluginSettingsById: this.pluginSettingsById,
       });
@@ -575,6 +589,13 @@ export const useSettingsStore = defineStore('settings', {
       if (typeof parsed.packImageProxyAnonymousToken === 'string') this.packImageProxyAnonymousToken = parsed.packImageProxyAnonymousToken;
       if (typeof parsed.packImageProxyFrameworkToken === 'string') this.packImageProxyFrameworkToken = parsed.packImageProxyFrameworkToken;
       if (typeof parsed.showLoadingOverlay === 'boolean') this.showLoadingOverlay = parsed.showLoadingOverlay;
+      if (
+        typeof parsed.quantLineWidthScale === 'number'
+        && Number.isFinite(parsed.quantLineWidthScale)
+        && parsed.quantLineWidthScale > 0
+      ) {
+        this.quantLineWidthScale = parsed.quantLineWidthScale;
+      }
       if (typeof parsed.circuitCollectionPreviewShowPieces === 'boolean') this.circuitCollectionPreviewShowPieces = parsed.circuitCollectionPreviewShowPieces;
       if (typeof parsed.circuitEditorPiecePanelSplitRatio === 'number') this.circuitEditorPiecePanelSplitRatio = parsed.circuitEditorPiecePanelSplitRatio;
       if (typeof parsed.detectPcDisableMobile === 'boolean') this.detectPcDisableMobile = parsed.detectPcDisableMobile;

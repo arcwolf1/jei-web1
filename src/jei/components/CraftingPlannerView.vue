@@ -130,6 +130,7 @@
           <q-tab name="tree" :label="treeTabLabel" />
           <q-tab name="graph" :label="graphTabLabel" />
           <q-tab name="line" :label="lineTabLabel" />
+          <q-tab name="quant" :label="quantTabLabel" />
           <q-tab name="calc" :label="calcTabLabel" />
         </q-tabs>
         <q-separator />
@@ -958,6 +959,94 @@
           </div>
         </div>
 
+        <div v-else-if="activeTab === 'quant'" class="q-mt-md">
+          <div :class="['planner__pagefull', { 'planner__pagefull--active': quantPageFull }]">
+            <div class="row items-center q-gutter-sm">
+              <div class="text-caption text-grey-8">目标产出</div>
+              <q-input
+                dense
+                filled
+                type="number"
+                style="width: 160px"
+                :model-value="targetAmount"
+                @update:model-value="(v) => (targetAmount = Number(v))"
+              />
+              <q-select
+                dense
+                filled
+                emit-value
+                map-options
+                popup-content-class="planner__select-menu"
+                style="min-width: 100px"
+                :options="unitOptions"
+                :model-value="targetUnit"
+                @update:model-value="
+                  (v) => (targetUnit = v as (typeof unitOptions)[number]['value'])
+                "
+              />
+              <q-btn-group outline>
+                <q-btn
+                  dense
+                  no-caps
+                  size="md"
+                  label="HS"
+                  :disable="!canApplyHalfRatePreset"
+                  @click="applyTargetRatePreset('half')"
+                />
+                <q-btn
+                  dense
+                  no-caps
+                  size="md"
+                  label="FS"
+                  :disable="!canApplyFullRatePreset"
+                  @click="applyTargetRatePreset('full')"
+                />
+              </q-btn-group>
+              <q-toggle v-model="quantShowFluids" dense :label="t('showFluids')" />
+              <q-toggle v-model="quantWidthByRate" dense :label="t('lineWidthByRate')" />
+              <q-space />
+              <q-btn
+                flat
+                dense
+                round
+                :icon="quantPageFull ? 'close_fullscreen' : 'fit_screen'"
+                @click="quantPageFull = !quantPageFull"
+              >
+                <q-tooltip>{{ quantPageFull ? '退出页面内全屏' : '页面内全屏' }}</q-tooltip>
+              </q-btn>
+              <q-btn
+                flat
+                dense
+                round
+                :icon="quantFullscreen ? 'fullscreen_exit' : 'fullscreen'"
+                @click="toggleQuantFullscreen"
+              >
+                <q-tooltip>{{ quantFullscreen ? '退出全屏' : '全屏' }}</q-tooltip>
+              </q-btn>
+            </div>
+            <div
+              v-if="treeResult && quantModel.nodes.length"
+              class="q-mt-md planner__flow"
+              :class="{ 'planner__flow--fullscreen': quantFullscreen }"
+              ref="quantFlowWrapEl"
+            >
+              <quant-flow-g6-view
+                :model="quantModel"
+                :item-defs-by-key-hash="itemDefsByKeyHash"
+                :display-unit="targetUnit"
+                :width-by-rate="quantWidthByRate"
+                :belt-speed="beltSpeed"
+                :line-width-curve-config="lineWidthCurveConfig"
+                :line-width-scale="settingsStore.quantLineWidthScale"
+                @item-click="emit('item-click', $event)"
+                @item-mouseenter="emit('item-mouseenter', $event)"
+                @item-mouseleave="emit('item-mouseleave')"
+              />
+            </div>
+            <div v-else-if="treeResult" class="q-mt-md text-center text-grey q-pa-lg">暂无节点</div>
+          </div>
+        </div>
+
         <div v-else class="q-mt-md">
           <div class="row items-center q-gutter-sm">
             <div class="text-caption text-grey-8">目标产出</div>
@@ -1270,7 +1359,9 @@ import '@vue-flow/minimap/dist/style.css';
 import RecipeViewer from './RecipeViewer.vue';
 import StackView from './StackView.vue';
 import LineWidthCurveEditor from './LineWidthCurveEditor.vue';
+import QuantFlowG6View from './QuantFlowG6View.vue';
 import { buildProductionLineModel } from 'src/jei/planner/productionLine';
+import { buildQuantFlowModel } from 'src/jei/planner/quantFlow';
 import {
   convertAmountPerMinuteToUnitValue,
   createDefaultLineWidthCurveConfig,
@@ -1298,9 +1389,11 @@ import {
   keyBindingToString,
   type KeyAction,
 } from 'src/stores/keybindings';
+import { useSettingsStore } from 'src/stores/settings';
 
 const { t } = useI18n();
 const keyBindingsStore = useKeyBindingsStore();
+const settingsStore = useSettingsStore();
 
 const props = defineProps<{
   pack: PackData;
@@ -1308,7 +1401,7 @@ const props = defineProps<{
   rootItemKey: ItemKey;
   itemDefsByKeyHash: Record<string, ItemDef>;
   initialState?: PlannerInitialState | null;
-  initialTab?: 'tree' | 'graph' | 'line' | 'calc' | null;
+  initialTab?: 'tree' | 'graph' | 'line' | 'calc' | 'quant' | null;
 }>();
 
 const beltSpeed = computed(() => {
@@ -1341,14 +1434,16 @@ const treeTabLabel = computed(() => labelWithShortcut(t('treeStructure'), 'plann
 const graphTabLabel = computed(() => labelWithShortcut(t('nodeGraph'), 'plannerGraph'));
 const lineTabLabel = computed(() => labelWithShortcut(t('productionLine'), 'plannerLine'));
 const calcTabLabel = computed(() => labelWithShortcut(t('calculator'), 'plannerCalc'));
+const quantTabLabel = computed(() => labelWithShortcut(t('quantificationView'), 'plannerQuant'));
 
-const activeTab = ref<'tree' | 'graph' | 'line' | 'calc'>('tree');
+const activeTab = ref<'tree' | 'graph' | 'line' | 'calc' | 'quant'>('tree');
 const targetAmount = ref(1);
 const targetUnit = ref<'items' | 'per_second' | 'per_minute' | 'per_hour'>('per_minute');
 const treeDisplayMode = ref<'list' | 'compact'>('list');
 const collapsed = ref<Set<string>>(new Set());
 const lineCollapseIntermediate = ref(true);
 const lineWidthByRate = ref(false);
+const quantWidthByRate = ref(true);
 const lineWidthCurveDialogOpen = ref(false);
 const lineWidthCurveConfig = ref<LineWidthCurveConfig>(createDefaultLineWidthCurveConfig());
 const forcedRawItemKeyHashes = ref<Set<string>>(new Set());
@@ -1356,6 +1451,7 @@ const useProductRecovery = ref(false);
 const hasManualSelectionOverride = ref(false);
 const graphPageFull = ref(false);
 const linePageFull = ref(false);
+const quantPageFull = ref(false);
 const graphShowFluids = ref(true);
 const graphMergeRawMaterials = ref(false);
 
@@ -1363,13 +1459,16 @@ const selectedGraphNodeId = ref<string | null>(null);
 const graphNodePositions = ref(new Map<string, { x: number; y: number }>());
 const selectedLineNodeId = ref<string | null>(null);
 const lineNodePositions = ref(new Map<string, { x: number; y: number }>());
+const quantShowFluids = ref(true);
 
 const $q = useQuasar();
 
 const graphFullscreen = ref(false);
 const lineFullscreen = ref(false);
+const quantFullscreen = ref(false);
 const graphFlowWrapEl = ref<HTMLElement | null>(null);
 const lineFlowWrapEl = ref<HTMLElement | null>(null);
+const quantFlowWrapEl = ref<HTMLElement | null>(null);
 
 const targetRatePresets = computed(() => {
   const preset = props.pack?.manifest?.planner?.targetRatePresets;
@@ -1412,6 +1511,13 @@ function toggleLineFullscreen() {
   $q.fullscreen.toggle(el).catch(() => undefined);
 }
 
+function toggleQuantFullscreen() {
+  if (!$q.fullscreen.isCapable) return;
+  const el = quantFlowWrapEl.value;
+  if (!el) return;
+  $q.fullscreen.toggle(el).catch(() => undefined);
+}
+
 function onLineNodeDragStop(evt: { node: Node }) {
   const next = new Map(lineNodePositions.value);
   next.set(evt.node.id, { ...evt.node.position });
@@ -1428,6 +1534,7 @@ function handleFullscreenChange() {
   const activeEl = document.fullscreenElement;
   graphFullscreen.value = activeEl !== null && activeEl === graphFlowWrapEl.value;
   lineFullscreen.value = activeEl !== null && activeEl === lineFlowWrapEl.value;
+  quantFullscreen.value = activeEl !== null && activeEl === quantFlowWrapEl.value;
 }
 
 onMounted(() => {
@@ -2943,6 +3050,16 @@ const lineFlowEdgesStyled = computed(() => {
   });
 });
 
+const quantModel = computed(() => {
+  const result = enhancedTreeResult.value || treeResult.value;
+  if (!result) return { nodes: [], edges: [] };
+  return buildQuantFlowModel({
+    root: result.root as unknown as RequirementNode,
+    rootItemKey: props.rootItemKey,
+    includeFluids: quantShowFluids.value,
+  });
+});
+
 const leafColumns = [
   { name: 'name', label: '物品', field: 'name', align: 'left' as const },
   { name: 'amount', label: '数量', field: 'amount', align: 'right' as const },
@@ -3449,6 +3566,88 @@ const flowBackgroundPatternColor = computed(() =>
 
 .planner__flow-node--fluid {
   min-width: 180px;
+}
+
+.planner__quant-node {
+  position: relative;
+  width: 112px;
+  min-height: 112px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+}
+
+.planner__quant-node--fluid {
+  width: 96px;
+  min-height: 96px;
+}
+
+.planner__quant-node-circle {
+  width: 72px;
+  height: 72px;
+  border-radius: 50%;
+  border: 1px solid rgba(0, 0, 0, 0.22);
+  background: radial-gradient(circle at 35% 30%, rgba(255, 255, 255, 0.95), rgba(236, 243, 255, 0.94) 60%, rgba(220, 232, 248, 0.92));
+  box-shadow: 0 8px 18px rgba(0, 0, 0, 0.14);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+}
+
+.planner__quant-node-circle--fluid {
+  background: radial-gradient(circle at 35% 30%, rgba(222, 250, 255, 0.95), rgba(186, 236, 245, 0.92) 62%, rgba(151, 208, 219, 0.9));
+}
+
+.planner__quant-fluid-symbol {
+  font-size: 26px;
+  font-weight: 700;
+  color: rgba(0, 0, 0, 0.58);
+}
+
+.planner__quant-node-label {
+  text-align: center;
+  user-select: text;
+  -webkit-user-select: text;
+}
+
+.planner__quant-node-title {
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1.2;
+}
+
+.planner__quant-node-sub {
+  margin-top: 2px;
+  font-size: 11px;
+  color: rgba(0, 0, 0, 0.68);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+}
+
+.planner__quant-node--selected .planner__quant-node-circle {
+  border-color: var(--q-primary);
+  box-shadow: 0 0 0 2px rgba(25, 118, 210, 0.25), 0 8px 18px rgba(0, 0, 0, 0.14);
+}
+
+.planner__quant-node--recovery .planner__quant-node-circle {
+  border-color: #26a69a;
+}
+
+.planner__quant-node--root .planner__quant-node-circle {
+  border-color: var(--q-primary);
+}
+
+.planner__quant-handle {
+  width: 1px !important;
+  height: 1px !important;
+  opacity: 0 !important;
+  background: transparent !important;
+  border: none !important;
+  pointer-events: none !important;
 }
 
 .planner__handle {

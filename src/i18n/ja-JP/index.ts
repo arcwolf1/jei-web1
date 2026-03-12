@@ -146,6 +146,7 @@ export default {
   plannerTabGraph: 'グラフ (G)',
   plannerTabLine: 'ライン (L)',
   plannerTabCalc: '計算 (C)',
+  plannerTabQuant: '量化 (Q)',
 
   // Advanced Planner Tabs
   startPlanning: '計画開始',
@@ -214,6 +215,7 @@ export default {
   // Planner Details
   target: 'ターゲット',
   treeStructure: 'ツリー構造',
+  quantificationView: '量化ビュー',
   conveyorBelt: 'コンベヤベルト',
   equipment: '設備',
   power: '電力',
@@ -252,6 +254,7 @@ export default {
   keybindingPlannerGraph: 'プランナーグラフ',
   keybindingPlannerLine: 'プランナーライン',
   keybindingPlannerCalc: 'プランナー計算',
+  keybindingPlannerQuant: 'プランナー量化ビュー',
   keybindingToggleFavorite: 'お気に入りに追加/削除',
   keybindingAddToAdvanced: '高度なプランナーに追加',
   keybindingCircuitRotate: '回転',

@@ -248,6 +248,18 @@
                       :model-value="showLoadingOverlay"
                       @update:model-value="$emit('update:show-loading-overlay', !!$event)"
                     />
+                    <q-input
+                      dense
+                      outlined
+                      type="number"
+                      :min="0.1"
+                      :step="0.1"
+                      label="量化视图线宽缩放因子"
+                      :model-value="quantLineWidthScale"
+                      @update:model-value="
+                        $emit('update:quant-line-width-scale', Number($event) || 1)
+                      "
+                    />
                   </div>
                 </q-card-section>
               </q-card>
@@ -566,6 +578,7 @@ const props = defineProps<{
   debugLayout: boolean;
   debugNavPanel: boolean;
   showLoadingOverlay: boolean;
+  quantLineWidthScale: number;
   recipeViewMode: 'dialog' | 'panel';
   recipeSlotShowName: boolean;
   favoritesOpensNewStack: boolean;
@@ -626,6 +639,7 @@ const emit = defineEmits<{
   'update:debug-layout': [value: boolean];
   'update:debug-nav-panel': [value: boolean];
   'update:show-loading-overlay': [value: boolean];
+  'update:quant-line-width-scale': [value: number];
   'update:recipe-view-mode': [value: 'dialog' | 'panel'];
   'update:recipe-slot-show-name': [value: boolean];
   'update:favorites-open-stack': [value: boolean];
