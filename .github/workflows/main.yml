@@ -45,11 +45,11 @@ jobs:
       - name: Merge upstream changes
         run: |
           # 切换到主分支（根据你的主分支名称调整，如 main/master）
-          git checkout main
+          git checkout master
           # 变基到上游主分支（推荐），如果有冲突会失败
-          # 如需自动解决冲突，可替换为：git pull upstream main --rebase --autostash
+          # 如需自动解决冲突，可替换为：git pull upstream master --rebase --autostash
           git rebase upstream/main
-          # 如果变基失败，也可以用合并：git merge upstream/main --no-edit
+          # 如果变基失败，也可以用合并：git merge upstream/master --no-edit
 
       # 步骤5：推送到当前仓库
       - name: Push changes to current repo
