@@ -1,0 +1,228 @@
+/**
+ * advancedPlanner.ts
+ *
+ * High-level API for the LP-backed advanced planner.
+ *
+ * Usage:
+ *   const result = await solveAdvanced({ objectives, index, selections, defaultNs });
+ *
+ * The output `Step[]` is structurally compatible with the existing
+ * buildEnhancedRequirementTree() output so views can reuse the same rendering.
+ */
+
+import type { ItemKey } from '../types';
+import type { JeiIndex } from '../indexing/buildIndex';
+import { itemKeyHash } from '../indexing/key';
+import type { ObjectiveState, Step, Totals, PlannerResult } from './types';
+import { ResultType, MaximizeType } from './types';
+import { rational } from './rational';
+import type { Rational } from './rational';
+import { buildMatrixState } from './matrixState';
+import { solveLp, ensureGlpkLoaded, DEFAULT_SOLVER_COSTS, type SolverCostSettings } from './glpkSolver';
+
+// ─── Public API ────────────────────────────────────────────────────────────────
+
+export interface AdvancedPlannerInput {
+  /** Multi-target objectives (Output / Input / Maximize / Limit) */
+  objectives: ObjectiveState[];
+  index: JeiIndex;
+  /**
+   * Per-item recipe selection — same format as the simple planner.
+   * itemKeyHash → recipeId
+   */
+  selectedRecipeIdByItemKeyHash: Map<string, string>;
+  /** normalised tagId → chosen itemId */
+  selectedItemIdByTagId: Map<string, string>;
+  /** Default game namespace (from pack.manifest.gameId) */
+  defaultNs: string;
+  /** Maximization strategy */
+  maximizeType?: MaximizeType;
+  /** Override LP cost weights */
+  costs?: Partial<SolverCostSettings>;
+}
+
+// ─── Implementation ────────────────────────────────────────────────────────────
+
+/**
+ * Solve a multi-objective advanced plan using GLPK LP.
+ *
+ * Returns a PlannerResult whose Step[] can be consumed by the same view
+ * components that handle buildEnhancedRequirementTree() output.
+ */
+export async function solveAdvanced(
+  input: AdvancedPlannerInput,
+): Promise<PlannerResult> {
+  // Ensure the WASM module is ready
+  await ensureGlpkLoaded();
+
+  const {
+    objectives,
+    index,
+    selectedRecipeIdByItemKeyHash,
+    selectedItemIdByTagId,
+    defaultNs,
+    maximizeType = MaximizeType.Ratio,
+    costs = {},
+  } = input;
+
+  const solverCosts = { ...DEFAULT_SOLVER_COSTS, ...costs };
+
+  // ── 1. Build matrix state (graph DFS) ─────────────────────────────────────
+  const state = buildMatrixState({
+    objectives,
+    index,
+    selectedRecipeIdByItemKeyHash,
+    selectedItemIdByTagId,
+    defaultNs,
+    maximizeType,
+  });
+
+  // ── 2. Solve LP ───────────────────────────────────────────────────────────
+  const solverResult = await solveLp(state, solverCosts);
+
+  if (solverResult.resultType !== ResultType.Solved) {
+    return {
+      steps: [],
+      totals: {},
+      resultType: solverResult.resultType,
+    };
+  }
+
+  // ── 3. Build Step[] from solver output ────────────────────────────────────
+
+  const steps: Step[] = [];
+  let stepSeq = 0;
+
+  const totalMachines: Record<string, Rational> = {};
+  let totalPower = rational(0);
+  let totalPollution = rational(0);
+
+  /** Demand for item h (from Output objectives), in items/s */
+  const demandByHash = new Map<string, number>();
+  for (const h of state.itemIds) {
+    const iv = state.itemValues[h];
+    if (iv?.out && iv.out.toNumber() > 0) demandByHash.set(h, iv.out.toNumber());
+  }
+
+  for (const [recipeId, norm] of state.normalizedRecipes) {
+    const rate = solverResult.recipeRates.get(recipeId) ?? 0;
+    if (rate < 1e-12) continue; // Skip non-running recipes
+
+    // machine count = rate (crafts/s) × time (s/craft)
+    const machineCount = rate * norm.time;
+    const machinesRational = rational(machineCount);
+
+    // Per-second output of primary product (first output item)
+    const primaryOutput = norm.outputItems[0];
+
+    // Determine which item this step "belongs to" (primary output)
+    const itemKey: ItemKey | undefined = primaryOutput?.key;
+    const itemHash = itemKey ? itemKeyHash(itemKey) : recipeId;
+    const itemKeyOrFallback: ItemKey = itemKey ?? { id: recipeId };
+
+    // Production amount: items/s × 60 = items/min (match tree builder convention)
+    // For consistency, keep in items/s and let UI format
+    const itemsPerSecond = primaryOutput
+      ? (norm.outputByHash.get(itemHash) ?? 0) * rate
+      : 0;
+
+    const itemsRational = rational(itemsPerSecond);
+    const surplusVal = primaryOutput
+      ? (solverResult.surpluses.get(itemHash) ?? 0)
+      : 0;
+
+    // Power / pollution for this step
+    const stepPower = norm.defaultPower != null ? machineCount * norm.defaultPower : 0;
+    const stepPollution = norm.defaultPollution != null ? machineCount * norm.defaultPollution : 0;
+
+    if (stepPower > 0) totalPower = totalPower.add(rational(stepPower));
+    if (stepPollution > 0) totalPollution = totalPollution.add(rational(stepPollution));
+
+    // Accumulate machines by machine type
+    if (norm.machineId) {
+      const prev = totalMachines[norm.machineId];
+      totalMachines[norm.machineId] = prev ? prev.add(machinesRational) : machinesRational;
+    }
+
+    const recipe = state.recipes.get(recipeId);
+    const step: Step = {
+      id: `adv_step_${(stepSeq += 1)}`,
+      itemId: itemKeyOrFallback.id,
+      itemKey: itemKeyOrFallback,
+      items: itemsRational,
+      ...(demandByHash.has(itemHash) ? { output: rational(demandByHash.get(itemHash)!) } : {}),
+      ...(surplusVal > 1e-9 ? { surplus: rational(surplusVal) } : {}),
+      recipeId,
+      ...(recipe !== undefined ? { recipe } : {}),
+      machines: machinesRational,
+      ...(norm.machineId !== undefined ? { machineId: norm.machineId } : {}),
+      ...(norm.machineName !== undefined ? { machineName: norm.machineName } : {}),
+      perSecond: itemsRational,
+      perMinute: rational(itemsPerSecond * 60),
+      perHour: rational(itemsPerSecond * 3600),
+      ...(stepPower > 0 ? { power: rational(stepPower) } : {}),
+      ...(stepPollution > 0 ? { pollution: rational(stepPollution) } : {}),
+      parents: new Map(),
+      children: [],
+      depth: 0,
+    };
+
+    steps.push(step);
+  }
+
+  // ── 4. Add "leaf" steps for raw materials (unproduceable items) ───────────
+
+  for (const h of state.unproduceableIds) {
+    const key = state.itemKeyByHash.get(h);
+    if (!key) continue;
+
+    // How much is consumed of this item per second?
+    let consumedPerSecond = 0;
+    for (const [recipeId, norm] of state.normalizedRecipes) {
+      const rate = solverResult.recipeRates.get(recipeId) ?? 0;
+      if (rate < 1e-12) continue;
+      const inAmt = norm.inputByHash.get(h) ?? 0;
+      consumedPerSecond += (inAmt / norm.time) * rate;
+    }
+    // Also add any external supply forced by the LP
+    const forcedSupply = solverResult.unproduceableValues.get(h) ?? 0;
+    const total = Math.max(consumedPerSecond, forcedSupply);
+    if (total < 1e-12) continue;
+
+    const totalR = rational(total);
+    const step: Step = {
+      id: `adv_leaf_${(stepSeq += 1)}`,
+      itemId: key.id,
+      itemKey: key,
+      items: totalR,
+      perSecond: totalR,
+      perMinute: rational(total * 60),
+      perHour: rational(total * 3600),
+      parents: new Map(),
+      children: [],
+      depth: 1,
+    };
+    steps.push(step);
+  }
+
+  // ── 5. Assemble totals ────────────────────────────────────────────────────
+
+  const totals: Totals = {
+    ...(Object.keys(totalMachines).length > 0 ? { machines: totalMachines } : {}),
+    ...(totalPower.toNumber() > 0 ? { power: totalPower } : {}),
+    ...(totalPollution.toNumber() > 0 ? { pollution: totalPollution } : {}),
+  };
+
+  return {
+    steps,
+    totals,
+    resultType: ResultType.Solved,
+  };
+}
+
+/**
+ * Pre-warm the GLPK WASM module.
+ * Call this during application startup (e.g., in a boot file) so there's no
+ * cold-start delay when the user first opens the advanced planner.
+ */
+export { ensureGlpkLoaded };

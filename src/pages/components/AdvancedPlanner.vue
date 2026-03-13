@@ -1,5 +1,5 @@
 <template>
-  <div class="advanced-planner column no-wrap">
+  <div v-bind="$attrs" class="advanced-planner column no-wrap">
     <!-- 目标产物管理区 -->
     <q-card flat bordered class="q-pa-md">
       <div class="row items-center q-gutter-sm q-mb-md">
@@ -35,27 +35,42 @@
           <q-item-section>
             <q-item-label>{{ target.itemName }}</q-item-label>
             <q-item-label caption>
-              <div class="row items-center q-gutter-sm">
-                <span>{{ t('productionSpeed') }}:</span>
-                <q-input
+              <div class="row items-center q-gutter-sm q-mt-xs">
+                <!-- LP 模式下显示目标类型切换 -->
+                <q-btn-toggle
+                  v-if="lpMode"
                   dense
-                  filled
-                  type="number"
-                  style="width: 100px"
-                  :model-value="target.rate"
-                  @update:model-value="(v) => updateTargetRate(index, Number(v))"
+                  unelevated
+                  toggle-color="deep-purple"
+                  size="xs"
+                  :options="objectiveTypeOptions"
+                  :model-value="target.type"
+                  @update:model-value="(v) => updateTargetType(index, v as ObjectiveType)"
                 />
-                <q-select
-                  dense
-                  filled
-                  emit-value
-                  map-options
-                  popup-content-class="planner__select-menu"
-                  style="width: 120px"
-                  :options="rateUnitOptions"
-                  :model-value="target.unit"
-                  @update:model-value="(v) => updateTargetUnit(index, v)"
-                />
+                <template v-if="target.type !== ObjectiveType.Maximize">
+                  <q-input
+                    dense
+                    filled
+                    type="number"
+                    style="width: 90px"
+                    :model-value="target.rate"
+                    @update:model-value="(v) => updateTargetRate(index, Number(v))"
+                  />
+                  <q-select
+                    dense
+                    filled
+                    emit-value
+                    map-options
+                    popup-content-class="planner__select-menu"
+                    style="width: 110px"
+                    :options="rateUnitOptions"
+                    :model-value="target.unit"
+                    @update:model-value="(v) => updateTargetUnit(index, v)"
+                  />
+                </template>
+                <span v-else class="text-caption text-grey-7"
+                  >权重 {{ target.rate }}（自动最大化）</span
+                >
               </div>
             </q-item-label>
           </q-item-section>
@@ -82,29 +97,47 @@
       </div>
 
       <!-- 操作按钮 -->
-      <div v-if="targets.length" class="q-mt-md row q-gutter-sm">
+      <div v-if="targets.length" class="q-mt-md row items-center q-gutter-sm">
+        <q-toggle
+          v-model="lpMode"
+          label="LP优化模式"
+          color="deep-purple"
+          checked-icon="science"
+          unchecked-icon="account_tree"
+        >
+          <q-tooltip>启用后使用线性规划求解器；支持产出、投入、最大化、限制四种目标类型</q-tooltip>
+        </q-toggle>
         <q-btn
-          color="primary"
-          icon="calculate"
+          :color="lpMode ? 'deep-purple' : 'primary'"
+          :icon="lpMode ? 'science' : 'calculate'"
           :label="t('startPlanning')"
           :disable="targets.length === 0"
+          :loading="lpSolving"
           @click="startPlanning"
         />
         <q-btn
           outline
-          color="primary"
+          :color="lpMode ? 'deep-purple' : 'primary'"
           icon="auto_awesome"
-          :label="t('autoOptimize')"
+          :label="lpMode ? '自动配方 + LP' : t('autoOptimize')"
           :disable="targets.length === 0"
+          :loading="lpMode && lpSolving"
           @click="autoOptimize"
         >
-          <q-tooltip>{{ t('autoOptimizeHint') }}</q-tooltip>
+          <q-tooltip>{{
+            lpMode ? '自动选择最优配方，然后用 LP 求解' : t('autoOptimizeHint')
+          }}</q-tooltip>
         </q-btn>
       </div>
     </q-card>
 
-    <!-- 决策区域 -->
-    <q-card v-if="pendingDecisions.length" flat bordered class="q-pa-md q-mt-md">
+    <!-- 决策区域：LP 手动模式下仍需手动选配方；LP 自动优化跳过此步 -->
+    <q-card
+      v-if="pendingDecisions.length && (!lpMode || lpPendingAfterDecisions)"
+      flat
+      bordered
+      class="q-pa-md q-mt-md"
+    >
       <div class="row items-center q-gutter-sm q-mb-md">
         <div class="text-subtitle2">{{ t('recipeSelection') }}</div>
         <q-space />
@@ -248,6 +281,7 @@
         <q-tab name="line" :label="t('productionLine')" />
         <q-tab name="quant" :label="t('quantificationView')" />
         <q-tab name="calc" :label="t('calculator')" />
+        <q-tab v-if="lpMode && lpResult" name="lp_raw" label="LP 原始数据" />
       </q-tabs>
       <q-separator class="q-my-md" />
 
@@ -688,7 +722,9 @@
                         </q-badge>
                         <q-badge v-if="p.data.recovery" color="teal" class="q-ml-xs">
                           recovery
-                          <q-tooltip v-if="p.data.recoverySource">{{ p.data.recoverySource }}</q-tooltip>
+                          <q-tooltip v-if="p.data.recoverySource">{{
+                            p.data.recoverySource
+                          }}</q-tooltip>
                         </q-badge>
                         <q-badge
                           v-if="p.data.cycle"
@@ -753,7 +789,11 @@
                 @update:model-value="settingsStore.setLineIntermediateColoring(!!$event)"
               />
               <q-toggle
-                v-if="selectedLineItemData && !selectedLineItemData.isRoot && !selectedLineItemData.recovery"
+                v-if="
+                  selectedLineItemData &&
+                  !selectedLineItemData.isRoot &&
+                  !selectedLineItemData.recovery
+                "
                 :model-value="selectedLineItemForcedRaw"
                 dense
                 color="warning"
@@ -780,7 +820,9 @@
                   { label: 'G6', value: 'g6' },
                 ]"
                 @update:model-value="
-                  settingsStore.setProductionLineRenderer(($event as 'vue_flow' | 'g6') ?? 'vue_flow')
+                  settingsStore.setProductionLineRenderer(
+                    ($event as 'vue_flow' | 'g6') ?? 'vue_flow',
+                  )
                 "
               />
               <q-space />
@@ -1120,6 +1162,52 @@
             </q-card>
           </div>
         </q-tab-panel>
+
+        <!-- LP 原始数据视图 -->
+        <q-tab-panel v-if="lpMode && lpResult" name="lp_raw" class="q-pa-none">
+          <div class="column q-gutter-md">
+            <q-card flat bordered class="q-pa-md">
+              <div class="text-subtitle2 q-mb-sm">
+                LP 求解结果 — 配方运行速率（每秒）
+                <q-badge color="deep-purple" class="q-ml-sm"
+                  >{{ lpResult.steps.filter((s) => s.recipeId).length }} 条配方</q-badge
+                >
+              </div>
+              <q-table
+                dense
+                flat
+                :rows="lpRawRows"
+                :columns="lpRawColumns"
+                row-key="id"
+                :rows-per-page-options="[0]"
+              >
+                <template #body-cell-name="props">
+                  <q-td :props="props">
+                    <div class="row items-center q-gutter-xs">
+                      <stack-view
+                        v-if="props.row.itemId"
+                        :content="{ kind: 'item', id: props.row.itemId, amount: 1 }"
+                        :item-defs-by-key-hash="itemDefsByKeyHash"
+                        variant="slot"
+                        :show-name="false"
+                        :show-subtitle="false"
+                      />
+                      <span>{{ props.row.name }}</span>
+                      <q-badge v-if="!props.row.recipeId" color="grey" label="原料" />
+                    </div>
+                  </q-td>
+                </template>
+                <template #body-cell-surplus="props">
+                  <q-td :props="props" class="text-right">
+                    <span :class="props.row.surplus > 0 ? 'text-orange-7' : ''">
+                      {{ props.row.surplus > 0 ? props.row.surplus.toFixed(4) : '-' }}
+                    </span>
+                  </q-td>
+                </template>
+              </q-table>
+            </q-card>
+          </div>
+        </q-tab-panel>
       </q-tab-panels>
     </q-card>
 
@@ -1163,12 +1251,17 @@
     :open="lineWidthCurveDialogOpen"
     :model-value="lineWidthCurveConfig"
     @update:open="(v) => (lineWidthCurveDialogOpen = v)"
-    @update:model-value="(v) => (lineWidthCurveConfig = v)"
+    @update:model-value="(v) => settingsStore.setLineWidthCurveConfig(v)"
   />
 </template>
 
 <script setup lang="ts">
 import { ref, computed, watch, onMounted, onUnmounted } from 'vue';
+
+// The template has multiple root nodes (main div + q-dialog + line-width-curve-editor),
+// so class/style passed by the parent cannot be automatically inherited.
+// Disable auto-inheritance and let the root <div> inherit via v-bind="$attrs".
+defineOptions({ inheritAttrs: false });
 import { Dark, useQuasar } from 'quasar';
 import { useI18n } from 'vue-i18n';
 import type { ItemKey, ItemDef, ItemId, PackData, Stack } from 'src/jei/types';
@@ -1185,6 +1278,10 @@ import {
   extractRecipeStacks,
   buildEnhancedRequirementTree,
 } from 'src/jei/planner/planner';
+import { ObjectiveType } from 'src/jei/planner/types';
+import type { ObjectiveState, ObjectiveUnit, PlannerResult } from 'src/jei/planner/types';
+import { solveAdvanced } from 'src/jei/planner/advancedPlanner';
+import { rational } from 'src/jei/planner/rational';
 import StackView from 'src/jei/components/StackView.vue';
 import RecipeViewer from 'src/jei/components/RecipeViewer.vue';
 import LineWidthCurveEditor from 'src/jei/components/LineWidthCurveEditor.vue';
@@ -1194,7 +1291,6 @@ import { buildProductionLineModel } from 'src/jei/planner/productionLine';
 import { buildQuantFlowModel } from 'src/jei/planner/quantFlow';
 import {
   convertAmountPerMinuteToUnitValue,
-  createDefaultLineWidthCurveConfig,
   evaluateLineWidthCurve,
   type LineWidthCurveConfig,
 } from 'src/jei/planner/lineWidthCurve';
@@ -1217,6 +1313,8 @@ interface Target {
   itemName: string;
   rate: number;
   unit: 'per_second' | 'per_minute' | 'per_hour';
+  /** LP 目标类型：产出/投入/最大化/限制 */
+  type: ObjectiveType;
 }
 
 interface Props {
@@ -1250,6 +1348,13 @@ const emit = defineEmits<{
 const $q = useQuasar();
 
 const targets = ref<Target[]>([]);
+/** LP 优化模式开关：开启后调用 solveAdvanced() 代替树形递归 */
+const lpMode = ref(false);
+/** LP 手动模式：等待用户解决决策后再触发求解 */
+const lpPendingAfterDecisions = ref(false);
+/** LP 求解结果（仅在 lpMode 下有效） */
+const lpResult = ref<PlannerResult | null>(null);
+const lpSolving = ref(false);
 const activeTab = ref<'summary' | 'tree' | 'graph' | 'line' | 'quant' | 'calc'>('summary');
 const allDecisions = ref<PlannerDecision[]>([]);
 const selectedRecipeIdByItemKeyHash = ref<Map<string, string>>(new Map());
@@ -1264,6 +1369,13 @@ const rateUnitOptions = [
   { label: '每小时', value: 'per_hour' },
 ];
 
+const objectiveTypeOptions = [
+  { label: '产出', value: ObjectiveType.Output },
+  { label: '投入', value: ObjectiveType.Input },
+  { label: '最大化', value: ObjectiveType.Maximize },
+  { label: '限制', value: ObjectiveType.Limit },
+];
+
 const treeDisplayMode = ref<'list' | 'compact'>('list');
 const treeDisplayUnit = ref<'per_second' | 'per_minute' | 'per_hour'>('per_minute');
 const collapsed = ref<Set<string>>(new Set());
@@ -1275,10 +1387,16 @@ const graphNodePositions = ref(new Map<string, { x: number; y: number }>());
 const lineDisplayUnit = ref<'per_second' | 'per_minute' | 'per_hour'>('per_minute');
 const lineCollapseIntermediate = ref(true);
 const lineIncludeCycleSeeds = ref(true);
-const lineWidthByRate = ref(false);
+const lineWidthByRate = computed({
+  get: () => settingsStore.lineWidthByRate,
+  set: (v: boolean) => settingsStore.setLineWidthByRate(v),
+});
 const quantWidthByRate = ref(true);
 const lineWidthCurveDialogOpen = ref(false);
-const lineWidthCurveConfig = ref<LineWidthCurveConfig>(createDefaultLineWidthCurveConfig());
+const lineWidthCurveConfig = computed({
+  get: () => settingsStore.lineWidthCurveConfig,
+  set: (v: LineWidthCurveConfig) => settingsStore.setLineWidthCurveConfig(v),
+});
 const quantDisplayUnit = ref<'per_second' | 'per_minute' | 'per_hour'>('per_minute');
 const quantShowFluids = ref(true);
 const forcedRawItemKeyHashes = ref<Set<string>>(new Set());
@@ -1391,6 +1509,8 @@ const cycleSeedEntries = computed<CycleSeedInfo[]>(() => {
 });
 
 const planningComplete = computed(() => {
+  // LP 模式：只要 LP 完成并构建了 mergedTree 就算完成，不依赖 pendingDecisions
+  if (lpMode.value) return planningStarted.value && lpResult.value !== null;
   return planningStarted.value && pendingDecisions.value.length === 0;
 });
 
@@ -1547,6 +1667,12 @@ const buildMergedTree = () => {
     console.error('Failed to build merged tree', e);
     mergedTree.value = null;
   }
+
+  // LP 手动模式：决策全部解决并建好传统树后，触发 LP 求解
+  if (lpMode.value && lpPendingAfterDecisions.value) {
+    lpPendingAfterDecisions.value = false;
+    runLpSolve();
+  }
 };
 
 const addTarget = (itemKey: ItemKey, itemName: string, rate = 1) => {
@@ -1557,7 +1683,7 @@ const addTarget = (itemKey: ItemKey, itemName: string, rate = 1) => {
     existing.rate += rate;
     invalidatePlanningIfNeeded();
   } else {
-    targets.value.push({ itemKey, itemName, rate, unit: 'per_minute' });
+    targets.value.push({ itemKey, itemName, rate, unit: 'per_minute', type: ObjectiveType.Output });
     invalidatePlanningIfNeeded();
   }
 };
@@ -1567,8 +1693,9 @@ const loadSavedPlan = (payload: PlannerSavePayload) => {
   targets.value = payload.targets.map((t) => ({
     itemKey: t.itemKey,
     itemName: t.itemName ?? itemName(t.itemKey),
-    rate: t.rate,
-    unit: t.unit,
+    rate: t.value ?? 1,
+    unit: t.unit as 'per_second' | 'per_minute' | 'per_hour',
+    type: t.type ?? ObjectiveType.Output,
   }));
 
   selectedRecipeIdByItemKeyHash.value = new Map(
@@ -1616,6 +1743,13 @@ const updateTargetUnit = (index: number, unit: 'per_second' | 'per_minute' | 'pe
   }
 };
 
+const updateTargetType = (index: number, type: ObjectiveType) => {
+  if (targets.value[index]) {
+    targets.value[index].type = type;
+    invalidatePlanningIfNeeded();
+  }
+};
+
 const clearTargets = () => {
   targets.value = [];
   forcedRawItemKeyHashes.value = new Set();
@@ -1624,6 +1758,7 @@ const clearTargets = () => {
 
 const resetPlanning = () => {
   planningStarted.value = false;
+  lpPendingAfterDecisions.value = false;
   allDecisions.value = [];
   selectedRecipeIdByItemKeyHash.value = new Map();
   selectedItemIdByTagId.value = new Map();
@@ -1636,8 +1771,66 @@ const invalidatePlanningIfNeeded = () => {
   if (planningStarted.value) resetPlanning();
 };
 
+/** 提取 LP 求解逻辑，供多处复用 */
+const runLpSolve = () => {
+  if (!props.index || !props.pack) return;
+  lpResult.value = null;
+  lpSolving.value = true;
+  const objectives: ObjectiveState[] = targets.value.map((t, i) => ({
+    id: `obj_${i}`,
+    targetId: t.itemKey.id,
+    value: rational(t.rate),
+    unit: t.unit as ObjectiveUnit,
+    type: t.type,
+  }));
+  solveAdvanced({
+    objectives,
+    index: props.index,
+    selectedRecipeIdByItemKeyHash: selectedRecipeIdByItemKeyHash.value,
+    selectedItemIdByTagId: selectedItemIdByTagId.value as Map<string, string>,
+    defaultNs: props.pack.manifest.gameId,
+  })
+    .then((result) => {
+      lpResult.value = result;
+      lpSolving.value = false;
+      // 把 LP 求出的配方选择全部回写，覆盖已有选择，保证树与 LP 结果一致
+      const merged = new Map(selectedRecipeIdByItemKeyHash.value);
+      for (const step of result.steps) {
+        if (step.recipeId && step.itemKey) {
+          merged.set(itemKeyHash(step.itemKey), step.recipeId);
+        }
+      }
+      selectedRecipeIdByItemKeyHash.value = merged;
+      planningStarted.value = true;
+      // LP 已决定所有配方，跳过 collectPendingDecisions 直接构建树；
+      // 否则 LP 新引入的子依赖会被判为"待决策"从而清空 mergedTree。
+      allDecisions.value = [];
+      buildMergedTree();
+    })
+    .catch((e) => {
+      console.error('[LP] solve failed', e);
+      lpSolving.value = false;
+    });
+};
+
 const startPlanning = () => {
   if (!props.index || !props.pack || targets.value.length === 0) return;
+
+  if (lpMode.value) {
+    // LP 手动模式：先走普通决策流程，让用户自行选配方，决策完成后自动触发 LP
+    lpResult.value = null;
+    lpPendingAfterDecisions.value = true;
+    planningStarted.value = false;
+    allDecisions.value = [];
+    selectedRecipeIdByItemKeyHash.value = new Map();
+    selectedItemIdByTagId.value = new Map();
+    mergedTree.value = null;
+    mergedRootItemKey.value = null;
+    collapsed.value = new Set();
+    planningStarted.value = true;
+    recomputePlanningState();
+    return;
+  }
 
   planningStarted.value = false;
   allDecisions.value = [];
@@ -1687,6 +1880,13 @@ const autoOptimize = () => {
   // 应用自动选择
   selectedRecipeIdByItemKeyHash.value = allRecipeSelections;
   selectedItemIdByTagId.value = allTagSelections;
+
+  if (lpMode.value) {
+    // LP 自动优化：配方已自动选好，直接跑 LP，不经过决策面板
+    lpPendingAfterDecisions.value = false;
+    runLpSolve();
+    return;
+  }
   recomputePlanningState();
 };
 
@@ -1768,14 +1968,13 @@ const decisionKey = (d: PlannerDecision): string => {
 const recipeOptionsForDecision = (d: Extract<PlannerDecision, { kind: 'item_recipe' }>) => {
   if (!props.index) return [];
 
-  return d.recipeOptions
-    .map((recipeId: string) => {
-      const r = props.index!.recipesById.get(recipeId);
-      const recipeType = r ? props.index!.recipeTypesByKey.get(r.type) : undefined;
-      const label = r ? `${recipeType?.displayName ?? r.type}` : recipeId;
-      const inputs: Stack[] = r ? extractRecipeStacks(r, recipeType).inputs : [];
-      return { label, value: recipeId, inputs, recipe: r, recipeType };
-    });
+  return d.recipeOptions.map((recipeId: string) => {
+    const r = props.index!.recipesById.get(recipeId);
+    const recipeType = r ? props.index!.recipeTypesByKey.get(r.type) : undefined;
+    const label = r ? `${recipeType?.displayName ?? r.type}` : recipeId;
+    const inputs: Stack[] = r ? extractRecipeStacks(r, recipeType).inputs : [];
+    return { label, value: recipeId, inputs, recipe: r, recipeType };
+  });
 };
 
 const getSelectedRecipe = (itemKeyHash: string): string | null => {
@@ -1834,8 +2033,10 @@ function confirmSave() {
     targets: targets.value.map((t) => ({
       itemKey: t.itemKey,
       itemName: t.itemName,
+      value: t.rate,
       rate: t.rate,
-      unit: t.unit,
+      unit: t.unit as ObjectiveUnit,
+      type: t.type,
     })),
   };
   emit('save-plan', payload);
@@ -2068,9 +2269,7 @@ function rateByUnitFromPerSecond(
 
 const LINE_EDGE_BASE_STROKE_WIDTH = 2;
 
-function lineEdgeBaseWidthFromRate(
-  amountPerMinute: number,
-): number {
+function lineEdgeBaseWidthFromRate(amountPerMinute: number): number {
   if (!lineWidthByRate.value) return LINE_EDGE_BASE_STROKE_WIDTH;
   const cfg = lineWidthCurveConfig.value;
   const unitValue = convertAmountPerMinuteToUnitValue(
@@ -2099,7 +2298,10 @@ function lineEdgeStrokeWidth(
 function formatMachineCountForDisplay(value: unknown): number {
   const v = finiteOr(value, 0);
   if (!Number.isFinite(v) || v <= 0) return 0;
-  const decimals = Math.max(0, Math.min(4, Math.floor(finiteOr(settingsStore.machineCountDecimals, 0))));
+  const decimals = Math.max(
+    0,
+    Math.min(4, Math.floor(finiteOr(settingsStore.machineCountDecimals, 0))),
+  );
   if (decimals === 0) return Math.round(v);
   const factor = 10 ** decimals;
   return Math.round(v * factor) / factor;
@@ -3410,12 +3612,57 @@ const calcForcedRawRows = computed(() => {
 
   walk(mergedTree.value.root);
 
-  return Array.from(rowsByHash.values()).sort((a, b) => b.rate - a.rate || a.name.localeCompare(b.name));
+  return Array.from(rowsByHash.values()).sort(
+    (a, b) => b.rate - a.rate || a.name.localeCompare(b.name),
+  );
 });
 
 const calcMachineTotal = computed(() => {
   return calcMachineRows.value.reduce((sum, r) => sum + r.count, 0);
 });
+
+// ─── LP raw data table ─────────────────────────────────────────────────────
+const lpRawRows = computed(() => {
+  if (!lpResult.value) return [];
+  return lpResult.value.steps.map((step) => ({
+    id: step.id,
+    name: (getItemName(step.itemId ?? '') || step.recipeId) ?? step.id,
+    itemId: step.itemId,
+    recipeId: step.recipeId,
+    perSecond: step.perSecond?.toNumber() ?? 0,
+    perMinute: step.perMinute?.toNumber() ?? 0,
+    machines: step.machines?.toNumber() ?? 0,
+    power: step.power?.toNumber() ?? 0,
+    surplus: step.surplus?.toNumber() ?? 0,
+  }));
+});
+
+const lpRawColumns = [
+  { name: 'name', label: '物品/配方', field: 'name', align: 'left' as const },
+  {
+    name: 'perSecond',
+    label: '产出/s',
+    field: 'perSecond',
+    align: 'right' as const,
+    format: (v: number) => (v > 0 ? v.toFixed(4) : '-'),
+  },
+  {
+    name: 'perMinute',
+    label: '产出/min',
+    field: 'perMinute',
+    align: 'right' as const,
+    format: (v: number) => (v > 0 ? v.toFixed(2) : '-'),
+  },
+  {
+    name: 'machines',
+    label: '机器数',
+    field: 'machines',
+    align: 'right' as const,
+    format: (v: number) => (v > 0 ? v.toFixed(2) : '-'),
+  },
+  { name: 'surplus', label: '剩余/s', field: 'surplus', align: 'right' as const },
+];
+// ──────────────────────────────────────────────────────────────────────────────
 
 const calcMachineColumns = [
   { name: 'name', label: '设备', field: 'name', align: 'left' as const },
@@ -3745,7 +3992,12 @@ defineExpose({
   height: 72px;
   border-radius: 50%;
   border: 1px solid rgba(0, 0, 0, 0.22);
-  background: radial-gradient(circle at 35% 30%, rgba(255, 255, 255, 0.95), rgba(236, 243, 255, 0.94) 60%, rgba(220, 232, 248, 0.92));
+  background: radial-gradient(
+    circle at 35% 30%,
+    rgba(255, 255, 255, 0.95),
+    rgba(236, 243, 255, 0.94) 60%,
+    rgba(220, 232, 248, 0.92)
+  );
   box-shadow: 0 8px 18px rgba(0, 0, 0, 0.14);
   display: flex;
   align-items: center;
@@ -3754,7 +4006,12 @@ defineExpose({
 }
 
 .planner__quant-node-circle--fluid {
-  background: radial-gradient(circle at 35% 30%, rgba(222, 250, 255, 0.95), rgba(186, 236, 245, 0.92) 62%, rgba(151, 208, 219, 0.9));
+  background: radial-gradient(
+    circle at 35% 30%,
+    rgba(222, 250, 255, 0.95),
+    rgba(186, 236, 245, 0.92) 62%,
+    rgba(151, 208, 219, 0.9)
+  );
 }
 
 .planner__quant-fluid-symbol {
@@ -3785,7 +4042,9 @@ defineExpose({
 
 .planner__quant-node--selected .planner__quant-node-circle {
   border-color: var(--q-primary);
-  box-shadow: 0 0 0 2px rgba(25, 118, 210, 0.25), 0 8px 18px rgba(0, 0, 0, 0.14);
+  box-shadow:
+    0 0 0 2px rgba(25, 118, 210, 0.25),
+    0 8px 18px rgba(0, 0, 0, 0.14);
 }
 
 .planner__quant-node--recovery .planner__quant-node-circle {
@@ -3918,11 +4177,21 @@ defineExpose({
 
 .body--dark .planner__quant-node-circle {
   border-color: rgba(255, 255, 255, 0.24);
-  background: radial-gradient(circle at 35% 30%, rgba(255, 255, 255, 0.2), rgba(94, 120, 150, 0.34) 62%, rgba(62, 88, 117, 0.44));
+  background: radial-gradient(
+    circle at 35% 30%,
+    rgba(255, 255, 255, 0.2),
+    rgba(94, 120, 150, 0.34) 62%,
+    rgba(62, 88, 117, 0.44)
+  );
 }
 
 .body--dark .planner__quant-node-circle--fluid {
-  background: radial-gradient(circle at 35% 30%, rgba(196, 243, 250, 0.26), rgba(82, 145, 157, 0.42) 62%, rgba(54, 109, 123, 0.5));
+  background: radial-gradient(
+    circle at 35% 30%,
+    rgba(196, 243, 250, 0.26),
+    rgba(82, 145, 157, 0.42) 62%,
+    rgba(54, 109, 123, 0.5)
+  );
 }
 
 .body--dark .planner__quant-node-sub {
