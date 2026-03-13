@@ -1,0 +1,58 @@
+name: Sync with Upstream Repository
+
+# 触发条件：
+# 1. 手动触发（workflow_dispatch）
+# 2. 定时触发（每天 UTC 时间 0 点检测一次）
+# 3. 可选：监听上游仓库 push 事件（需要上游仓库配置转发，否则只能用定时）
+on:
+  workflow_dispatch:  # 手动触发
+  schedule:
+    - cron: '0 0 * * *'  # 每天 UTC 0 点执行
+
+# 设置权限
+permissions:
+  contents: write  # 允许推送代码
+  pull-requests: write  # 可选：允许创建 PR
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      # 步骤1：检出当前仓库代码
+      - name: Checkout current repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # 拉取完整历史，避免合并冲突
+
+      # 步骤2：配置 Git 身份（必须，否则推送会失败）
+      - name: Configure Git user
+        run: |
+          git config --global user.name "figreojgihgj"
+          git config --global user.email "61793735@qq.com"
+
+      # 步骤3：添加上游仓库并拉取最新代码
+      - name: Add upstream remote and fetch
+        env:
+          # 替换为你的上游仓库地址（HTTPS 或 SSH 格式）
+          UPSTREAM_REPO: https://github.com/AndreaFrederica/jei-web.git
+        run: |
+          # 添加上游仓库
+          git remote add upstream $UPSTREAM_REPO
+          # 拉取上游所有分支
+          git fetch upstream
+
+      # 步骤4：合并上游代码（优先使用 rebase 避免冗余提交）
+      - name: Merge upstream changes
+        run: |
+          # 切换到主分支（根据你的主分支名称调整，如 main/master）
+          git checkout main
+          # 变基到上游主分支（推荐），如果有冲突会失败
+          # 如需自动解决冲突，可替换为：git pull upstream main --rebase --autostash
+          git rebase upstream/main
+          # 如果变基失败，也可以用合并：git merge upstream/main --no-edit
+
+      # 步骤5：推送到当前仓库
+      - name: Push changes to current repo
+        run: |
+          # 强制推送（变基后需要），注意：仅在自己的仓库使用
+          git push origin main --force-with-lease
