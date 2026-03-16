@@ -12,6 +12,11 @@ import {
   PROXY_ANONYMOUS_TOKEN_KEY,
   PROXY_FRAMEWORK_TOKEN_KEY,
 } from 'src/utils/storageHelper';
+import {
+  createDefaultLineWidthCurveConfig,
+  sanitizeLineWidthCurveConfig,
+  type LineWidthCurveConfig,
+} from 'src/jei/planner/lineWidthCurve';
 
 export type DarkMode = 'auto' | 'light' | 'dark';
 export type Language = 'zh-CN' | 'en-US' | 'ja-JP';
@@ -121,6 +126,8 @@ export const useSettingsStore = defineStore('settings', {
       productionLineRenderer: 'vue_flow' as 'vue_flow' | 'g6',
       quantFlowRenderer: 'nodes' as 'nodes' | 'sankey',
       lineIntermediateColoring: true,
+      lineWidthByRate: false,
+      lineWidthCurveConfig: createDefaultLineWidthCurveConfig(),
       machineCountDecimals: 2,
       pluginEnabledById: {} as Record<string, boolean>,
       pluginSettingsById: {} as Record<string, Record<string, string | number | boolean>>,
@@ -304,6 +311,14 @@ export const useSettingsStore = defineStore('settings', {
           typeof parsed.lineIntermediateColoring === 'boolean'
             ? parsed.lineIntermediateColoring
             : defaults.lineIntermediateColoring,
+        lineWidthByRate:
+          typeof parsed.lineWidthByRate === 'boolean'
+            ? parsed.lineWidthByRate
+            : defaults.lineWidthByRate,
+        lineWidthCurveConfig:
+          parsed.lineWidthCurveConfig && typeof parsed.lineWidthCurveConfig === 'object'
+            ? sanitizeLineWidthCurveConfig(parsed.lineWidthCurveConfig as unknown as LineWidthCurveConfig)
+            : defaults.lineWidthCurveConfig,
         machineCountDecimals:
           typeof parsed.machineCountDecimals === 'number'
             && Number.isFinite(parsed.machineCountDecimals)
@@ -534,6 +549,14 @@ export const useSettingsStore = defineStore('settings', {
       this.lineIntermediateColoring = value;
       void this.save();
     },
+    setLineWidthByRate(value: boolean) {
+      this.lineWidthByRate = value;
+      void this.save();
+    },
+    setLineWidthCurveConfig(value: LineWidthCurveConfig) {
+      this.lineWidthCurveConfig = sanitizeLineWidthCurveConfig(value);
+      void this.save();
+    },
     setMachineCountDecimals(value: number) {
       const n = Number(value);
       if (!Number.isFinite(n) || n < 0) return;
@@ -598,6 +621,8 @@ export const useSettingsStore = defineStore('settings', {
         productionLineRenderer: this.productionLineRenderer,
         quantFlowRenderer: this.quantFlowRenderer,
         lineIntermediateColoring: this.lineIntermediateColoring,
+        lineWidthByRate: this.lineWidthByRate,
+        lineWidthCurveConfig: this.lineWidthCurveConfig,
         machineCountDecimals: this.machineCountDecimals,
         pluginEnabledById: this.pluginEnabledById,
         pluginSettingsById: this.pluginSettingsById,
@@ -669,6 +694,12 @@ export const useSettingsStore = defineStore('settings', {
       }
       if (typeof parsed.lineIntermediateColoring === 'boolean') {
         this.lineIntermediateColoring = parsed.lineIntermediateColoring;
+      }
+      if (typeof parsed.lineWidthByRate === 'boolean') {
+        this.lineWidthByRate = parsed.lineWidthByRate;
+      }
+      if (parsed.lineWidthCurveConfig && typeof parsed.lineWidthCurveConfig === 'object') {
+        this.lineWidthCurveConfig = sanitizeLineWidthCurveConfig(parsed.lineWidthCurveConfig as unknown as LineWidthCurveConfig);
       }
       if (
         typeof parsed.machineCountDecimals === 'number'

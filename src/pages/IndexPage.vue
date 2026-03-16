@@ -353,7 +353,10 @@ import type {
   PlannerInitialState,
   PlannerLiveState,
   PlannerSavePayload,
+  AdvancedObjectiveEntry,
 } from 'src/jei/planner/plannerUi';
+import { ObjectiveType } from 'src/jei/planner/types';
+import type { ObjectiveUnit } from 'src/jei/planner/types';
 import { itemKeyHash } from 'src/jei/indexing/key';
 import { autoPlanSelections } from 'src/jei/planner/planner';
 import { builtinPlugins } from 'src/jei/plugins/builtin';
@@ -508,12 +511,7 @@ type SavedPlan = {
   selectedItemIdByTagId: Record<string, string>;
   createdAt: number;
   kind?: 'advanced';
-  targets?: Array<{
-    itemKey: ItemKey;
-    itemName?: string;
-    rate: number;
-    unit: 'per_second' | 'per_minute' | 'per_hour';
-  }>;
+  targets?: AdvancedObjectiveEntry[];
 };
 
 const savedPlans = ref<SavedPlan[]>([]);
@@ -1901,7 +1899,9 @@ async function loadPacksIndex() {
 }
 
 function normalizeMirrorUrls(raw: string[]): string[] {
-  return Array.from(new Set(raw.map((m) => m.replace(/\/+$/, '').trim()).filter((m) => m.length > 0)));
+  return Array.from(
+    new Set(raw.map((m) => m.replace(/\/+$/, '').trim()).filter((m) => m.length > 0)),
+  );
 }
 
 function registerCustomSources(
@@ -2709,28 +2709,24 @@ async function loadPlans(packId: string): Promise<SavedPlan[]> {
           ? (obj.targets as Array<Record<string, unknown>>)
           : [];
         const targets = targetsRaw
-          .map((t) => {
+          .map((t): AdvancedObjectiveEntry | null => {
             const itemKey = t.itemKey as ItemKey | undefined;
-            const rate = typeof t.rate === 'number' ? t.rate : Number(t.rate);
-            const unit = t.unit as 'per_second' | 'per_minute' | 'per_hour' | undefined;
-            if (!itemKey?.id || !Number.isFinite(rate) || !unit) return null;
+            const value =
+              typeof t.value === 'number'
+                ? t.value
+                : typeof t.rate === 'number'
+                  ? t.rate
+                  : Number(t.rate ?? t.value);
+            const unit = t.unit as ObjectiveUnit | undefined;
+            if (!itemKey?.id || !Number.isFinite(value) || !unit) return null;
             const itemName = typeof t.itemName === 'string' ? t.itemName : undefined;
-            const result: {
-              itemKey: ItemKey;
-              itemName?: string;
-              rate: number;
-              unit: 'per_second' | 'per_minute' | 'per_hour';
-            } = {
-              itemKey,
-              rate,
-              unit,
-            };
-            if (itemName !== undefined) {
-              result.itemName = itemName;
-            }
-            return result;
+            const type =
+              typeof t.type === 'number' ? (t.type as ObjectiveType) : ObjectiveType.Output;
+            const entry: AdvancedObjectiveEntry = { itemKey, value, unit, type };
+            if (itemName !== undefined) entry.itemName = itemName;
+            return entry;
           })
-          .filter((t): t is NonNullable<typeof t> => !!t);
+          .filter((t): t is AdvancedObjectiveEntry => t !== null);
         if (!id || !name || !rootItemKey?.id || !rootKeyHash || !Number.isFinite(targetAmount))
           return null;
         const plan: SavedPlan = {

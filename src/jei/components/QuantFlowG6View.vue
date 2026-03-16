@@ -550,8 +550,13 @@ onMounted(() => {
 
   resizeObserver = new ResizeObserver(() => {
     if (!graph || !containerEl.value) return;
-    const nextWidth = Math.max(1, Math.floor(containerEl.value.clientWidth));
-    const nextHeight = Math.max(1, Math.floor(containerEl.value.clientHeight));
+    const rawWidth = containerEl.value.clientWidth;
+    const rawHeight = containerEl.value.clientHeight;
+    // 容器被 display:none 隐藏时尺寸为 0，跳过处理；
+    // 标签切回来时 ResizeObserver 会再次触发，届时尺寸恢复正常再执行 resize/fitView。
+    if (rawWidth === 0 || rawHeight === 0) return;
+    const nextWidth = Math.floor(rawWidth);
+    const nextHeight = Math.floor(rawHeight);
     graph.resize(nextWidth, nextHeight);
     void graph.fitView();
   });
