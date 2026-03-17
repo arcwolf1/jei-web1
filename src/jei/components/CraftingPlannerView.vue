@@ -12,6 +12,26 @@
           :disable="!!decisions.length"
           @click="openSaveDialog"
         />
+        <q-btn-dropdown dense outline icon="share" label="分享" :disable="!!decisions.length">
+          <q-list dense style="min-width: 180px">
+            <q-item clickable v-close-popup @click="shareAsUrl">
+              <q-item-section avatar><q-icon name="link" /></q-item-section>
+              <q-item-section>复制分享链接</q-item-section>
+            </q-item>
+            <q-item clickable v-close-popup @click="copyShareJson">
+              <q-item-section avatar><q-icon name="data_object" /></q-item-section>
+              <q-item-section>复制 JSON</q-item-section>
+            </q-item>
+            <q-item clickable v-close-popup @click="shareByJsonUrl">
+              <q-item-section avatar><q-icon name="link" /></q-item-section>
+              <q-item-section>用 JSON 链接分享</q-item-section>
+            </q-item>
+            <q-item clickable v-close-popup @click="importShareJson">
+              <q-item-section avatar><q-icon name="upload_file" /></q-item-section>
+              <q-item-section>导入 JSON</q-item-section>
+            </q-item>
+          </q-list>
+        </q-btn-dropdown>
         <q-toggle v-model="useProductRecovery" dense label="使用产物回收" />
         <q-space />
         <q-badge v-if="decisions.length" color="warning"
@@ -874,6 +894,7 @@
               <quant-flow-view
                 :mode="settingsStore.quantFlowRenderer"
                 :model="quantModel"
+                :node-positions="nodePositionMapToRecord(quantNodePositions)"
                 :item-defs-by-key-hash="itemDefsByKeyHash"
                 :display-unit="targetUnit"
                 :width-by-rate="quantWidthByRate"
@@ -881,6 +902,7 @@
                 :line-width-curve-config="lineWidthCurveConfig"
                 :line-width-scale="settingsStore.quantLineWidthScale"
                 :machine-count-decimals="settingsStore.machineCountDecimals"
+                @node-drag-stop="onQuantNodeDragStop"
                 @item-click="emit('item-click', $event)"
                 @item-mouseenter="emit('item-mouseenter', $event)"
                 @item-mouseleave="emit('item-mouseleave')"
@@ -1213,10 +1235,18 @@ import {
   type LineWidthCurveConfig,
 } from 'src/jei/planner/lineWidthCurve';
 import type {
+  AdvancedPlannerViewState,
   PlannerInitialState,
   PlannerLiveState,
+  PlannerNodePosition,
   PlannerSavePayload,
+  PlannerTargetUnit,
 } from 'src/jei/planner/plannerUi';
+import {
+  createPlannerShareData,
+  parsePlannerShareJson,
+  stringifyPlannerShareJson,
+} from 'src/jei/planner/plannerShare';
 import { DEFAULT_BELT_SPEED } from 'src/jei/planner/units';
 import {
   autoPlanSelections,
@@ -1258,6 +1288,8 @@ const beltSpeed = computed(() => {
 const emit = defineEmits<{
   (e: 'item-click', itemKey: ItemKey): void;
   (e: 'save-plan', payload: PlannerSavePayload): void;
+  (e: 'share-plan', payload: PlannerSavePayload): void;
+  (e: 'share-plan-json-url', payload: PlannerSavePayload): void;
   (e: 'state-change', payload: PlannerLiveState): void;
   (e: 'item-mouseenter', keyHash: string): void;
   (e: 'item-mouseleave'): void;
@@ -1275,6 +1307,12 @@ const graphTabLabel = computed(() => labelWithShortcut(t('nodeGraph'), 'plannerG
 const lineTabLabel = computed(() => labelWithShortcut(t('productionLine'), 'plannerLine'));
 const calcTabLabel = computed(() => labelWithShortcut(t('calculator'), 'plannerCalc'));
 const quantTabLabel = computed(() => labelWithShortcut(t('quantificationView'), 'plannerQuant'));
+const VALID_TARGET_UNITS = new Set<PlannerTargetUnit>([
+  'items',
+  'per_second',
+  'per_minute',
+  'per_hour',
+]);
 
 const activeTab = ref<'tree' | 'graph' | 'line' | 'calc' | 'quant'>('tree');
 const targetAmount = ref(1);
@@ -1299,6 +1337,7 @@ const selectedGraphNodeId = ref<string | null>(null);
 const graphNodePositions = ref(new Map<string, { x: number; y: number }>());
 const selectedLineNodeId = ref<string | null>(null);
 const lineNodePositions = ref(new Map<string, { x: number; y: number }>());
+const quantNodePositions = ref(new Map<string, { x: number; y: number }>());
 const quantShowFluids = ref(true);
 
 const $q = useQuasar();
@@ -1358,6 +1397,12 @@ function onLineNodeDragStop(evt: { node: Node }) {
   lineNodePositions.value = next;
 }
 
+function onQuantNodeDragStop(evt: { node: { id: string; position: { x: number; y: number } } }) {
+  const next = new Map(quantNodePositions.value);
+  next.set(evt.node.id, { ...evt.node.position });
+  quantNodePositions.value = next;
+}
+
 function onGraphNodeDragStop(evt: { node: Node }) {
   const next = new Map(graphNodePositions.value);
   next.set(evt.node.id, { ...evt.node.position });
@@ -1392,12 +1437,180 @@ function mapToRecord<V extends string>(m: Map<string, V>): Record<string, V> {
   return Object.fromEntries(m.entries()) as Record<string, V>;
 }
 
-function emitLiveState() {
-  emit('state-change', {
+function nodePositionMapToRecord(
+  value: Map<string, PlannerNodePosition>,
+): Record<string, PlannerNodePosition> {
+  const out: Record<string, PlannerNodePosition> = {};
+  value.forEach((pos, id) => {
+    const x = Number(pos?.x);
+    const y = Number(pos?.y);
+    if (!Number.isFinite(x) || !Number.isFinite(y)) return;
+    out[id] = { x, y };
+  });
+  return out;
+}
+
+function recordToNodePositionMap(
+  value: Record<string, PlannerNodePosition> | undefined,
+): Map<string, PlannerNodePosition> {
+  const out = new Map<string, PlannerNodePosition>();
+  if (!value || typeof value !== 'object') return out;
+  Object.entries(value).forEach(([id, pos]) => {
+    const x = Number(pos?.x);
+    const y = Number(pos?.y);
+    if (!Number.isFinite(x) || !Number.isFinite(y)) return;
+    out.set(id, { x, y });
+  });
+  return out;
+}
+
+function buildSavedViewState(): AdvancedPlannerViewState {
+  return {
+    activeTab: activeTab.value,
+    line: {
+      collapseIntermediate: lineCollapseIntermediate.value,
+      selectedNodeId: selectedLineNodeId.value,
+      nodePositions: nodePositionMapToRecord(lineNodePositions.value),
+    },
+    quant: {
+      showFluids: quantShowFluids.value,
+      widthByRate: quantWidthByRate.value,
+      nodePositions: nodePositionMapToRecord(quantNodePositions.value),
+    },
+  };
+}
+
+function applySavedViewState(viewState: AdvancedPlannerViewState | undefined): void {
+  const activeTabValue = viewState?.activeTab;
+  if (
+    activeTabValue === 'tree' ||
+    activeTabValue === 'graph' ||
+    activeTabValue === 'line' ||
+    activeTabValue === 'calc' ||
+    activeTabValue === 'quant'
+  ) {
+    activeTab.value = activeTabValue;
+  }
+
+  const lineView = viewState?.line;
+  if (typeof lineView?.collapseIntermediate === 'boolean') {
+    lineCollapseIntermediate.value = lineView.collapseIntermediate;
+  }
+  selectedLineNodeId.value =
+    typeof lineView?.selectedNodeId === 'string' ? lineView.selectedNodeId : null;
+  lineNodePositions.value = recordToNodePositionMap(lineView?.nodePositions);
+
+  const quantView = viewState?.quant;
+  if (typeof quantView?.showFluids === 'boolean') {
+    quantShowFluids.value = quantView.showFluids;
+  }
+  if (typeof quantView?.widthByRate === 'boolean') {
+    quantWidthByRate.value = quantView.widthByRate;
+  }
+  quantNodePositions.value = recordToNodePositionMap(quantView?.nodePositions);
+}
+
+function isPlannerTargetUnit(value: unknown): value is PlannerTargetUnit {
+  return typeof value === 'string' && VALID_TARGET_UNITS.has(value as PlannerTargetUnit);
+}
+
+async function copyText(text: string): Promise<void> {
+  if (typeof navigator !== 'undefined' && navigator.clipboard?.writeText) {
+    await navigator.clipboard.writeText(text);
+    return;
+  }
+  window.prompt('请复制以下内容', text);
+}
+
+function buildCurrentPlanPayload(name = `${itemName(props.rootItemKey)} 线路`): PlannerSavePayload {
+  return {
+    name,
+    rootItemKey: props.rootItemKey,
     targetAmount: targetAmount.value,
+    targetUnit: targetUnit.value,
     useProductRecovery: useProductRecovery.value,
     selectedRecipeIdByItemKeyHash: mapToRecord(selectedRecipeIdByItemKeyHash.value),
     selectedItemIdByTagId: mapToRecord(selectedItemIdByTagId.value as Map<string, ItemId>),
+    forcedRawItemKeyHashes: Array.from(forcedRawItemKeyHashes.value),
+    viewState: buildSavedViewState(),
+  };
+}
+
+function loadSharedPlan(payload: PlannerSavePayload): void {
+  selectedRecipeIdByItemKeyHash.value = new Map(
+    Object.entries(payload.selectedRecipeIdByItemKeyHash ?? {}),
+  );
+  selectedItemIdByTagId.value = new Map(Object.entries(payload.selectedItemIdByTagId ?? {}));
+  targetAmount.value = Number(payload.targetAmount) || 1;
+  targetUnit.value = isPlannerTargetUnit(payload.targetUnit) ? payload.targetUnit : 'per_minute';
+  useProductRecovery.value = payload.useProductRecovery === true;
+  hasManualSelectionOverride.value = true;
+  activeTab.value = 'tree';
+  treeDisplayMode.value = 'list';
+  collapsed.value = new Set();
+  forcedRawItemKeyHashes.value = new Set(payload.forcedRawItemKeyHashes ?? []);
+  applySavedViewState(payload.viewState);
+  emitLiveState();
+}
+
+function shareAsUrl(): void {
+  emit('share-plan', buildCurrentPlanPayload());
+}
+
+function shareByJsonUrl(): void {
+  emit('share-plan-json-url', buildCurrentPlanPayload());
+}
+
+function copyShareJson(): void {
+  const share = createPlannerShareData(props.pack.manifest.packId, buildCurrentPlanPayload());
+  void copyText(stringifyPlannerShareJson(share))
+    .then(() => {
+      $q.notify({ type: 'positive', message: '线路 JSON 已复制。' });
+    })
+    .catch(() => {
+      $q.notify({ type: 'negative', message: '复制线路 JSON 失败。' });
+    });
+}
+
+function importShareJson(): void {
+  $q.dialog({
+    title: '导入线路 JSON',
+    message: '粘贴分享出来的线路 JSON。',
+    prompt: {
+      model: '',
+      type: 'textarea',
+    },
+    cancel: true,
+    ok: { label: '导入' },
+  }).onOk((text: unknown) => {
+    try {
+      const share = parsePlannerShareJson(typeof text === 'string' ? text : '');
+      if (share.packId !== props.pack.manifest.packId) {
+        $q.notify({ type: 'negative', message: `分享线路属于包 ${share.packId}，当前包不匹配。` });
+        return;
+      }
+      if (share.plan.kind === 'advanced') {
+        $q.notify({ type: 'negative', message: '这是高级规划器分享，请在高级规划器中导入。' });
+        return;
+      }
+      loadSharedPlan(share.plan);
+      $q.notify({ type: 'positive', message: '线路 JSON 已导入。' });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      $q.notify({ type: 'negative', message });
+    }
+  });
+}
+
+function emitLiveState() {
+  emit('state-change', {
+    targetAmount: targetAmount.value,
+    targetUnit: targetUnit.value,
+    useProductRecovery: useProductRecovery.value,
+    selectedRecipeIdByItemKeyHash: mapToRecord(selectedRecipeIdByItemKeyHash.value),
+    selectedItemIdByTagId: mapToRecord(selectedItemIdByTagId.value as Map<string, ItemId>),
+    forcedRawItemKeyHashes: Array.from(forcedRawItemKeyHashes.value),
+    viewState: buildSavedViewState(),
   });
 }
 
@@ -1409,24 +1622,30 @@ function applyInitialState() {
     );
     selectedItemIdByTagId.value = new Map(Object.entries(st.selectedItemIdByTagId ?? {}));
     targetAmount.value = Number(st.targetAmount) || 1;
+    targetUnit.value = isPlannerTargetUnit(st.targetUnit) ? st.targetUnit : 'per_minute';
     useProductRecovery.value = st.useProductRecovery === true;
     hasManualSelectionOverride.value = !st.loadKey.startsWith('auto:');
     activeTab.value = props.initialTab ?? 'tree';
     treeDisplayMode.value = 'list';
     collapsed.value = new Set();
-    forcedRawItemKeyHashes.value = new Set();
+    forcedRawItemKeyHashes.value = new Set(st.forcedRawItemKeyHashes ?? []);
+    applySavedViewState(st.viewState);
     emitLiveState();
     return;
   }
   selectedRecipeIdByItemKeyHash.value = new Map();
   selectedItemIdByTagId.value = new Map();
   targetAmount.value = 1;
+  targetUnit.value = 'per_minute';
   useProductRecovery.value = false;
   hasManualSelectionOverride.value = false;
   activeTab.value = props.initialTab ?? 'tree';
   treeDisplayMode.value = 'list';
   collapsed.value = new Set();
   forcedRawItemKeyHashes.value = new Set();
+  selectedLineNodeId.value = null;
+  lineNodePositions.value = new Map();
+  quantNodePositions.value = new Map();
   emitLiveState();
 }
 
@@ -1625,9 +1844,13 @@ function resetPlanner() {
   useProductRecovery.value = false;
   hasManualSelectionOverride.value = false;
   targetAmount.value = 1;
+  targetUnit.value = 'per_minute';
   activeTab.value = 'tree';
   treeDisplayMode.value = 'list';
   collapsed.value = new Set();
+  selectedLineNodeId.value = null;
+  lineNodePositions.value = new Map();
+  quantNodePositions.value = new Map();
   emitLiveState();
 }
 
@@ -1641,14 +1864,7 @@ function openSaveDialog() {
 }
 
 function confirmSave() {
-  const payload: PlannerSavePayload = {
-    name: saveName.value.trim(),
-    rootItemKey: props.rootItemKey,
-    targetAmount: targetAmount.value,
-    useProductRecovery: useProductRecovery.value,
-    selectedRecipeIdByItemKeyHash: mapToRecord(selectedRecipeIdByItemKeyHash.value),
-    selectedItemIdByTagId: mapToRecord(selectedItemIdByTagId.value as Map<string, ItemId>),
-  };
+  const payload = buildCurrentPlanPayload(saveName.value.trim());
   emit('save-plan', payload);
   saveDialogOpen.value = false;
 }

@@ -107,6 +107,18 @@
             </q-list>
           </q-menu>
         </q-btn>
+        <q-btn
+          v-if="isHomePageRoute"
+          flat
+          dense
+          round
+          :class="$q.dark.isActive ? 'text-white' : 'text-grey-8'"
+          icon="input"
+          aria-label="Import Shared Plan"
+          @click="triggerPlannerShareImport"
+        >
+          <q-tooltip>导入分享链接或 JSON</q-tooltip>
+        </q-btn>
 
         <div :class="$q.dark.isActive ? 'text-white' : 'text-grey-8'">v{{ appVersion }}</div>
 
@@ -304,6 +316,10 @@ function handleFullscreenChange() {
 function togglePageFullscreen() {
   if (!$q.fullscreen.isCapable) return;
   $q.fullscreen.toggle().catch(() => undefined);
+}
+
+function triggerPlannerShareImport() {
+  window.dispatchEvent(new CustomEvent('jei:import-shared-plan'));
 }
 
 const linksList: EssentialLinkProps[] = [

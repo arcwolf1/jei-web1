@@ -95,6 +95,8 @@
         @wiki-item-click="(key) => openDialogByItemKey(key, 'wiki')"
         @machine-item-click="openMachineItem"
         @save-plan="savePlannerPlan"
+        @share-plan="sharePlannerPlan"
+        @share-plan-json-url="sharePlannerPlanByJsonUrl"
         @state-change="onPlannerStateChange"
         @item-mouseenter="
           hoveredKeyHash = $event;
@@ -284,6 +286,8 @@
       @wiki-item-click="(key) => openDialogByItemKey(key, 'wiki')"
       @machine-item-click="openMachineItem"
       @save-plan="savePlannerPlan"
+      @share-plan="sharePlannerPlan"
+      @share-plan-json-url="sharePlannerPlanByJsonUrl"
       @state-change="onPlannerStateChange"
       @ensure-recipe-detail="ensureRecipeDetailLoadedById"
       @item-mouseenter="
@@ -350,11 +354,22 @@ import JeiLoading from 'src/components/JeiLoading.vue';
 import MarkdownIt from 'markdown-it';
 import { pinyin } from 'pinyin-pro';
 import type {
+  AdvancedPlannerViewState,
   PlannerInitialState,
   PlannerLiveState,
+  PlannerNodePosition,
+  PlannerRateDisplayUnit,
   PlannerSavePayload,
+  PlannerTargetUnit,
   AdvancedObjectiveEntry,
 } from 'src/jei/planner/plannerUi';
+import {
+  createPlannerShareData,
+  decodePlannerShareUrl,
+  encodePlannerShareUrl,
+  normalizePlannerShareJsonUrl,
+  parsePlannerShareJson,
+} from 'src/jei/planner/plannerShare';
 import { ObjectiveType } from 'src/jei/planner/types';
 import type { ObjectiveUnit } from 'src/jei/planner/types';
 import { itemKeyHash } from 'src/jei/indexing/key';
@@ -391,6 +406,17 @@ for (const plugin of builtinPlugins) {
 }
 const contextMenuTarget = ref<HTMLElement | null>(null);
 const $q = useQuasar();
+const PLANNER_SHARE_QUERY_KEY = 'ps';
+const PLANNER_SHARE_JSON_URL_QUERY_KEY = 'psj';
+const lastAppliedPlannerShareCode = ref<string | null>(null);
+const lastAppliedPlannerShareJsonUrl = ref<string | null>(null);
+const pendingPlannerShareData = ref<ReturnType<typeof createPlannerShareData> | null>(null);
+const pendingPlannerShareSource = ref<string | null>(null);
+const plannerShareJsonLoading = ref<string | null>(null);
+
+function handleImportSharedPlanRequest() {
+  promptImportSharedPlan();
+}
 
 // PC UA 检测函数 - 检测是否为 PC 环境
 function detectPcUserAgent(): boolean {
@@ -506,12 +532,15 @@ type SavedPlan = {
   rootItemKey: ItemKey;
   rootKeyHash: string;
   targetAmount: number;
+  targetUnit?: PlannerTargetUnit;
   useProductRecovery?: boolean;
   selectedRecipeIdByItemKeyHash: Record<string, string>;
   selectedItemIdByTagId: Record<string, string>;
   createdAt: number;
   kind?: 'advanced';
   targets?: AdvancedObjectiveEntry[];
+  forcedRawItemKeyHashes?: string[];
+  viewState?: AdvancedPlannerViewState;
 };
 
 const savedPlans = ref<SavedPlan[]>([]);
@@ -519,9 +548,11 @@ const plannerInitialState = ref<PlannerInitialState | null>(null);
 function createDefaultPlannerLiveState(): PlannerLiveState {
   return {
     targetAmount: 1,
+    targetUnit: 'per_minute',
     useProductRecovery: false,
     selectedRecipeIdByItemKeyHash: {},
     selectedItemIdByTagId: {},
+    forcedRawItemKeyHashes: [],
   };
 }
 
@@ -1264,17 +1295,163 @@ function routeTab(): JeiTab | null {
   return parseTab(route.query.tab);
 }
 
-function applyRouteState() {
+function routePlannerShare(): string | null {
+  const q = route.query[PLANNER_SHARE_QUERY_KEY];
+  return typeof q === 'string' && q ? q : null;
+}
+
+function routePlannerShareJsonUrl(): string | null {
+  const q = route.query[PLANNER_SHARE_JSON_URL_QUERY_KEY];
+  return typeof q === 'string' && q ? q : null;
+}
+
+async function copyText(text: string): Promise<void> {
+  if (typeof navigator !== 'undefined' && navigator.clipboard?.writeText) {
+    await navigator.clipboard.writeText(text);
+    return;
+  }
+  window.prompt('请复制以下内容', text);
+}
+
+function openPlannerPayload(payload: PlannerSavePayload, loadKey = `share:${Date.now()}`): void {
+  if (payload.kind === 'advanced' && payload.targets?.length) {
+    centerTab.value = 'advanced';
+    plannerInitialState.value = null;
+    dialogOpen.value = false;
+    void nextTick(() => {
+      centerPanelRef.value?.loadAdvancedPlan(payload);
+    });
+    return;
+  }
+
+  centerTab.value = 'recipe';
+  selectedKeyHash.value = itemKeyHash(payload.rootItemKey);
+  navStack.value = [payload.rootItemKey];
+  activeTab.value = 'planner';
+  plannerInitialState.value = {
+    loadKey,
+    targetAmount: payload.targetAmount,
+    ...(payload.targetUnit ? { targetUnit: payload.targetUnit } : {}),
+    useProductRecovery: payload.useProductRecovery === true,
+    selectedRecipeIdByItemKeyHash: payload.selectedRecipeIdByItemKeyHash,
+    selectedItemIdByTagId: payload.selectedItemIdByTagId,
+    forcedRawItemKeyHashes: payload.forcedRawItemKeyHashes ?? [],
+    ...(payload.viewState ? { viewState: payload.viewState } : {}),
+  };
+  dialogOpen.value = settingsStore.recipeViewMode === 'dialog';
+}
+
+function applyPlannerShareFromRoute(code: string): 'applied' | 'deferred' | 'invalid' {
+  try {
+    const share = decodePlannerShareUrl(code);
+    if (share.packId !== activePackId.value) {
+      activePackId.value = share.packId;
+      return 'deferred';
+    }
+    openPlannerPayload(share.plan, `share:${Date.now()}`);
+    lastAppliedPlannerShareCode.value = code;
+    return 'applied';
+  } catch (error) {
+    if (lastAppliedPlannerShareCode.value !== code) {
+      const message = error instanceof Error ? error.message : String(error);
+      $q.notify({ type: 'negative', message });
+      lastAppliedPlannerShareCode.value = code;
+    }
+    return 'invalid';
+  }
+}
+
+async function fetchPlannerShareFromJsonUrl(jsonUrl: string) {
+  const normalizedUrl = normalizePlannerShareJsonUrl(jsonUrl);
+  const response = await fetch(normalizedUrl, {
+    headers: { Accept: 'application/json' },
+  });
+  if (!response.ok) {
+    throw new Error(`加载分享 JSON 失败：${response.status} ${response.statusText}`);
+  }
+  const text = await response.text();
+  return {
+    normalizedUrl,
+    share: parsePlannerShareJson(text),
+  };
+}
+
+async function applyPlannerShareJsonUrlFromRoute(
+  jsonUrl: string,
+): Promise<'applied' | 'deferred' | 'loading' | 'invalid'> {
+  let normalizedUrl: string;
+  try {
+    normalizedUrl = normalizePlannerShareJsonUrl(jsonUrl);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    if (lastAppliedPlannerShareJsonUrl.value !== jsonUrl) {
+      $q.notify({ type: 'negative', message });
+      lastAppliedPlannerShareJsonUrl.value = jsonUrl;
+    }
+    return 'invalid';
+  }
+
+  try {
+    const share =
+      pendingPlannerShareSource.value === normalizedUrl && pendingPlannerShareData.value
+        ? pendingPlannerShareData.value
+        : null;
+
+    let resolvedShare = share;
+    if (!resolvedShare) {
+      if (plannerShareJsonLoading.value === normalizedUrl) return 'loading';
+      plannerShareJsonLoading.value = normalizedUrl;
+      const fetched = await fetchPlannerShareFromJsonUrl(normalizedUrl);
+      resolvedShare = fetched.share;
+      pendingPlannerShareData.value = fetched.share;
+      pendingPlannerShareSource.value = fetched.normalizedUrl;
+    }
+
+    if (resolvedShare.packId !== activePackId.value) {
+      activePackId.value = resolvedShare.packId;
+      return 'deferred';
+    }
+
+    openPlannerPayload(resolvedShare.plan, `share-json-url:${Date.now()}`);
+    lastAppliedPlannerShareJsonUrl.value = normalizedUrl;
+    return 'applied';
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    if (lastAppliedPlannerShareJsonUrl.value !== normalizedUrl) {
+      $q.notify({ type: 'negative', message });
+      lastAppliedPlannerShareJsonUrl.value = normalizedUrl;
+    }
+    return 'invalid';
+  } finally {
+    if (plannerShareJsonLoading.value === normalizedUrl) {
+      plannerShareJsonLoading.value = null;
+    }
+  }
+}
+
+async function applyRouteState() {
   if (applyingRoute.value) return;
   const keyHash = routeKeyHash();
   const tab = routeTab();
   const packId = typeof route.query.pack === 'string' ? route.query.pack : null;
+  const shareCode = routePlannerShare();
+  const shareJsonUrl = routePlannerShareJsonUrl();
 
   applyingRoute.value = true;
   try {
     if (packId && packId !== activePackId.value) {
       activePackId.value = packId;
       return;
+    }
+
+    if (shareCode) {
+      const result = applyPlannerShareFromRoute(shareCode);
+      if (result !== 'invalid') return;
+    }
+
+    if (shareJsonUrl) {
+      const result = await applyPlannerShareJsonUrlFromRoute(shareJsonUrl);
+      if (result !== 'invalid') return;
     }
 
     if (!keyHash) {
@@ -1317,9 +1494,14 @@ function applyRouteState() {
       plannerInitialState.value = {
         loadKey: `auto:${itemKeyHash(def.key)}:${Date.now()}`,
         targetAmount: 1,
+        targetUnit: plannerLiveState.value.targetUnit ?? 'per_minute',
         useProductRecovery: plannerLiveState.value.useProductRecovery === true,
         selectedRecipeIdByItemKeyHash: auto.selectedRecipeIdByItemKeyHash,
         selectedItemIdByTagId: auto.selectedItemIdByTagId,
+        forcedRawItemKeyHashes: plannerLiveState.value.forcedRawItemKeyHashes ?? [],
+        ...(plannerLiveState.value.viewState
+          ? { viewState: plannerLiveState.value.viewState }
+          : {}),
       };
     } else {
       plannerInitialState.value = null;
@@ -1390,6 +1572,8 @@ watch(
       route.query.item,
       route.query.tab,
       route.query.pack,
+      route.query[PLANNER_SHARE_QUERY_KEY],
+      route.query[PLANNER_SHARE_JSON_URL_QUERY_KEY],
     ] as const,
   () => {
     void applyRouteState();
@@ -1607,6 +1791,7 @@ onMounted(async () => {
     loading.value = false;
   }
 
+  window.addEventListener('jei:import-shared-plan', handleImportSharedPlanRequest);
   window.addEventListener('keydown', onKeyDown, true);
   window.addEventListener('resize', onWindowResize);
 });
@@ -1656,6 +1841,7 @@ watch(
 );
 
 onUnmounted(() => {
+  window.removeEventListener('jei:import-shared-plan', handleImportSharedPlanRequest);
   window.removeEventListener('keydown', onKeyDown, true);
   window.removeEventListener('resize', onWindowResize);
   resizeObserver.value?.disconnect();
@@ -1805,7 +1991,7 @@ async function reloadPack(packId: string) {
     loading.value = false;
     await nextTick();
     recomputePageSize();
-    applyRouteState();
+    await applyRouteState();
   } catch (e) {
     packRoutingRuntimeStore.setActiveBaseUrl(packId, null);
     error.value = e instanceof Error ? e.message : String(e);
@@ -2094,9 +2280,12 @@ watch(
     plannerInitialState.value = {
       loadKey: `auto:${itemKeyHash(key)}:${Date.now()}`,
       targetAmount: 1,
+      targetUnit: plannerLiveState.value.targetUnit ?? 'per_minute',
       useProductRecovery: plannerLiveState.value.useProductRecovery === true,
       selectedRecipeIdByItemKeyHash: auto.selectedRecipeIdByItemKeyHash,
       selectedItemIdByTagId: auto.selectedItemIdByTagId,
+      forcedRawItemKeyHashes: plannerLiveState.value.forcedRawItemKeyHashes ?? [],
+      ...(plannerLiveState.value.viewState ? { viewState: plannerLiveState.value.viewState } : {}),
     };
   },
   { immediate: true },
@@ -2269,9 +2458,12 @@ function buildAutoPlannerInitialState(rootItemKey: ItemKey): PlannerInitialState
   return {
     loadKey: `auto:${itemKeyHash(rootItemKey)}:${Date.now()}`,
     targetAmount: 1,
+    targetUnit: plannerLiveState.value.targetUnit ?? 'per_minute',
     useProductRecovery,
     selectedRecipeIdByItemKeyHash: auto.selectedRecipeIdByItemKeyHash,
     selectedItemIdByTagId: auto.selectedItemIdByTagId,
+    forcedRawItemKeyHashes: plannerLiveState.value.forcedRawItemKeyHashes ?? [],
+    ...(plannerLiveState.value.viewState ? { viewState: plannerLiveState.value.viewState } : {}),
   };
 }
 
@@ -2646,16 +2838,117 @@ function normalizeStringRecord(v: unknown): Record<string, string> {
   return out;
 }
 
+function normalizeNodePositionRecord(v: unknown): Record<string, PlannerNodePosition> | undefined {
+  if (!v || typeof v !== 'object') return undefined;
+  const out: Record<string, PlannerNodePosition> = {};
+  Object.entries(v as Record<string, unknown>).forEach(([key, value]) => {
+    if (!value || typeof value !== 'object') return;
+    const raw = value as Record<string, unknown>;
+    const x = typeof raw.x === 'number' ? raw.x : Number(raw.x);
+    const y = typeof raw.y === 'number' ? raw.y : Number(raw.y);
+    if (!Number.isFinite(x) || !Number.isFinite(y)) return;
+    out[key] = { x, y };
+  });
+  return Object.keys(out).length ? out : undefined;
+}
+
+function normalizeRateDisplayUnit(v: unknown): PlannerRateDisplayUnit | undefined {
+  return v === 'per_second' || v === 'per_minute' || v === 'per_hour' ? v : undefined;
+}
+
+function normalizeAdvancedPlannerViewState(v: unknown): AdvancedPlannerViewState | undefined {
+  if (!v || typeof v !== 'object') return undefined;
+  const obj = v as Record<string, unknown>;
+  const activeTab =
+    obj.activeTab === 'summary' ||
+    obj.activeTab === 'tree' ||
+    obj.activeTab === 'graph' ||
+    obj.activeTab === 'line' ||
+    obj.activeTab === 'quant' ||
+    obj.activeTab === 'calc'
+      ? obj.activeTab
+      : undefined;
+  const lineRaw =
+    obj.line && typeof obj.line === 'object' ? (obj.line as Record<string, unknown>) : undefined;
+  const quantRaw =
+    obj.quant && typeof obj.quant === 'object' ? (obj.quant as Record<string, unknown>) : undefined;
+  const calcRaw =
+    obj.calc && typeof obj.calc === 'object' ? (obj.calc as Record<string, unknown>) : undefined;
+
+  const line = lineRaw
+    ? {
+        ...(normalizeRateDisplayUnit(lineRaw.displayUnit)
+          ? { displayUnit: normalizeRateDisplayUnit(lineRaw.displayUnit)! }
+          : {}),
+        ...(typeof lineRaw.collapseIntermediate === 'boolean'
+          ? { collapseIntermediate: lineRaw.collapseIntermediate }
+          : {}),
+        ...(typeof lineRaw.includeCycleSeeds === 'boolean'
+          ? { includeCycleSeeds: lineRaw.includeCycleSeeds }
+          : {}),
+        ...(typeof lineRaw.selectedNodeId === 'string' || lineRaw.selectedNodeId === null
+          ? { selectedNodeId: lineRaw.selectedNodeId }
+          : {}),
+        ...(normalizeNodePositionRecord(lineRaw.nodePositions)
+          ? { nodePositions: normalizeNodePositionRecord(lineRaw.nodePositions)! }
+          : {}),
+      }
+    : undefined;
+
+  const quant = quantRaw
+    ? {
+        ...(normalizeRateDisplayUnit(quantRaw.displayUnit)
+          ? { displayUnit: normalizeRateDisplayUnit(quantRaw.displayUnit)! }
+          : {}),
+        ...(typeof quantRaw.showFluids === 'boolean' ? { showFluids: quantRaw.showFluids } : {}),
+        ...(typeof quantRaw.widthByRate === 'boolean' ? { widthByRate: quantRaw.widthByRate } : {}),
+        ...(normalizeNodePositionRecord(quantRaw.nodePositions)
+          ? { nodePositions: normalizeNodePositionRecord(quantRaw.nodePositions)! }
+          : {}),
+      }
+    : undefined;
+
+  const calc = calcRaw
+    ? {
+        ...(normalizeRateDisplayUnit(calcRaw.displayUnit)
+          ? { displayUnit: normalizeRateDisplayUnit(calcRaw.displayUnit)! }
+          : {}),
+      }
+    : undefined;
+
+  if (!activeTab && !line && !quant && !calc) return undefined;
+  return {
+    ...(activeTab ? { activeTab } : {}),
+    ...(line && Object.keys(line).length ? { line } : {}),
+    ...(quant && Object.keys(quant).length ? { quant } : {}),
+    ...(calc && Object.keys(calc).length ? { calc } : {}),
+  };
+}
+
+function normalizePlannerTargetUnit(raw: unknown): PlannerTargetUnit | undefined {
+  return raw === 'items' || raw === 'per_second' || raw === 'per_minute' || raw === 'per_hour'
+    ? raw
+    : undefined;
+}
+
 function normalizePlannerLiveState(v: unknown): PlannerLiveState {
   if (!v || typeof v !== 'object') return createDefaultPlannerLiveState();
   const obj = v as Record<string, unknown>;
   const targetAmountRaw =
     typeof obj.targetAmount === 'number' ? obj.targetAmount : Number(obj.targetAmount);
+  const targetUnit = normalizePlannerTargetUnit(obj.targetUnit) ?? 'per_minute';
+  const forcedRawItemKeyHashes = Array.isArray(obj.forcedRawItemKeyHashes)
+    ? obj.forcedRawItemKeyHashes.filter((entry): entry is string => typeof entry === 'string')
+    : [];
+  const viewState = normalizeAdvancedPlannerViewState(obj.viewState);
   return {
     targetAmount: Number.isFinite(targetAmountRaw) && targetAmountRaw > 0 ? targetAmountRaw : 1,
+    targetUnit,
     useProductRecovery: obj.useProductRecovery === true,
     selectedRecipeIdByItemKeyHash: normalizeStringRecord(obj.selectedRecipeIdByItemKeyHash),
     selectedItemIdByTagId: normalizeStringRecord(obj.selectedItemIdByTagId),
+    forcedRawItemKeyHashes,
+    ...(viewState ? { viewState } : {}),
   };
 }
 
@@ -2698,6 +2991,7 @@ async function loadPlans(packId: string): Promise<SavedPlan[]> {
         const rootKeyHash = typeof obj.rootKeyHash === 'string' ? obj.rootKeyHash : '';
         const targetAmount =
           typeof obj.targetAmount === 'number' ? obj.targetAmount : Number(obj.targetAmount);
+        const targetUnit = normalizePlannerTargetUnit(obj.targetUnit);
         const selectedRecipeIdByItemKeyHash =
           (obj.selectedRecipeIdByItemKeyHash as Record<string, string> | undefined) ?? {};
         const selectedItemIdByTagId =
@@ -2705,6 +2999,10 @@ async function loadPlans(packId: string): Promise<SavedPlan[]> {
         const useProductRecovery = obj.useProductRecovery === true;
         const createdAt = typeof obj.createdAt === 'number' ? obj.createdAt : 0;
         const kind = obj.kind === 'advanced' ? 'advanced' : undefined;
+        const forcedRawItemKeyHashes = Array.isArray(obj.forcedRawItemKeyHashes)
+          ? obj.forcedRawItemKeyHashes.filter((entry): entry is string => typeof entry === 'string')
+          : [];
+        const viewState = normalizeAdvancedPlannerViewState(obj.viewState);
         const targetsRaw = Array.isArray(obj.targets)
           ? (obj.targets as Array<Record<string, unknown>>)
           : [];
@@ -2735,12 +3033,15 @@ async function loadPlans(packId: string): Promise<SavedPlan[]> {
           rootItemKey,
           rootKeyHash,
           targetAmount,
+          ...(targetUnit ? { targetUnit } : {}),
           useProductRecovery,
           selectedRecipeIdByItemKeyHash,
           selectedItemIdByTagId,
           createdAt,
           ...(kind ? { kind } : {}),
           ...(targets.length ? { targets } : {}),
+          ...(forcedRawItemKeyHashes.length ? { forcedRawItemKeyHashes } : {}),
+          ...(viewState ? { viewState } : {}),
         };
         return plan;
       })
@@ -2782,12 +3083,17 @@ function savePlannerPlan(payload: PlannerSavePayload) {
     rootItemKey: payload.rootItemKey,
     rootKeyHash: itemKeyHash(payload.rootItemKey),
     targetAmount: payload.targetAmount,
+    ...(payload.targetUnit ? { targetUnit: payload.targetUnit } : {}),
     useProductRecovery: payload.useProductRecovery === true,
     selectedRecipeIdByItemKeyHash: payload.selectedRecipeIdByItemKeyHash,
     selectedItemIdByTagId: payload.selectedItemIdByTagId,
     createdAt: Date.now(),
     ...(payload.kind === 'advanced' ? { kind: 'advanced' } : {}),
-    ...(payload.kind === 'advanced' && payload.targets ? { targets: payload.targets } : {}),
+    ...(payload.targets ? { targets: payload.targets } : {}),
+    ...(payload.forcedRawItemKeyHashes
+      ? { forcedRawItemKeyHashes: payload.forcedRawItemKeyHashes }
+      : {}),
+    ...(payload.viewState ? { viewState: payload.viewState } : {}),
   };
   const next = [plan, ...savedPlans.value];
   savedPlans.value = next;
@@ -2796,34 +3102,210 @@ function savePlannerPlan(payload: PlannerSavePayload) {
 
 function openSavedPlan(p: SavedPlan) {
   if (p.kind === 'advanced' && p.targets?.length) {
-    centerTab.value = 'advanced';
-    centerPanelRef.value?.loadAdvancedPlan({
+    openPlannerPayload({
       name: p.name,
       rootItemKey: p.rootItemKey,
       targetAmount: p.targetAmount,
+      ...(p.targetUnit ? { targetUnit: p.targetUnit } : {}),
       useProductRecovery: p.useProductRecovery === true,
       selectedRecipeIdByItemKeyHash: p.selectedRecipeIdByItemKeyHash,
       selectedItemIdByTagId: p.selectedItemIdByTagId,
       kind: 'advanced',
       targets: p.targets,
+      ...(p.forcedRawItemKeyHashes ? { forcedRawItemKeyHashes: p.forcedRawItemKeyHashes } : {}),
+      ...(p.viewState ? { viewState: p.viewState } : {}),
     });
     return;
   }
 
-  // 普通计划切换到资料查看器
-  centerTab.value = 'recipe';
-  selectedKeyHash.value = p.rootKeyHash;
-  navStack.value = [p.rootItemKey];
-  activeTab.value = 'planner';
-  plannerInitialState.value = {
-    loadKey: `${p.id}:${Date.now()}`,
-    targetAmount: p.targetAmount,
-    useProductRecovery: p.useProductRecovery === true,
-    selectedRecipeIdByItemKeyHash: p.selectedRecipeIdByItemKeyHash,
-    selectedItemIdByTagId: p.selectedItemIdByTagId,
-  };
-  dialogOpen.value = settingsStore.recipeViewMode === 'dialog';
+  openPlannerPayload(
+    {
+      name: p.name,
+      rootItemKey: p.rootItemKey,
+      targetAmount: p.targetAmount,
+      ...(p.targetUnit ? { targetUnit: p.targetUnit } : {}),
+      useProductRecovery: p.useProductRecovery === true,
+      selectedRecipeIdByItemKeyHash: p.selectedRecipeIdByItemKeyHash,
+      selectedItemIdByTagId: p.selectedItemIdByTagId,
+      ...(p.forcedRawItemKeyHashes ? { forcedRawItemKeyHashes: p.forcedRawItemKeyHashes } : {}),
+      ...(p.viewState ? { viewState: p.viewState } : {}),
+    },
+    `${p.id}:${Date.now()}`,
+  );
   pushHistoryKeyHash(p.rootKeyHash);
+}
+
+function sharePlannerPlan(payload: PlannerSavePayload) {
+  const packId = pack.value?.manifest.packId;
+  if (!packId) return;
+  const share = createPlannerShareData(packId, payload);
+  const encoded = encodePlannerShareUrl(share);
+  const resolved = router.resolve({
+    path: '/',
+    query: {
+      pack: packId,
+      [PLANNER_SHARE_QUERY_KEY]: encoded,
+    },
+  });
+  const url = new URL(resolved.href, window.location.origin).toString();
+  void copyText(url)
+    .then(() => {
+      $q.notify({ type: 'positive', message: `分享链接已复制（${encoded.length} 字符）。` });
+    })
+    .catch(() => {
+      $q.notify({ type: 'negative', message: '复制分享链接失败。' });
+    });
+}
+
+function sharePlannerPlanByJsonUrl(payload: PlannerSavePayload) {
+  const packId = pack.value?.manifest.packId;
+  if (!packId) return;
+  $q.dialog({
+    title: 'JSON 链接分享',
+    message: '输入可公开访问的线路 JSON 地址。打开时会从该地址拉取 JSON。',
+    prompt: {
+      model: '',
+      type: 'textarea',
+    },
+    cancel: true,
+    ok: { label: '生成链接' },
+  }).onOk((text: unknown) => {
+    try {
+      const jsonUrl = normalizePlannerShareJsonUrl(typeof text === 'string' ? text : '');
+      const resolved = router.resolve({
+        path: '/',
+        query: {
+          pack: packId,
+          [PLANNER_SHARE_JSON_URL_QUERY_KEY]: jsonUrl,
+        },
+      });
+      const url = new URL(resolved.href, window.location.origin).toString();
+      void copyText(url)
+        .then(() => {
+          $q.notify({
+            type: 'positive',
+            message: `JSON 链接分享已复制。当前 app 内短码长度由外部 JSON URL 决定。`,
+          });
+        })
+        .catch(() => {
+          $q.notify({ type: 'negative', message: '复制 JSON 链接分享失败。' });
+        });
+
+      const share = createPlannerShareData(packId, payload);
+      pendingPlannerShareData.value = share;
+      pendingPlannerShareSource.value = jsonUrl;
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      $q.notify({ type: 'negative', message });
+    }
+  });
+}
+
+function extractPlannerShareCode(text: string): string | null {
+  const trimmed = text.trim();
+  if (!trimmed) return null;
+  if (trimmed.startsWith('jp1-')) return trimmed;
+
+  const queryMatch = trimmed.match(new RegExp(`[?&#]${PLANNER_SHARE_QUERY_KEY}=([^&#]+)`));
+  if (queryMatch?.[1]) {
+    return decodeURIComponent(queryMatch[1]);
+  }
+
+  try {
+    const url = new URL(trimmed, window.location.origin);
+    const code = url.searchParams.get(PLANNER_SHARE_QUERY_KEY);
+    return code && code.length > 0 ? code : null;
+  } catch {
+    return null;
+  }
+}
+
+function extractPlannerShareJsonUrl(text: string): string | null {
+  const trimmed = text.trim();
+  if (!trimmed) return null;
+
+  const queryMatch = trimmed.match(new RegExp(`[?&#]${PLANNER_SHARE_JSON_URL_QUERY_KEY}=([^&#]+)`));
+  if (queryMatch?.[1]) {
+    return decodeURIComponent(queryMatch[1]);
+  }
+
+  try {
+    const url = new URL(trimmed, window.location.origin);
+    const code = url.searchParams.get(PLANNER_SHARE_JSON_URL_QUERY_KEY);
+    if (code && code.length > 0) return code;
+  } catch {
+    // ignore and continue
+  }
+
+  try {
+    return normalizePlannerShareJsonUrl(trimmed);
+  } catch {
+    return null;
+  }
+}
+
+function promptImportSharedPlan() {
+  $q.dialog({
+    title: '导入分享',
+    message: '粘贴分享链接、分享码、JSON，或可公开访问的 JSON URL。',
+    prompt: {
+      model: '',
+      type: 'textarea',
+    },
+    cancel: true,
+    ok: { label: '导入' },
+  }).onOk((text: unknown) => {
+    void (async () => {
+      try {
+        const raw = typeof text === 'string' ? text.trim() : '';
+        if (!raw) throw new Error('请输入分享链接、分享码或 JSON。');
+
+        if (raw.startsWith('{')) {
+          const share = parsePlannerShareJson(raw);
+          const encoded = encodePlannerShareUrl(share);
+          await router.replace({
+            path: '/',
+            query: {
+              pack: share.packId,
+              [PLANNER_SHARE_QUERY_KEY]: encoded,
+            },
+          });
+          return;
+        }
+
+        const shareCode = extractPlannerShareCode(raw);
+        if (shareCode) {
+          const share = decodePlannerShareUrl(shareCode);
+          await router.replace({
+            path: '/',
+            query: {
+              pack: share.packId,
+              [PLANNER_SHARE_QUERY_KEY]: shareCode,
+            },
+          });
+          return;
+        }
+
+        const jsonUrl = extractPlannerShareJsonUrl(raw);
+        if (jsonUrl) {
+          const normalizedUrl = normalizePlannerShareJsonUrl(jsonUrl);
+          await router.replace({
+            path: '/',
+            query: {
+              ...(typeof route.query.pack === 'string' ? { pack: route.query.pack } : {}),
+              [PLANNER_SHARE_JSON_URL_QUERY_KEY]: normalizedUrl,
+            },
+          });
+          return;
+        }
+
+        throw new Error('未识别的分享内容。');
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        $q.notify({ type: 'negative', message });
+      }
+    })();
+  });
 }
 
 function deleteSavedPlan(id: string) {

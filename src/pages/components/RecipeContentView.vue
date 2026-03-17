@@ -13,6 +13,8 @@
       :initial-tab="plannerTab"
       @item-click="$emit('item-click', $event)"
       @save-plan="$emit('save-plan', $event)"
+      @share-plan="$emit('share-plan', $event)"
+      @share-plan-json-url="$emit('share-plan-json-url', $event)"
       @state-change="$emit('state-change', $event)"
       @item-mouseenter="$emit('item-mouseenter', $event)"
       @item-mouseleave="$emit('item-mouseleave')"
@@ -584,6 +586,8 @@ const emit = defineEmits<{
   'wiki-item-click': [keyHash: ItemKey];
   'machine-item-click': [itemId: string];
   'save-plan': [payload: any]; // eslint-disable-line @typescript-eslint/no-explicit-any
+  'share-plan': [payload: any]; // eslint-disable-line @typescript-eslint/no-explicit-any
+  'share-plan-json-url': [payload: any]; // eslint-disable-line @typescript-eslint/no-explicit-any
   'state-change': [state: PlannerLiveState];
   'item-mouseenter': [keyHash: string];
   'item-mouseleave': [];

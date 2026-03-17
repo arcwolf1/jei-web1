@@ -243,6 +243,32 @@
           :disable="pendingDecisions.length > 0"
           @click="openSaveDialog"
         />
+        <q-btn-dropdown
+          dense
+          outline
+          icon="share"
+          label="分享"
+          :disable="pendingDecisions.length > 0"
+        >
+          <q-list dense style="min-width: 180px">
+            <q-item clickable v-close-popup @click="shareAsUrl">
+              <q-item-section avatar><q-icon name="link" /></q-item-section>
+              <q-item-section>复制分享链接</q-item-section>
+            </q-item>
+            <q-item clickable v-close-popup @click="copyShareJson">
+              <q-item-section avatar><q-icon name="data_object" /></q-item-section>
+              <q-item-section>复制 JSON</q-item-section>
+            </q-item>
+            <q-item clickable v-close-popup @click="shareByJsonUrl">
+              <q-item-section avatar><q-icon name="link" /></q-item-section>
+              <q-item-section>用 JSON 链接分享</q-item-section>
+            </q-item>
+            <q-item clickable v-close-popup @click="importShareJson">
+              <q-item-section avatar><q-icon name="upload_file" /></q-item-section>
+              <q-item-section>导入 JSON</q-item-section>
+            </q-item>
+          </q-list>
+        </q-btn-dropdown>
         <q-chip dense color="primary" text-color="white">
           {{ targets.length }} {{ t('targetCount') }}
         </q-chip>
@@ -928,6 +954,7 @@
               <quant-flow-view
                 :mode="settingsStore.quantFlowRenderer"
                 :model="quantModel"
+                :node-positions="nodePositionMapToRecord(quantNodePositions)"
                 :item-defs-by-key-hash="itemDefsByKeyHash"
                 :display-unit="quantDisplayUnit"
                 :width-by-rate="quantWidthByRate"
@@ -935,6 +962,7 @@
                 :line-width-curve-config="lineWidthCurveConfig"
                 :line-width-scale="settingsStore.quantLineWidthScale"
                 :machine-count-decimals="settingsStore.machineCountDecimals"
+                @node-drag-stop="onQuantNodeDragStop"
               />
             </div>
             <div v-else class="text-center text-grey q-pa-lg">暂无节点</div>
@@ -1295,7 +1323,20 @@ import {
   evaluateLineWidthCurve,
   type LineWidthCurveConfig,
 } from 'src/jei/planner/lineWidthCurve';
-import type { PlannerLiveState, PlannerSavePayload } from 'src/jei/planner/plannerUi';
+import type {
+  AdvancedPlannerTab,
+  AdvancedPlannerViewState,
+  PlannerLiveState,
+  PlannerNodePosition,
+  PlannerRateDisplayUnit,
+  PlannerSavePayload,
+  PlannerTargetUnit,
+} from 'src/jei/planner/plannerUi';
+import {
+  createPlannerShareData,
+  parsePlannerShareJson,
+  stringifyPlannerShareJson,
+} from 'src/jei/planner/plannerShare';
 import { useSettingsStore } from 'src/stores/settings';
 import { Background } from '@vue-flow/background';
 import { Controls } from '@vue-flow/controls';
@@ -1343,6 +1384,8 @@ const beltSpeed = computed(() => {
 
 const emit = defineEmits<{
   'save-plan': [payload: PlannerSavePayload];
+  'share-plan': [payload: PlannerSavePayload];
+  'share-plan-json-url': [payload: PlannerSavePayload];
   'state-change': [state: PlannerLiveState];
 }>();
 
@@ -1404,6 +1447,7 @@ const forcedRawItemKeyHashes = ref<Set<string>>(new Set());
 const useProductRecovery = ref(false);
 const selectedLineNodeId = ref<string | null>(null);
 const lineNodePositions = ref(new Map<string, { x: number; y: number }>());
+const quantNodePositions = ref(new Map<string, { x: number; y: number }>());
 const calcDisplayUnit = ref<'per_second' | 'per_minute' | 'per_hour'>('per_minute');
 
 const graphPageFull = ref(false);
@@ -1419,7 +1463,215 @@ const quantFlowWrapEl = ref<HTMLElement | null>(null);
 const saveDialogOpen = ref(false);
 const saveName = ref('');
 
+const VALID_ADVANCED_PLANNER_TABS = new Set<AdvancedPlannerTab>([
+  'summary',
+  'tree',
+  'graph',
+  'line',
+  'quant',
+  'calc',
+]);
+
+const VALID_RATE_DISPLAY_UNITS = new Set<PlannerRateDisplayUnit>([
+  'per_second',
+  'per_minute',
+  'per_hour',
+]);
+const VALID_TARGET_UNITS = new Set<PlannerTargetUnit>([
+  'items',
+  'per_second',
+  'per_minute',
+  'per_hour',
+]);
+
 const pendingDecisions = computed(() => allDecisions.value);
+
+function nodePositionMapToRecord(
+  value: Map<string, PlannerNodePosition>,
+): Record<string, PlannerNodePosition> {
+  const out: Record<string, PlannerNodePosition> = {};
+  value.forEach((pos, id) => {
+    const x = finiteOr(pos?.x, Number.NaN);
+    const y = finiteOr(pos?.y, Number.NaN);
+    if (!Number.isFinite(x) || !Number.isFinite(y)) return;
+    out[id] = { x, y };
+  });
+  return out;
+}
+
+function recordToNodePositionMap(
+  value: Record<string, PlannerNodePosition> | undefined,
+): Map<string, PlannerNodePosition> {
+  const out = new Map<string, PlannerNodePosition>();
+  if (!value || typeof value !== 'object') return out;
+  Object.entries(value).forEach(([id, pos]) => {
+    const x = finiteOr(pos?.x, Number.NaN);
+    const y = finiteOr(pos?.y, Number.NaN);
+    if (!Number.isFinite(x) || !Number.isFinite(y)) return;
+    out.set(id, { x, y });
+  });
+  return out;
+}
+
+function isRateDisplayUnit(value: unknown): value is PlannerRateDisplayUnit {
+  return typeof value === 'string' && VALID_RATE_DISPLAY_UNITS.has(value as PlannerRateDisplayUnit);
+}
+
+function isAdvancedPlannerTab(value: unknown): value is AdvancedPlannerTab {
+  return typeof value === 'string' && VALID_ADVANCED_PLANNER_TABS.has(value as AdvancedPlannerTab);
+}
+
+function isPlannerTargetUnit(value: unknown): value is PlannerTargetUnit {
+  return typeof value === 'string' && VALID_TARGET_UNITS.has(value as PlannerTargetUnit);
+}
+
+async function copyText(text: string): Promise<void> {
+  if (typeof navigator !== 'undefined' && navigator.clipboard?.writeText) {
+    await navigator.clipboard.writeText(text);
+    return;
+  }
+  window.prompt('请复制以下内容', text);
+}
+
+function buildCurrentPlanPayload(
+  name = `${targets.value[0]?.itemName ?? '多目标规划'} 线路`,
+): PlannerSavePayload | null {
+  if (!targets.value.length) return null;
+  return {
+    name,
+    rootItemKey: targets.value[0]!.itemKey,
+    targetAmount: targets.value[0]!.rate,
+    ...(isPlannerTargetUnit(targets.value[0]!.unit) ? { targetUnit: targets.value[0]!.unit } : {}),
+    useProductRecovery: useProductRecovery.value,
+    selectedRecipeIdByItemKeyHash: mapToRecord(selectedRecipeIdByItemKeyHash.value),
+    selectedItemIdByTagId: mapToRecord(selectedItemIdByTagId.value),
+    kind: 'advanced',
+    forcedRawItemKeyHashes: Array.from(forcedRawItemKeyHashes.value),
+    viewState: buildSavedViewState(),
+    targets: targets.value.map((t) => ({
+      itemKey: t.itemKey,
+      itemName: t.itemName,
+      value: t.rate,
+      rate: t.rate,
+      unit: t.unit as ObjectiveUnit,
+      type: t.type,
+    })),
+  };
+}
+
+function shareAsUrl(): void {
+  const payload = buildCurrentPlanPayload();
+  if (!payload) return;
+  emit('share-plan', payload);
+}
+
+function shareByJsonUrl(): void {
+  const payload = buildCurrentPlanPayload();
+  if (!payload) return;
+  emit('share-plan-json-url', payload);
+}
+
+function copyShareJson(): void {
+  const payload = buildCurrentPlanPayload();
+  if (!payload || !props.pack) return;
+  const share = createPlannerShareData(props.pack.manifest.packId, payload);
+  void copyText(stringifyPlannerShareJson(share))
+    .then(() => {
+      $q.notify({ type: 'positive', message: '线路 JSON 已复制。' });
+    })
+    .catch(() => {
+      $q.notify({ type: 'negative', message: '复制线路 JSON 失败。' });
+    });
+}
+
+function importShareJson(): void {
+  $q.dialog({
+    title: '导入线路 JSON',
+    message: '粘贴分享出来的线路 JSON。',
+    prompt: {
+      model: '',
+      type: 'textarea',
+    },
+    cancel: true,
+    ok: { label: '导入' },
+  }).onOk((text: unknown) => {
+    try {
+      const share = parsePlannerShareJson(typeof text === 'string' ? text : '');
+      if (!props.pack || share.packId !== props.pack.manifest.packId) {
+        $q.notify({ type: 'negative', message: `分享线路属于包 ${share.packId}，当前包不匹配。` });
+        return;
+      }
+      if (share.plan.kind !== 'advanced' || !share.plan.targets?.length) {
+        $q.notify({ type: 'negative', message: '这不是高级规划器分享。' });
+        return;
+      }
+      loadSavedPlan(share.plan);
+      $q.notify({ type: 'positive', message: '线路 JSON 已导入。' });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      $q.notify({ type: 'negative', message });
+    }
+  });
+}
+
+function buildSavedViewState(): AdvancedPlannerViewState {
+  return {
+    activeTab: activeTab.value,
+    line: {
+      displayUnit: lineDisplayUnit.value,
+      collapseIntermediate: lineCollapseIntermediate.value,
+      includeCycleSeeds: lineIncludeCycleSeeds.value,
+      selectedNodeId: selectedLineNodeId.value,
+      nodePositions: nodePositionMapToRecord(lineNodePositions.value),
+    },
+    quant: {
+      displayUnit: quantDisplayUnit.value,
+      showFluids: quantShowFluids.value,
+      widthByRate: quantWidthByRate.value,
+      nodePositions: nodePositionMapToRecord(quantNodePositions.value),
+    },
+    calc: {
+      displayUnit: calcDisplayUnit.value,
+    },
+  };
+}
+
+function applySavedViewState(viewState: AdvancedPlannerViewState | undefined): void {
+  if (isAdvancedPlannerTab(viewState?.activeTab)) {
+    activeTab.value = viewState.activeTab;
+  }
+
+  const lineView = viewState?.line;
+  if (isRateDisplayUnit(lineView?.displayUnit)) {
+    lineDisplayUnit.value = lineView.displayUnit;
+  }
+  if (typeof lineView?.collapseIntermediate === 'boolean') {
+    lineCollapseIntermediate.value = lineView.collapseIntermediate;
+  }
+  if (typeof lineView?.includeCycleSeeds === 'boolean') {
+    lineIncludeCycleSeeds.value = lineView.includeCycleSeeds;
+  }
+  selectedLineNodeId.value =
+    typeof lineView?.selectedNodeId === 'string' ? lineView.selectedNodeId : null;
+  lineNodePositions.value = recordToNodePositionMap(lineView?.nodePositions);
+
+  const quantView = viewState?.quant;
+  if (isRateDisplayUnit(quantView?.displayUnit)) {
+    quantDisplayUnit.value = quantView.displayUnit;
+  }
+  if (typeof quantView?.showFluids === 'boolean') {
+    quantShowFluids.value = quantView.showFluids;
+  }
+  if (typeof quantView?.widthByRate === 'boolean') {
+    quantWidthByRate.value = quantView.widthByRate;
+  }
+  quantNodePositions.value = recordToNodePositionMap(quantView?.nodePositions);
+
+  const calcView = viewState?.calc;
+  if (isRateDisplayUnit(calcView?.displayUnit)) {
+    calcDisplayUnit.value = calcView.displayUnit;
+  }
+}
 
 const rawItemTotals = computed(() => {
   const totals = new Map<ItemId, number>();
@@ -1800,6 +2052,8 @@ const loadSavedPlan = (payload: PlannerSavePayload) => {
   );
   selectedItemIdByTagId.value = new Map(Object.entries(payload.selectedItemIdByTagId ?? {}));
   useProductRecovery.value = payload.useProductRecovery === true;
+  forcedRawItemKeyHashes.value = new Set(payload.forcedRawItemKeyHashes ?? []);
+  applySavedViewState(payload.viewState);
   emitLiveState();
 
   allDecisions.value = [];
@@ -1862,6 +2116,9 @@ const resetPlanning = () => {
   mergedTree.value = null;
   mergedRootItemKey.value = null;
   collapsed.value = new Set();
+  selectedLineNodeId.value = null;
+  lineNodePositions.value = new Map();
+  quantNodePositions.value = new Map();
 };
 
 const invalidatePlanningIfNeeded = () => {
@@ -2115,9 +2372,12 @@ function mapToRecord<V extends string>(m: Map<string, V>): Record<string, V> {
 function emitLiveState() {
   emit('state-change', {
     targetAmount: targets.value[0]?.rate ?? 1,
+    ...(isPlannerTargetUnit(targets.value[0]?.unit) ? { targetUnit: targets.value[0]?.unit } : {}),
     useProductRecovery: useProductRecovery.value,
     selectedRecipeIdByItemKeyHash: mapToRecord(selectedRecipeIdByItemKeyHash.value),
     selectedItemIdByTagId: mapToRecord(selectedItemIdByTagId.value),
+    forcedRawItemKeyHashes: Array.from(forcedRawItemKeyHashes.value),
+    viewState: buildSavedViewState(),
   });
 }
 
@@ -2128,24 +2388,8 @@ function openSaveDialog() {
 }
 
 function confirmSave() {
-  if (!targets.value.length) return;
-  const payload: PlannerSavePayload = {
-    name: saveName.value.trim(),
-    rootItemKey: targets.value[0]!.itemKey,
-    targetAmount: targets.value[0]!.rate,
-    useProductRecovery: useProductRecovery.value,
-    selectedRecipeIdByItemKeyHash: mapToRecord(selectedRecipeIdByItemKeyHash.value),
-    selectedItemIdByTagId: mapToRecord(selectedItemIdByTagId.value),
-    kind: 'advanced',
-    targets: targets.value.map((t) => ({
-      itemKey: t.itemKey,
-      itemName: t.itemName,
-      value: t.rate,
-      rate: t.rate,
-      unit: t.unit as ObjectiveUnit,
-      type: t.type,
-    })),
-  };
+  const payload = buildCurrentPlanPayload(saveName.value.trim());
+  if (!payload) return;
   emit('save-plan', payload);
   saveDialogOpen.value = false;
 }
@@ -2175,6 +2419,12 @@ function onLineNodeDragStop(evt: { node: Node }) {
   const next = new Map(lineNodePositions.value);
   next.set(evt.node.id, { ...evt.node.position });
   lineNodePositions.value = next;
+}
+
+function onQuantNodeDragStop(evt: { node: { id: string; position: { x: number; y: number } } }) {
+  const next = new Map(quantNodePositions.value);
+  next.set(evt.node.id, { ...evt.node.position });
+  quantNodePositions.value = next;
 }
 
 function onGraphNodeDragStop(evt: { node: Node }) {

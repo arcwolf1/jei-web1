@@ -16,6 +16,7 @@
     "test:ui": "vitest --ui",
     "test:coverage": "vitest --coverage",
     "typecheck:scripts": "tsc -p tsconfig.scripts.json",
+    "sync:submodules": "node scripts/sync-submodules.mjs",
     "sync:temp": "node scripts/sync-temp-files.mjs",
     "convert:wiki": "node scripts/convert-wiki-local.mjs",
     "extract:wiki:methods": "node scripts/extract-skland-methods.mjs",
@@ -23,12 +24,12 @@
     "crawl:wiki": "node scripts/crawl-skland-wiki.mjs",
     "proxy:skland": "node scripts/skland-proxy/server.js",
     "crawl:wiki:oneclick": "node scripts/crawl-wiki-oneclick.mjs",
-    "predev": "pnpm run gen:about && pnpm run gen:items-lite",
+    "predev": "pnpm run sync:submodules && pnpm run gen:about && pnpm run gen:items-lite",
     "dev": "quasar dev",
-    "prebuild": "pnpm run gen:about && pnpm run gen:items-lite",
+    "prebuild": "pnpm run sync:submodules && pnpm run gen:about && pnpm run gen:items-lite",
     "build": "quasar build",
     "build:cloudflare": "git fetch --unshallow 2>/dev/null || true && pnpm run build",
-    "postinstall": "pnpm run gen:about && quasar prepare"
+    "postinstall": "pnpm run sync:submodules && pnpm run gen:about && quasar prepare"
   },
   "dependencies": {
     "@antv/g6": "^5.0.51",
