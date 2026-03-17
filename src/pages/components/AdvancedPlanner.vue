@@ -1281,6 +1281,7 @@ import {
 import { ObjectiveType } from 'src/jei/planner/types';
 import type { ObjectiveState, ObjectiveUnit, PlannerResult } from 'src/jei/planner/types';
 import { solveAdvanced } from 'src/jei/planner/advancedPlanner';
+import { normalizeRecipe } from 'src/jei/planner/recipeAdapter';
 import { rational } from 'src/jei/planner/rational';
 import StackView from 'src/jei/components/StackView.vue';
 import RecipeViewer from 'src/jei/components/RecipeViewer.vue';
@@ -1424,6 +1425,29 @@ const rawItemTotals = computed(() => {
   const totals = new Map<ItemId, number>();
   if (!mergedTree.value) return totals;
 
+  // Pre-pass: find the maximum machineCount for each recipeId across the entire merged tree.
+  // For multi-output recipes, different targets may compute different rates; only the
+  // highest-rate (binding) occurrence should contribute raw-material consumption.
+  const maxMachineCountByRecipe = new Map<string, number>();
+  const prepass = (node: RequirementNode): void => {
+    if (node.kind !== 'item') return;
+    const n = node as RequirementNode & {
+      recipeIdUsed?: string;
+      machineCount?: number;
+      cycle?: boolean;
+      recovery?: boolean;
+    };
+    if (n.recipeIdUsed && !n.cycle && !n.recovery) {
+      const mc = n.machineCount ?? 0;
+      const existing = maxMachineCountByRecipe.get(n.recipeIdUsed) ?? 0;
+      if (mc > existing) maxMachineCountByRecipe.set(n.recipeIdUsed, mc);
+    }
+    node.children.forEach(prepass);
+  };
+  prepass(mergedTree.value.root);
+
+  // Main walk: for each recipe, skip lower-rate occurrences and only count the max-rate one.
+  const seenRecipeIds = new Set<string>();
   const walk = (node: RequirementNode) => {
     if (node.kind === 'fluid') return;
     if (node.kind === 'item') {
@@ -1432,7 +1456,22 @@ const rawItemTotals = computed(() => {
         const prev = totals.get(node.itemKey.id) ?? 0;
         totals.set(node.itemKey.id, prev + (node.amount ?? 0));
       }
-      node.children.forEach(walk);
+      if (!isLeaf) {
+        const n = node as RequirementNode & {
+          recipeIdUsed?: string;
+          machineCount?: number;
+          cycle?: boolean;
+          recovery?: boolean;
+        };
+        if (n.recipeIdUsed && !n.cycle && !n.recovery) {
+          const mc = n.machineCount ?? 0;
+          const maxMc = maxMachineCountByRecipe.get(n.recipeIdUsed) ?? 0;
+          if (mc < maxMc - 1e-9) return; // not the highest-rate occurrence — skip
+          if (seenRecipeIds.has(n.recipeIdUsed)) return; // max already counted
+          seenRecipeIds.add(n.recipeIdUsed);
+        }
+        node.children.forEach(walk);
+      }
     }
   };
 
@@ -1444,13 +1483,48 @@ const rawFluidTotals = computed(() => {
   const totals = new Map<string, number>();
   if (!mergedTree.value) return totals;
 
+  // Same pre-pass as rawItemTotals: find max machineCount per recipeId.
+  const maxMachineCountByRecipe = new Map<string, number>();
+  const prepass = (node: RequirementNode): void => {
+    if (node.kind !== 'item') return;
+    const n = node as RequirementNode & {
+      recipeIdUsed?: string;
+      machineCount?: number;
+      cycle?: boolean;
+      recovery?: boolean;
+    };
+    if (n.recipeIdUsed && !n.cycle && !n.recovery) {
+      const mc = n.machineCount ?? 0;
+      const existing = maxMachineCountByRecipe.get(n.recipeIdUsed) ?? 0;
+      if (mc > existing) maxMachineCountByRecipe.set(n.recipeIdUsed, mc);
+    }
+    node.children.forEach(prepass);
+  };
+  prepass(mergedTree.value.root);
+
+  const seenRecipeIds = new Set<string>();
   const walk = (node: RequirementNode) => {
     if (node.kind === 'fluid') {
       const prev = totals.get(node.id) ?? 0;
       totals.set(node.id, prev + (node.amount ?? 0));
       return;
     }
-    if (node.kind === 'item') node.children.forEach(walk);
+    if (node.kind === 'item') {
+      const n = node as RequirementNode & {
+        recipeIdUsed?: string;
+        machineCount?: number;
+        cycle?: boolean;
+        recovery?: boolean;
+      };
+      if (n.recipeIdUsed && !n.cycle && !n.recovery) {
+        const mc = n.machineCount ?? 0;
+        const maxMc = maxMachineCountByRecipe.get(n.recipeIdUsed) ?? 0;
+        if (mc < maxMc - 1e-9) return;
+        if (seenRecipeIds.has(n.recipeIdUsed)) return;
+        seenRecipeIds.add(n.recipeIdUsed);
+      }
+      node.children.forEach(walk);
+    }
   };
 
   walk(mergedTree.value.root);
@@ -1625,15 +1699,38 @@ const buildMergedTree = () => {
       pollution: 0,
     } satisfies EnhancedBuildTreeResult['totals'];
 
+    // Merge machine counts by recipeId (same recipe in multiple trees → MAX, not SUM);
+    // different recipes sharing the same machine type are still summed correctly.
+    const mergedRecipeMachines = new Map<string, { machineItemId: ItemId; count: number }>();
     for (const tree of trees) {
-      for (const [itemId, count] of tree.totals.machines.entries()) {
-        totals.machines.set(itemId, (totals.machines.get(itemId) ?? 0) + count);
-      }
+      const walkRecipes = (node: RequirementNode): void => {
+        if (node.kind !== 'item') return;
+        const n = node as RequirementNode & {
+          recipeIdUsed?: string;
+          machineItemId?: ItemId;
+          machineCount?: number;
+          cycle?: boolean;
+          recovery?: boolean;
+        };
+        if (n.recipeIdUsed && n.machineItemId && !n.cycle && !n.recovery) {
+          const count = n.machineCount ?? 0;
+          const existing = mergedRecipeMachines.get(n.recipeIdUsed);
+          if (!existing || count > existing.count) {
+            mergedRecipeMachines.set(n.recipeIdUsed, { machineItemId: n.machineItemId, count });
+          }
+        }
+        node.children.forEach(walkRecipes);
+      };
+      walkRecipes(tree.root);
       for (const [itemId, perSecond] of tree.totals.perSecond.entries()) {
         totals.perSecond.set(itemId, (totals.perSecond.get(itemId) ?? 0) + perSecond);
       }
       totals.power += tree.totals.power;
       totals.pollution += tree.totals.pollution;
+    }
+    // Rebuild machines total from deduplicated per-recipe data.
+    for (const { machineItemId, count } of mergedRecipeMachines.values()) {
+      totals.machines.set(machineItemId, (totals.machines.get(machineItemId) ?? 0) + count);
     }
 
     if (trees.length === 1) {
@@ -1793,10 +1890,20 @@ const runLpSolve = () => {
     .then((result) => {
       lpResult.value = result;
       lpSolving.value = false;
-      // 把 LP 求出的配方选择全部回写，覆盖已有选择，保证树与 LP 结果一致
+      // 把 LP 求出的配方选择全部回写，覆盖已有选择，保证树与 LP 结果一致。
+      // 对于多产物配方（如精炼炉），LP 每条配方只生成一个 Step（主产物），
+      // 但副产物也需映射到同一配方；否则副产物目标会 fallback 到错误配方。
       const merged = new Map(selectedRecipeIdByItemKeyHash.value);
       for (const step of result.steps) {
-        if (step.recipeId && step.itemKey) {
+        if (!step.recipeId) continue;
+        const recipe = props.index!.recipesById.get(step.recipeId);
+        if (recipe) {
+          const recipeType = props.index!.recipeTypesByKey.get(recipe.type);
+          const norm = normalizeRecipe(recipe, recipeType);
+          for (const { key } of norm.outputItems) {
+            merged.set(itemKeyHash(key), step.recipeId);
+          }
+        } else if (step.itemKey) {
           merged.set(itemKeyHash(step.itemKey), step.recipeId);
         }
       }
@@ -2325,6 +2432,7 @@ type LineFlowItemData = {
   title: string;
   subtitle: string;
   isRoot: boolean;
+  isSurplus?: boolean;
   forcedRaw: boolean;
   recovery?: boolean;
   recoverySource?: string;
@@ -2336,7 +2444,18 @@ type LineFlowMachineData = {
   subtitle: string;
   machineItemId?: string;
   machineCount?: number;
-  outputItemKey: ItemKey;
+  outputItemKeys: ItemKey[];
+  outputDetails?: {
+    key: ItemKey;
+    demanded: number;
+    machineCountOwn: number;
+    surplusRate: number;
+    outputName?: string;
+    demandedText: string;
+    usedText?: string;
+    producedText?: string;
+    surplusText?: string;
+  }[];
   inPorts: number;
   outPorts: number;
 };
@@ -2351,6 +2470,7 @@ type LineFlowEdgeData = {
   itemKey?: ItemKey;
   fluidId?: string;
   recovery?: boolean;
+  surplus?: boolean;
 };
 
 const graphFlow = computed(() => {
@@ -2434,6 +2554,10 @@ const graphFlow = computed(() => {
 
   countLeaves(mergedTree.value.root);
 
+  // Deduplicate multi-output recipes: track first graph node created per recipeId.
+  // Secondary occurrences of the same recipe redirect to the existing node.
+  const seenRecipeToNodeId = new Map<string, string>();
+
   const walk = (
     node: RequirementNode,
     depth: number,
@@ -2487,6 +2611,22 @@ const graphFlow = computed(() => {
       const rate = nodeDisplayRateByUnit(node, graphDisplayUnit.value);
       const subtitle = `${formatAmount(rate)}${unitSuffix(graphDisplayUnit.value)}`;
       const recoverySource = node.recovery ? recoverySourceText(node) : '';
+
+      // Merge same-recipe nodes: if the recipe already has a node, reuse it.
+      if (!node.recovery && !node.cycle && node.recipeIdUsed) {
+        const existingId = seenRecipeToNodeId.get(node.recipeIdUsed);
+        if (existingId) {
+          // Secondary output of an already-placed recipe — point parent edge to the primary node.
+          const existingNode = nodes.find((n) => n.id === existingId);
+          if (existingNode && machineCount > 0) {
+            const existingMc = (existingNode.data as GraphNodeData).machineCount ?? 0;
+            if (machineCount > existingMc)
+              (existingNode.data as GraphNodeData).machineCount = Math.round(machineCount);
+          }
+          return existingId;
+        }
+        seenRecipeToNodeId.set(node.recipeIdUsed, nodeId);
+      }
 
       nodes.push({
         id: nodeId,
@@ -2730,6 +2870,24 @@ const lineModel = computed<ReturnType<typeof buildProductionLineModel>>(() => {
         }
         if (!prev.machineItemId && n.machineItemId) prev.machineItemId = n.machineItemId;
         if (!prev.machineName && n.machineName) prev.machineName = n.machineName;
+        n.outputItemKeys.forEach((k2) => {
+          const h2 = itemKeyHash(k2);
+          if (!prev.outputItemKeys.some((x) => itemKeyHash(x) === h2)) prev.outputItemKeys.push(k2);
+        });
+        if (n.outputDetails?.length) {
+          if (!prev.outputDetails) prev.outputDetails = [];
+          n.outputDetails.forEach((d) => {
+            const h2 = itemKeyHash(d.key);
+            const existing = prev.outputDetails!.find((x) => itemKeyHash(x.key) === h2);
+            if (!existing) {
+              prev.outputDetails!.push({ ...d });
+              return;
+            }
+            existing.demanded += d.demanded;
+            existing.machineCountOwn += d.machineCountOwn;
+            existing.surplusRate += d.surplusRate;
+          });
+        }
       }
     });
 
@@ -2769,7 +2927,7 @@ const lineFlow = computed(() => {
         lineIncludeCycleSeeds.value && n.seedAmount && n.seedAmount > 0
           ? ` (seed ${formatAmount(n.seedAmount)})`
           : '';
-      const subtitle = `${base}${seed}`;
+      const subtitle = n.isSurplus ? `冗余 +${base}` : `${base}${seed}`;
       const title = itemName(n.itemKey);
       const recoverySource = n.recovery ? recoverySourceText(n) : '';
       titleById.set(n.nodeId, title);
@@ -2784,7 +2942,8 @@ const lineFlow = computed(() => {
           title,
           subtitle,
           isRoot: !!n.isRoot,
-          forcedRaw: !n.recovery && isForcedRawKey(n.itemKey),
+          ...(n.isSurplus ? { isSurplus: true } : {}),
+          forcedRaw: !n.isSurplus && !n.recovery && isForcedRawKey(n.itemKey),
           ...(n.recovery ? { recovery: true, recoverySource } : {}),
           inPorts: 0,
           outPorts: 0,
@@ -2810,8 +2969,18 @@ const lineFlow = computed(() => {
     }
 
     const title = n.machineName ?? n.recipeTypeKey ?? n.recipeId;
-    const outName = itemName(n.outputItemKey);
-    const subtitle = `${outName} ${formatAmount(displayRateFromAmount(n.amount, unit))}${unitText}`;
+    const primaryOut = n.outputItemKeys[0];
+    const outName = primaryOut ? itemName(primaryOut) : title;
+    const outputDetails = n.outputDetails ?? [];
+    const totalProduced = outputDetails.reduce(
+      (acc, d) => acc + d.demanded + Math.max(0, d.surplusRate),
+      0,
+    );
+    const totalUsed = outputDetails.reduce((acc, d) => acc + d.demanded, 0);
+    const subtitle =
+      outputDetails.length > 0
+        ? `总产 ${formatAmount(displayRateFromAmount(totalProduced, unit))}${unitText} / 已用 ${formatAmount(displayRateFromAmount(totalUsed, unit))}${unitText}`
+        : `${outName} ${formatAmount(displayRateFromAmount(n.amount, unit))}${unitText}`;
     titleById.set(n.nodeId, title);
     return {
       id: n.nodeId,
@@ -2829,7 +2998,23 @@ const lineFlow = computed(() => {
               return machineCount > 0 ? { machineCount } : {};
             })()
           : {}),
-        outputItemKey: n.outputItemKey,
+        outputItemKeys: n.outputItemKeys,
+        ...(n.outputDetails
+          ? {
+              outputDetails: n.outputDetails.map((d) => ({
+                ...d,
+                outputName: itemName(d.key),
+                demandedText: `${formatAmount(displayRateFromAmount(d.demanded, unit))}${unitText}`,
+                usedText: `${formatAmount(displayRateFromAmount(d.demanded, unit))}${unitText}`,
+                producedText: `${formatAmount(displayRateFromAmount(d.demanded + Math.max(0, d.surplusRate), unit))}${unitText}`,
+                ...(d.surplusRate > 1e-9
+                  ? {
+                      surplusText: `${formatAmount(displayRateFromAmount(d.surplusRate, unit))}${unitText}`,
+                    }
+                  : {}),
+              })),
+            }
+          : {}),
         inPorts: 0,
         outPorts: 0,
       } satisfies LineFlowMachineData,
@@ -2838,7 +3023,8 @@ const lineFlow = computed(() => {
 
   const edges: Edge[] = model.edges.map((e) => {
     const recovery = e.kind === 'item' && e.recovery;
-    const label = `${formatAmount(displayRateFromAmount(e.amount, unit))}${unitText}${recovery ? ' ♻' : ''}`;
+    const surplus = e.kind === 'item' && e.surplus;
+    const label = `${formatAmount(displayRateFromAmount(e.amount, unit))}${unitText}${recovery ? ' ♻' : surplus ? ' □' : ''}`;
     return {
       id: e.id,
       source: e.source,
@@ -2852,11 +3038,13 @@ const lineFlow = computed(() => {
       style: {
         strokeWidth: lineEdgeBaseWidthFromRate(e.amount),
         ...(recovery ? { stroke: '#26a69a', strokeDasharray: '6 4' } : {}),
+        ...(surplus ? { stroke: '#f59e0b', strokeDasharray: '6 4', opacity: 0.75 } : {}),
       },
       data: {
         kind: e.kind,
         ...(e.kind === 'item' ? { itemKey: e.itemKey } : { fluidId: e.fluidId }),
         ...(recovery ? { recovery: true } : {}),
+        ...(surplus ? { surplus: true } : {}),
       } satisfies LineFlowEdgeData,
       markerEnd: {
         type: MarkerType.ArrowClosed,

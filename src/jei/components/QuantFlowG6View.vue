@@ -108,7 +108,7 @@ function edgeBaseWidthFromRate(amountPerMinute: number): number {
 
 function edgeArrowSizeFromLineWidth(lineWidth: number): number {
   const w = Math.max(1, finiteOr(lineWidth, 2));
-  return Math.max(6, Math.min(26, Math.round(w * 1.9)));
+  return Math.max(10, Math.round(w + 8));
 }
 
 const modelNodeMap = computed(() => new Map(props.model.nodes.map((n) => [n.nodeId, n] as const)));
@@ -447,6 +447,7 @@ function toGraphData(): GraphData {
         ...(recovery ? { lineDash: [6, 4] } : {}),
         curveOffset: 0,
         endArrow: true,
+        endArrowType: 'triangle',
         endArrowFill: stroke,
         endArrowSize: edgeArrowSizeFromLineWidth(edgeLineWidth),
         label: true,

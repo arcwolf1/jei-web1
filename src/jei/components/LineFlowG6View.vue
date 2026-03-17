@@ -18,9 +18,22 @@ type NodeDataRecord = {
   itemKey?: ItemKey;
   machineItemId?: string;
   machineCount?: number;
-  outputItemKey?: ItemKey;
+  outputItemKeys?: ItemKey[];
+  outputDetails?: MachineOutputDetailRecord[];
   isRoot?: boolean;
   recovery?: boolean;
+};
+
+type MachineOutputDetailRecord = {
+  key: ItemKey;
+  demanded?: number;
+  machineCountOwn?: number;
+  surplusRate?: number;
+  outputName?: string;
+  demandedText?: string;
+  usedText?: string;
+  producedText?: string;
+  surplusText?: string;
 };
 
 type EdgeDataRecord = {
@@ -109,6 +122,11 @@ function parseLineDash(value: unknown): number[] | undefined {
     .map((v) => Number(v))
     .filter((v) => Number.isFinite(v) && v > 0);
   return arr.length ? arr : undefined;
+}
+
+function edgeArrowSizeFromLineWidth(lineWidth: number): number {
+  const w = Math.max(1, finiteOr(lineWidth, 2));
+  return Math.max(10, Math.round(w + 8));
 }
 
 function parseSpritePosition(position: string): { x: number; y: number } {
@@ -205,7 +223,7 @@ async function ensureResolvedIcons() {
     const data = (n.data ?? {}) as NodeDataRecord;
     if (data.itemKey) requiredHashes.add(itemKeyHash(data.itemKey));
     if (data.machineItemId) requiredHashes.add(itemKeyHash({ id: data.machineItemId }));
-    if (data.outputItemKey) requiredHashes.add(itemKeyHash(data.outputItemKey));
+    if (data.outputItemKeys?.[0]) requiredHashes.add(itemKeyHash(data.outputItemKeys[0]));
   });
 
   await Promise.all(
@@ -235,7 +253,8 @@ function nodeIconFromData(data: NodeDataRecord): string | undefined {
   if (data.itemKey) return resolvedIconByHash.value.get(itemKeyHash(data.itemKey));
   if (data.machineItemId)
     return resolvedIconByHash.value.get(itemKeyHash({ id: data.machineItemId }));
-  if (data.outputItemKey) return resolvedIconByHash.value.get(itemKeyHash(data.outputItemKey));
+  if (data.outputItemKeys?.[0])
+    return resolvedIconByHash.value.get(itemKeyHash(data.outputItemKeys[0]));
   return undefined;
 }
 
@@ -246,6 +265,30 @@ function edgeItemName(data: EdgeDataRecord): string {
   }
   if (data.kind === 'fluid' && data.fluidId) return data.fluidId;
   return '';
+}
+
+function machineOutputName(detail: MachineOutputDetailRecord): string {
+  if (detail.outputName && detail.outputName.trim()) return detail.outputName;
+  const def = props.itemDefsByKeyHash[itemKeyHash(detail.key)];
+  return def?.name ?? detail.key.id;
+}
+
+function machineOutputLine(detail: MachineOutputDetailRecord): string {
+  const produced = detail.producedText ?? detail.demandedText ?? '-';
+  const used = detail.usedText ?? detail.demandedText ?? '-';
+  const surplus = detail.surplusText ? ` 余${detail.surplusText}` : '';
+  return `${machineOutputName(detail)} 总${produced} 用${used}${surplus}`;
+}
+
+function machineOutputLines(data: NodeDataRecord): string[] {
+  const details = Array.isArray(data.outputDetails) ? data.outputDetails : [];
+  if (details.length > 0) return details.map(machineOutputLine);
+  const keys = Array.isArray(data.outputItemKeys) ? data.outputItemKeys : [];
+  if (keys.length <= 1) return [];
+  return keys.map((k) => {
+    const def = props.itemDefsByKeyHash[itemKeyHash(k)];
+    return `${def?.name ?? k.id}`;
+  });
 }
 
 type SelectionContext = {
@@ -342,14 +385,22 @@ function toGraphData(): GraphData {
     const icon = nodeIconFromData(data);
     const title = data.title ?? n.id;
     const subtitleBase = data.subtitle ?? '';
+    const machineOutputs = kind === 'machine' ? machineOutputLines(data) : [];
     const subtitle =
       kind === 'machine' && typeof data.machineCount === 'number' && data.machineCount > 0
         ? `${subtitleBase} x${data.machineCount}`
         : subtitleBase;
+    const labelLines = [title, subtitle, ...machineOutputs].filter(
+      (s) => !!s && s.trim().length > 0,
+    );
+    const labelText = labelLines.join('\n');
+    const machineLabelLines = machineOutputs.length > 0 ? 2 + machineOutputs.length : 4;
+    const labelMaxLines = kind === 'machine' ? Math.max(4, Math.min(12, machineLabelLines)) : 4;
+    const labelMaxWidth = kind === 'machine' ? 260 : 188;
     const itemColor =
       (data.itemKey ? itemColorOfDef(props.itemDefsByKeyHash[itemKeyHash(data.itemKey)]) : null) ??
-      (data.outputItemKey
-        ? itemColorOfDef(props.itemDefsByKeyHash[itemKeyHash(data.outputItemKey)])
+      (data.outputItemKeys?.[0]
+        ? itemColorOfDef(props.itemDefsByKeyHash[itemKeyHash(data.outputItemKeys[0])])
         : null);
     const baseFill =
       kind === 'machine'
@@ -409,7 +460,7 @@ function toGraphData(): GraphData {
       shadowColor: isDark ? 'rgba(0,0,0,0.45)' : 'rgba(0,0,0,0.14)',
       shadowBlur: selected ? 14 : 10,
       label: true,
-      labelText: `${title}\n${subtitle}`,
+      labelText,
       labelTextAlign: 'center' as const,
       labelTextBaseline: 'top' as const,
       labelPlacement: 'bottom' as const,
@@ -417,8 +468,9 @@ function toGraphData(): GraphData {
       labelFontSize: 22,
       labelLineHeight: 20,
       labelFill: isDark ? '#e5e7eb' : '#111827',
-      labelMaxWidth: 188,
+      labelMaxWidth,
       labelWordWrap: true,
+      labelMaxLines,
       icon: !!icon,
       iconWidth: 82,
       iconHeight: 82,
@@ -469,8 +521,9 @@ function toGraphData(): GraphData {
         curveOffset: 0,
         ...(lineDash ? { lineDash } : {}),
         endArrow: true,
+        endArrowType: 'triangle',
         endArrowFill: stroke,
-        endArrowSize: Math.max(6, Math.min(22, strokeWidth * 2)),
+        endArrowSize: edgeArrowSizeFromLineWidth(strokeWidth),
         label: label.length > 0,
         labelText: label,
         labelFontSize: 14,

@@ -125,7 +125,7 @@
         </div>
       </div>
 
-        <div v-else class="q-mt-md">
+      <div v-else class="q-mt-md">
         <q-tabs v-model="activeTab" dense outside-arrows mobile-arrows inline-label>
           <q-tab name="tree" :label="treeTabLabel" />
           <q-tab name="graph" :label="graphTabLabel" />
@@ -601,7 +601,9 @@
                         </q-badge>
                         <q-badge v-if="p.data.recovery" color="teal" class="q-ml-xs">
                           recovery
-                          <q-tooltip v-if="p.data.recoverySource">{{ p.data.recoverySource }}</q-tooltip>
+                          <q-tooltip v-if="p.data.recoverySource">{{
+                            p.data.recoverySource
+                          }}</q-tooltip>
                         </q-badge>
                         <q-badge
                           v-if="p.data.cycle"
@@ -703,7 +705,11 @@
                 @update:model-value="settingsStore.setLineIntermediateColoring(!!$event)"
               />
               <q-toggle
-                v-if="selectedLineItemData && !selectedLineItemData.isRoot && !selectedLineItemData.recovery"
+                v-if="
+                  selectedLineItemData &&
+                  !selectedLineItemData.isRoot &&
+                  !selectedLineItemData.recovery
+                "
                 :model-value="selectedLineItemForcedRaw"
                 dense
                 color="warning"
@@ -730,7 +736,9 @@
                   { label: 'G6', value: 'g6' },
                 ]"
                 @update:model-value="
-                  settingsStore.setProductionLineRenderer(($event as 'vue_flow' | 'g6') ?? 'vue_flow')
+                  settingsStore.setProductionLineRenderer(
+                    ($event as 'vue_flow' | 'g6') ?? 'vue_flow',
+                  )
                 "
               />
               <q-space />
@@ -1220,11 +1228,7 @@ import {
   type RequirementNode,
   type EnhancedRequirementNode,
 } from 'src/jei/planner/planner';
-import {
-  useKeyBindingsStore,
-  keyBindingToString,
-  type KeyAction,
-} from 'src/stores/keybindings';
+import { useKeyBindingsStore, keyBindingToString, type KeyAction } from 'src/stores/keybindings';
 import { useSettingsStore } from 'src/stores/settings';
 
 const { t } = useI18n();
@@ -1311,14 +1315,8 @@ const targetRatePresets = computed(() => {
   const halfCandidate = Number(preset?.halfPerMinute);
   const fullCandidate = Number(preset?.fullPerMinute);
   return {
-    halfPerMinute:
-      Number.isFinite(halfCandidate) && halfCandidate > 0
-        ? halfCandidate
-        : null,
-    fullPerMinute:
-      Number.isFinite(fullCandidate) && fullCandidate > 0
-        ? fullCandidate
-        : null,
+    halfPerMinute: Number.isFinite(halfCandidate) && halfCandidate > 0 ? halfCandidate : null,
+    fullPerMinute: Number.isFinite(fullCandidate) && fullCandidate > 0 ? fullCandidate : null,
   };
 });
 
@@ -1712,7 +1710,8 @@ const recoveryProducedByNodeId = computed(() => {
     if (node.recovery && node.recoverySourceNodeId) {
       const sourceNodeId = node.recoverySourceNodeId;
       const itemHash = itemKeyHash(node.itemKey);
-      const bucket = byNodeAndItem.get(sourceNodeId) ?? new Map<string, { itemKey: ItemKey; amount: number }>();
+      const bucket =
+        byNodeAndItem.get(sourceNodeId) ?? new Map<string, { itemKey: ItemKey; amount: number }>();
       const prev = bucket.get(itemHash);
       if (prev) prev.amount += finiteOr(node.amount, 0);
       else bucket.set(itemHash, { itemKey: node.itemKey, amount: finiteOr(node.amount, 0) });
@@ -1805,7 +1804,10 @@ function lineEdgeStrokeWidth(
 function formatMachineCountForDisplay(value: unknown): number {
   const v = finiteOr(value, 0);
   if (!Number.isFinite(v) || v <= 0) return 0;
-  const decimals = Math.max(0, Math.min(4, Math.floor(finiteOr(settingsStore.machineCountDecimals, 0))));
+  const decimals = Math.max(
+    0,
+    Math.min(4, Math.floor(finiteOr(settingsStore.machineCountDecimals, 0))),
+  );
   if (decimals === 0) return Math.round(v);
   const factor = 10 ** decimals;
   return Math.round(v * factor) / factor;
@@ -1992,12 +1994,7 @@ const flow = computed(() => {
         zIndex: 2000,
         type: 'smoothstep',
       });
-      if (
-        c.kind === 'item' &&
-        c.recovery &&
-        c.recoverySourceRecipeId &&
-        c.recoverySourceItemKey
-      ) {
+      if (c.kind === 'item' && c.recovery && c.recoverySourceRecipeId && c.recoverySourceItemKey) {
         const key = recoverySourceKey(
           c.recoverySourceRecipeId,
           c.recoverySourceItemKey,
@@ -2223,6 +2220,7 @@ type LineFlowItemData = {
   title: string;
   subtitle: string;
   isRoot: boolean;
+  isSurplus?: boolean;
   forcedRaw: boolean;
   recovery?: boolean;
   recoverySource?: string;
@@ -2234,7 +2232,18 @@ type LineFlowMachineData = {
   subtitle: string;
   machineItemId?: string;
   machineCount?: number;
-  outputItemKey: ItemKey;
+  outputItemKeys: ItemKey[];
+  outputDetails?: {
+    key: ItemKey;
+    demanded: number;
+    machineCountOwn: number;
+    surplusRate: number;
+    outputName?: string;
+    demandedText: string;
+    usedText?: string;
+    producedText?: string;
+    surplusText?: string;
+  }[];
   inPorts: number;
   outPorts: number;
 };
@@ -2249,6 +2258,7 @@ type LineFlowEdgeData = {
   itemKey?: ItemKey;
   fluidId?: string;
   recovery?: boolean;
+  surplus?: boolean;
 };
 
 const lineFlow = computed(() => {
@@ -2270,7 +2280,7 @@ const lineFlow = computed(() => {
         targetUnit.value === 'items' && n.seedAmount && n.seedAmount > 0
           ? ` (seed ${formatAmount(n.seedAmount)})`
           : '';
-      const subtitle = `${base}${seed}`;
+      const subtitle = n.isSurplus ? `冗余 +${base}` : `${base}${seed}`;
       const title = itemName(n.itemKey);
       const recoverySource = n.recovery ? recoverySourceText(n) : '';
       titleById.set(n.nodeId, title);
@@ -2285,7 +2295,8 @@ const lineFlow = computed(() => {
           title,
           subtitle,
           isRoot: !!n.isRoot,
-          forcedRaw: !n.recovery && isForcedRawKey(n.itemKey),
+          ...(n.isSurplus ? { isSurplus: true } : {}),
+          forcedRaw: !n.isSurplus && !n.recovery && isForcedRawKey(n.itemKey),
           ...(n.recovery ? { recovery: true, recoverySource } : {}),
           inPorts: 0,
           outPorts: 0,
@@ -2311,8 +2322,18 @@ const lineFlow = computed(() => {
     }
 
     const title = n.machineName ?? n.recipeTypeKey ?? n.recipeId;
-    const outName = itemName(n.outputItemKey);
-    const subtitle = `${outName} ${formatAmount(displayRateFromAmount(n.amount))}${unitSuffix()}`;
+    const primaryOut = n.outputItemKeys[0];
+    const outName = primaryOut ? itemName(primaryOut) : title;
+    const outputDetails = n.outputDetails ?? [];
+    const totalProduced = outputDetails.reduce(
+      (acc, d) => acc + d.demanded + Math.max(0, d.surplusRate),
+      0,
+    );
+    const totalUsed = outputDetails.reduce((acc, d) => acc + d.demanded, 0);
+    const subtitle =
+      outputDetails.length > 0
+        ? `总产 ${formatAmount(displayRateFromAmount(totalProduced))}${unitSuffix()} / 已用 ${formatAmount(displayRateFromAmount(totalUsed))}${unitSuffix()}`
+        : `${outName} ${formatAmount(displayRateFromAmount(n.amount))}${unitSuffix()}`;
     titleById.set(n.nodeId, title);
     return {
       id: n.nodeId,
@@ -2330,7 +2351,23 @@ const lineFlow = computed(() => {
               return machineCount > 0 ? { machineCount } : {};
             })()
           : {}),
-        outputItemKey: n.outputItemKey,
+        outputItemKeys: n.outputItemKeys,
+        ...(n.outputDetails
+          ? {
+              outputDetails: n.outputDetails.map((d) => ({
+                ...d,
+                outputName: itemName(d.key),
+                demandedText: `${formatAmount(displayRateFromAmount(d.demanded))}${unitSuffix()}`,
+                usedText: `${formatAmount(displayRateFromAmount(d.demanded))}${unitSuffix()}`,
+                producedText: `${formatAmount(displayRateFromAmount(d.demanded + Math.max(0, d.surplusRate)))}${unitSuffix()}`,
+                ...(d.surplusRate > 1e-9
+                  ? {
+                      surplusText: `${formatAmount(displayRateFromAmount(d.surplusRate))}${unitSuffix()}`,
+                    }
+                  : {}),
+              })),
+            }
+          : {}),
         inPorts: 0,
         outPorts: 0,
       } satisfies LineFlowMachineData,
@@ -2339,7 +2376,8 @@ const lineFlow = computed(() => {
 
   const edges: Edge[] = model.edges.map((e) => {
     const recovery = e.kind === 'item' && e.recovery;
-    const label = `${formatAmount(displayRateFromAmount(e.amount))}${unitSuffix()}${recovery ? ' ♻' : ''}`;
+    const surplus = e.kind === 'item' && e.surplus;
+    const label = `${formatAmount(displayRateFromAmount(e.amount))}${unitSuffix()}${recovery ? ' ♻' : surplus ? ' □' : ''}`;
     return {
       id: e.id,
       source: e.source,
@@ -2353,11 +2391,13 @@ const lineFlow = computed(() => {
       style: {
         strokeWidth: lineEdgeBaseWidthFromRate(e.amount),
         ...(recovery ? { stroke: '#26a69a', strokeDasharray: '6 4' } : {}),
+        ...(surplus ? { stroke: '#f59e0b', strokeDasharray: '6 4', opacity: 0.75 } : {}),
       },
       data: {
         kind: e.kind,
         ...(e.kind === 'item' ? { itemKey: e.itemKey } : { fluidId: e.fluidId }),
         ...(recovery ? { recovery: true } : {}),
+        ...(surplus ? { surplus: true } : {}),
       } satisfies LineFlowEdgeData,
       markerEnd: {
         type: MarkerType.ArrowClosed,
@@ -3474,7 +3514,12 @@ const flowBackgroundPatternColor = computed(() =>
   height: 72px;
   border-radius: 50%;
   border: 1px solid rgba(0, 0, 0, 0.22);
-  background: radial-gradient(circle at 35% 30%, rgba(255, 255, 255, 0.95), rgba(236, 243, 255, 0.94) 60%, rgba(220, 232, 248, 0.92));
+  background: radial-gradient(
+    circle at 35% 30%,
+    rgba(255, 255, 255, 0.95),
+    rgba(236, 243, 255, 0.94) 60%,
+    rgba(220, 232, 248, 0.92)
+  );
   box-shadow: 0 8px 18px rgba(0, 0, 0, 0.14);
   display: flex;
   align-items: center;
@@ -3483,7 +3528,12 @@ const flowBackgroundPatternColor = computed(() =>
 }
 
 .planner__quant-node-circle--fluid {
-  background: radial-gradient(circle at 35% 30%, rgba(222, 250, 255, 0.95), rgba(186, 236, 245, 0.92) 62%, rgba(151, 208, 219, 0.9));
+  background: radial-gradient(
+    circle at 35% 30%,
+    rgba(222, 250, 255, 0.95),
+    rgba(186, 236, 245, 0.92) 62%,
+    rgba(151, 208, 219, 0.9)
+  );
 }
 
 .planner__quant-fluid-symbol {
@@ -3516,7 +3566,9 @@ const flowBackgroundPatternColor = computed(() =>
 
 .planner__quant-node--selected .planner__quant-node-circle {
   border-color: var(--q-primary);
-  box-shadow: 0 0 0 2px rgba(25, 118, 210, 0.25), 0 8px 18px rgba(0, 0, 0, 0.14);
+  box-shadow:
+    0 0 0 2px rgba(25, 118, 210, 0.25),
+    0 8px 18px rgba(0, 0, 0, 0.14);
 }
 
 .planner__quant-node--recovery .planner__quant-node-circle {
