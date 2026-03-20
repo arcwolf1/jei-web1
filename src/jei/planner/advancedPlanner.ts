@@ -112,16 +112,20 @@ export async function solveAdvanced(
     const machineCount = rate * norm.time;
     const machinesRational = rational(machineCount);
 
-    // Per-second output of primary product (first output item)
-    const primaryOutput = norm.outputItems[0];
+    // For multi-output recipes, prefer the output that matches a user demand
+    // (targeted by an objective) over always picking the first slot output.
+    const demandedOutput = norm.outputItems.find((o) => {
+      const h = itemKeyHash(o.key);
+      return demandByHash.has(h);
+    });
+    const primaryOutput = demandedOutput ?? norm.outputItems[0];
 
     // Determine which item this step "belongs to" (primary output)
     const itemKey: ItemKey | undefined = primaryOutput?.key;
     const itemHash = itemKey ? itemKeyHash(itemKey) : recipeId;
     const itemKeyOrFallback: ItemKey = itemKey ?? { id: recipeId };
 
-    // Production amount: items/s × 60 = items/min (match tree builder convention)
-    // For consistency, keep in items/s and let UI format
+    // Production rate of the primary output  (items/s)
     const itemsPerSecond = primaryOutput
       ? (norm.outputByHash.get(itemHash) ?? 0) * rate
       : 0;
@@ -182,7 +186,7 @@ export async function solveAdvanced(
       const rate = solverResult.recipeRates.get(recipeId) ?? 0;
       if (rate < 1e-12) continue;
       const inAmt = norm.inputByHash.get(h) ?? 0;
-      consumedPerSecond += (inAmt / norm.time) * rate;
+      consumedPerSecond += inAmt * rate;
     }
     // Also add any external supply forced by the LP
     const forcedSupply = solverResult.unproduceableValues.get(h) ?? 0;

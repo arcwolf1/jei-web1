@@ -1009,6 +1009,34 @@ export function buildEnhancedRequirementTree(args: {
     pollution: 0,
   };
 
+  // Pre-pass: compute max machineCount per recipeId so that when a multi-output recipe
+  // appears multiple times in the tree (once per output), we use the highest demand rate.
+  const maxMachineCountByRecipeId = new Map<string, number>();
+  const prePassWalk = (node: RequirementNode): void => {
+    if (node.kind !== 'item') return;
+    if (node.recipeIdUsed && node.machineItemId && !node.cycle && !node.recovery) {
+      const recipe = args.index.recipesById.get(node.recipeIdUsed);
+      if (recipe) {
+        const recipeType = args.index.recipeTypesByKey.get(recipe.type);
+        const recipeTime = getRecipeTime(recipe, recipeType);
+        const outputPerCraft = perCraftOutputAmountFor(recipe, recipeType, node.itemKey);
+        if (outputPerCraft > 0 && recipeTime > 0) {
+          const machineSpeed = (recipeType?.defaults?.speed as number) ?? 1;
+          const adjustedTime = recipeTime / (machineSpeed || 1);
+          const machines = (node.amount * adjustedTime) / outputPerCraft / 60;
+          const machineCount = machines > 0 ? Math.ceil(machines - 1e-9) : 0;
+          const existing = maxMachineCountByRecipeId.get(node.recipeIdUsed) ?? 0;
+          if (machineCount > existing) maxMachineCountByRecipeId.set(node.recipeIdUsed, machineCount);
+        }
+      }
+    }
+    node.children.forEach(prePassWalk);
+  };
+  prePassWalk(baseResult.root);
+
+  // Track first occurrence of each recipeId to avoid double-counting totals.
+  const seenRecipeIdsForTotals = new Set<string>();
+
   // Enhance nodes with rate information
   const enhanceNode = (node: RequirementNode): EnhancedRequirementNode => {
     if (node.kind === 'item') {
@@ -1048,17 +1076,21 @@ export function buildEnhancedRequirementTree(args: {
             enhanced.power = stepPower;
             enhanced.pollution = stepPollution;
 
-            // Track totals
-            const prevMachines = totals.machines.get(node.machineItemId) ?? 0;
-            totals.machines.set(node.machineItemId, prevMachines + machineCount);
+            // Track totals — only for the first occurrence of each recipe to avoid
+            // double-counting multi-output recipes that appear multiple times in the tree.
+            if (!node.recovery && !node.cycle && !seenRecipeIdsForTotals.has(node.recipeIdUsed)) {
+              seenRecipeIdsForTotals.add(node.recipeIdUsed);
+              // Use the max machine count seen across all occurrences of this recipe.
+              const effectiveCount = maxMachineCountByRecipeId.get(node.recipeIdUsed) ?? machineCount;
+              totals.machines.set(node.machineItemId, (totals.machines.get(node.machineItemId) ?? 0) + effectiveCount);
 
-            // Track per second totals by item ID
-            const prevPerSecond = totals.perSecond.get(node.itemKey.id) ?? 0;
-            totals.perSecond.set(node.itemKey.id, prevPerSecond + perSecond);
+              // Track per second totals by item ID
+              totals.perSecond.set(node.itemKey.id, (totals.perSecond.get(node.itemKey.id) ?? 0) + perSecond);
 
-            // Track total power and pollution
-            totals.power += stepPower;
-            totals.pollution += stepPollution;
+              // Track total power and pollution
+              totals.power += stepPower;
+              totals.pollution += stepPollution;
+            }
           }
         }
       }

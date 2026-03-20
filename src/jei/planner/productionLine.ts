@@ -12,6 +12,7 @@ export type ProductionLineNode =
     amount: number;
     seedAmount?: number;
     isRoot?: true;
+    isSurplus?: true;
     recovery?: true;
     recoverySourceItemKey?: ItemKey;
     recoverySourceRecipeId?: string;
@@ -29,7 +30,20 @@ export type ProductionLineNode =
     nodeId: string;
     recipeId: string;
     recipeTypeKey?: string;
-    outputItemKey: ItemKey;
+    /** All output item keys produced by this recipe (may be > 1 for multi-output recipes). */
+    outputItemKeys: ItemKey[];
+    /**
+     * Per-output breakdown. Populated for multi-output recipes.
+     * `demanded` = total rate consumed downstream.
+     * `machineCountOwn` = machines needed purely for this output (can be fractional).
+     * `surplusRate` = capacity – demanded (> 0 only when another output drove a higher machine count).
+     */
+    outputDetails?: {
+      key: ItemKey;
+      demanded: number;
+      machineCountOwn: number;
+      surplusRate: number;
+    }[];
     amount: number;
     machineItemId?: string;
     machineName?: string;
@@ -46,6 +60,7 @@ export type ProductionLineEdge =
     itemKey: ItemKey;
     amount: number;
     recovery?: true;
+    surplus?: true;
   }
   | {
     kind: 'fluid';
@@ -79,6 +94,7 @@ type ItemNodeAgg = {
   itemKey: ItemKey;
   seedAmount: number;
   isRoot?: true;
+  isSurplus?: true;
   recovery?: true;
   recoverySourceItemKey?: ItemKey;
   recoverySourceRecipeId?: string;
@@ -114,7 +130,14 @@ export function buildProductionLineModel(args: {
     {
       recipeId: string;
       recipeTypeKey?: string;
-      outputItemKey: ItemKey;
+      /** All distinct output item keys registered for this recipe. First = primary. */
+      outputItemKeys: ItemKey[];
+      /** Per-output data: demanded rate and own machine count for each output. */
+      outputDetails: {
+        key: ItemKey;
+        demanded: number;
+        machineCountOwn: number;
+      }[];
       amount: number;
       machineItemId?: string;
       machineName?: string;
@@ -163,8 +186,8 @@ export function buildProductionLineModel(args: {
     return { id: `f:${k}`, key: k };
   };
 
-  const machineKeyFor = (recipeId: string, outputItemKey: ItemKey) =>
-    `${recipeId}:${itemKeyHash(outputItemKey)}`;
+  // Machine key uses only recipeId so that multi-output recipes share one node.
+  const machineKeyFor = (recipeId: string) => recipeId;
 
   const ensureMachineByRecipe = (args2: {
     recipeId: string;
@@ -173,13 +196,14 @@ export function buildProductionLineModel(args: {
     machineItemId?: string;
     machineName?: string;
   }) => {
-    const k = machineKeyFor(args2.recipeId, args2.outputItemKey);
+    const k = machineKeyFor(args2.recipeId);
     const prev = machineByKey.get(k);
     if (!prev) {
       machineByKey.set(k, {
         recipeId: args2.recipeId,
         ...(args2.recipeTypeKey ? { recipeTypeKey: args2.recipeTypeKey } : {}),
-        outputItemKey: args2.outputItemKey,
+        outputItemKeys: [args2.outputItemKey],
+        outputDetails: [],
         amount: 0,
         ...(args2.machineItemId ? { machineItemId: args2.machineItemId } : {}),
         ...(args2.machineName ? { machineName: args2.machineName } : {}),
@@ -188,6 +212,11 @@ export function buildProductionLineModel(args: {
       if (!prev.machineItemId && args2.machineItemId) prev.machineItemId = args2.machineItemId;
       if (!prev.machineName && args2.machineName) prev.machineName = args2.machineName;
       if (!prev.recipeTypeKey && args2.recipeTypeKey) prev.recipeTypeKey = args2.recipeTypeKey;
+      // Append outputItemKey if not already present (multi-output case)
+      const h = itemKeyHash(args2.outputItemKey);
+      if (!prev.outputItemKeys.some((k2) => itemKeyHash(k2) === h)) {
+        prev.outputItemKeys.push(args2.outputItemKey);
+      }
     }
     return { id: `m:${k}`, key: k };
   };
@@ -226,13 +255,82 @@ export function buildProductionLineModel(args: {
     prev.amount += edge.amount;
   };
 
-  const addMachineTotals = (machineKey: string, node: Extract<AnyNode, { kind: 'item' }>) => {
+  const addMachineTotals = (
+    machineKey: string,
+    node: Extract<AnyNode, { kind: 'item' }>,
+    mode: 'sum' | 'max' = 'sum',
+  ) => {
     const m = machineByKey.get(machineKey);
     if (!m) return;
     const mc = finiteOr((node as unknown as { machineCount?: unknown }).machineCount, 0);
     const machines = finiteOr((node as unknown as { machines?: unknown }).machines, 0);
-    if (Number.isFinite(mc) && mc > 0) m.machineCount = (m.machineCount ?? 0) + mc;
-    if (Number.isFinite(machines) && machines > 0) m.machines = (m.machines ?? 0) + machines;
+    if (mode === 'max') {
+      if (Number.isFinite(mc) && mc > 0) m.machineCount = Math.max(m.machineCount ?? 0, mc);
+      if (Number.isFinite(machines) && machines > 0) m.machines = Math.max(m.machines ?? 0, machines);
+    } else {
+      if (Number.isFinite(mc) && mc > 0) m.machineCount = (m.machineCount ?? 0) + mc;
+      if (Number.isFinite(machines) && machines > 0) m.machines = (m.machines ?? 0) + machines;
+    }
+  };
+
+  /** Register all child→machine input edges (item + fluid). Called only when new capacity is added. */
+  const processChildInputEdges = (
+    machine: { id: string; key: string },
+    node: Extract<AnyNode, { kind: 'item' }>,
+  ) => {
+    node.children.forEach((c) => {
+      if (c.kind === 'item') {
+        const childItem = ensureItem(
+          c.itemKey,
+          c.recovery
+            ? {
+                recovery: true,
+                ...(c.recoverySourceItemKey ? { recoverySourceItemKey: c.recoverySourceItemKey } : {}),
+                ...(c.recoverySourceRecipeId ? { recoverySourceRecipeId: c.recoverySourceRecipeId } : {}),
+                ...(c.recoverySourceRecipeTypeKey
+                  ? { recoverySourceRecipeTypeKey: c.recoverySourceRecipeTypeKey }
+                  : {}),
+              }
+            : undefined,
+        );
+        const cycleAmountNeeded = finiteOr(
+          (c as unknown as { cycleAmountNeeded?: unknown }).cycleAmountNeeded,
+          0,
+        );
+        const amount = c.cycleSeed && cycleAmountNeeded > 0 ? cycleAmountNeeded : finiteOr(c.amount, 0);
+        addEdge({
+          kind: 'item',
+          source: childItem.id,
+          target: machine.id,
+          itemKey: c.itemKey,
+          amount,
+          ...(c.recovery ? { recovery: true } : {}),
+        });
+        if (c.recovery) {
+          const sourceMachine = ensureRecoverySourceMachine(c);
+          if (sourceMachine) {
+            addEdge({
+              kind: 'item',
+              source: sourceMachine.id,
+              target: childItem.id,
+              itemKey: c.itemKey,
+              amount,
+              recovery: true,
+            });
+          }
+        }
+      } else {
+        const childFluid = ensureFluid(c.id, c.unit);
+        addEdge({
+          kind: 'fluid',
+          source: childFluid.id,
+          target: machine.id,
+          fluidId: c.id,
+          ...(c.unit ? { unit: c.unit } : {}),
+          amount: finiteOr(c.amount, 0),
+        });
+      }
+    });
   };
 
   const walk = (node: AnyNode) => {
@@ -264,11 +362,64 @@ export function buildProductionLineModel(args: {
     }
 
     const canBuildMachine = !!node.recipeIdUsed && !node.cycle && !node.recovery;
+    // Pre-check BEFORE ensureMachine modifies the map, so we can distinguish three cases:
+    //  A) Machine didn't exist yet → first-ever visit → SUM + process input edges
+    //  B) Machine existed, but this outputItemKey was not registered → secondary output of a
+    //     multi-output recipe → same physical machines → MAX, skip re-adding input edges
+    //  C) Machine existed, this outputItemKey was already registered → independent additional
+    //     demand for the same recipe output → SUM + process input edges
+    const machinePreExists =
+      canBuildMachine && machineByKey.has(machineKeyFor(node.recipeIdUsed!));
+    const outputKeyPreExists = machinePreExists && (() => {
+      const existingAgg = machineByKey.get(machineKeyFor(node.recipeIdUsed!))!;
+      const h = itemKeyHash(node.itemKey);
+      return existingAgg.outputItemKeys.some((k2) => itemKeyHash(k2) === h);
+    })();
     const machine = canBuildMachine ? ensureMachine(node) : null;
     if (machine) {
       const mAgg = machineByKey.get(machine.key)!;
-      mAgg.amount += finiteOr(node.amount, 0);
-      addMachineTotals(machine.key, node);
+      const mc = finiteOr((node as unknown as { machineCount?: unknown }).machineCount, 0);
+      const ownMachines = finiteOr((node as unknown as { machines?: unknown }).machines, 0);
+      const ownMachineCount = ownMachines > 0 ? ownMachines : mc > 0 ? mc : 0;
+      const detailMergeMode: 'sum' | 'max' =
+        machinePreExists && !outputKeyPreExists ? 'max' : 'sum';
+
+      if (!machinePreExists) {
+        // Case A: first-ever visit for this recipe.
+        mAgg.amount += finiteOr(node.amount, 0);
+        addMachineTotals(machine.key, node, 'sum');
+        processChildInputEdges(machine, node);
+      } else if (!outputKeyPreExists) {
+        // Case B: secondary output of multi-output recipe (same physical machines).
+        // Use MAX so we don't double-count machines already counted for the primary output.
+        addMachineTotals(machine.key, node, 'max');
+        // Do NOT re-add input edges (same machines → same inputs already registered).
+      } else {
+        // Case C: same outputItemKey seen again → independent additional demand.
+        mAgg.amount += finiteOr(node.amount, 0);
+        addMachineTotals(machine.key, node, 'sum');
+        processChildInputEdges(machine, node);
+      }
+
+      // Accumulate per-output details (demanded rate & own machine count).
+      const itemH = itemKeyHash(node.itemKey);
+      const existing = mAgg.outputDetails.find((d) => itemKeyHash(d.key) === itemH);
+      if (!existing) {
+        mAgg.outputDetails.push({
+          key: node.itemKey,
+          demanded: finiteOr(node.amount, 0),
+          machineCountOwn: ownMachineCount,
+        });
+      } else {
+        existing.demanded += finiteOr(node.amount, 0);
+        if (detailMergeMode === 'max') {
+          existing.machineCountOwn = Math.max(existing.machineCountOwn, ownMachineCount);
+        } else {
+          existing.machineCountOwn += ownMachineCount;
+        }
+      }
+
+      // Output edge: machine → this item node (always add, distinct per outputItemKey)
       addEdge({
         kind: 'item',
         source: machine.id,
@@ -276,66 +427,64 @@ export function buildProductionLineModel(args: {
         itemKey: node.itemKey,
         amount: finiteOr(node.amount, 0),
       });
-
-      node.children.forEach((c) => {
-        if (c.kind === 'item') {
-          const childItem = ensureItem(
-            c.itemKey,
-            c.recovery
-              ? {
-                  recovery: true,
-                  ...(c.recoverySourceItemKey ? { recoverySourceItemKey: c.recoverySourceItemKey } : {}),
-                  ...(c.recoverySourceRecipeId ? { recoverySourceRecipeId: c.recoverySourceRecipeId } : {}),
-                  ...(c.recoverySourceRecipeTypeKey
-                    ? { recoverySourceRecipeTypeKey: c.recoverySourceRecipeTypeKey }
-                    : {}),
-                }
-              : undefined,
-          );
-          const cycleAmountNeeded = finiteOr(
-            (c as unknown as { cycleAmountNeeded?: unknown }).cycleAmountNeeded,
-            0,
-          );
-          const amount = c.cycleSeed && cycleAmountNeeded > 0 ? cycleAmountNeeded : finiteOr(c.amount, 0);
-          addEdge({
-            kind: 'item',
-            source: childItem.id,
-            target: machine.id,
-            itemKey: c.itemKey,
-            amount,
-            ...(c.recovery ? { recovery: true } : {}),
-          });
-          if (c.recovery) {
-            const sourceMachine = ensureRecoverySourceMachine(c);
-            if (sourceMachine) {
-              addEdge({
-                kind: 'item',
-                source: sourceMachine.id,
-                target: childItem.id,
-                itemKey: c.itemKey,
-                amount,
-                recovery: true,
-              });
-            }
-          }
-        } else {
-          const childFluid = ensureFluid(c.id, c.unit);
-          addEdge({
-            kind: 'fluid',
-            source: childFluid.id,
-            target: machine.id,
-            fluidId: c.id,
-            ...(c.unit ? { unit: c.unit } : {}),
-            amount: finiteOr(c.amount, 0),
-          });
-        }
-      });
     }
 
     if (node.children.length) node.children.forEach(walk);
   };
 
   walk(args.root);
+
+  const machineNodes: ProductionLineNode[] = [];
+  machineByKey.forEach((v, k) => {
+    const effectiveMachineCount = (v.machines ?? 0) > 0 ? (v.machines ?? 0) : (v.machineCount ?? 0);
+    // Compute per-output surplus: when another output drove a higher machine count, the
+    // capacity for this output exceeds what was demanded.
+    const outputDetailsWithSurplus = v.outputDetails.map((d) => {
+      let surplusRate = 0;
+      if (effectiveMachineCount > 0 && d.machineCountOwn > 0 && d.machineCountOwn < effectiveMachineCount) {
+        // capacity = demanded / machineCountOwn * effectiveMachineCount
+        const capacity = (d.demanded / d.machineCountOwn) * effectiveMachineCount;
+        surplusRate = Math.max(0, capacity - d.demanded);
+      }
+      return { ...d, surplusRate };
+    });
+
+    machineNodes.push({
+      kind: 'machine',
+      nodeId: `m:${k}`,
+      recipeId: v.recipeId,
+      ...(v.recipeTypeKey ? { recipeTypeKey: v.recipeTypeKey } : {}),
+      outputItemKeys: v.outputItemKeys,
+      ...(outputDetailsWithSurplus.length > 0 ? { outputDetails: outputDetailsWithSurplus } : {}),
+      amount: v.amount,
+      ...(v.machineItemId ? { machineItemId: v.machineItemId } : {}),
+      ...(v.machineName ? { machineName: v.machineName } : {}),
+      ...(v.machineCount !== undefined ? { machineCount: v.machineCount } : {}),
+      ...(v.machines !== undefined ? { machines: v.machines } : {}),
+    });
+
+    // Emit surplus item nodes + edges for outputs that have idle capacity.
+    outputDetailsWithSurplus.forEach((d) => {
+      if (d.surplusRate < 1e-9) return;
+      // Node key for this surplus output: no shared node with demand nodes.
+      const surplusNodeKey = `surplus:m:${k}:${itemKeyHash(d.key)}`;
+      const surplusNodeId = `i:${surplusNodeKey}`;
+      if (!itemByNodeKey.has(surplusNodeKey)) {
+        itemByNodeKey.set(surplusNodeKey, { itemKey: d.key, seedAmount: d.surplusRate, isSurplus: true });
+      } else {
+        itemByNodeKey.get(surplusNodeKey)!.seedAmount += d.surplusRate; // reuse seedAmount as accumulator
+      }
+      edgeByKey.set(`m:${k}->surplus:${itemKeyHash(d.key)}`, {
+        id: `e:surplus:m:${k}->surplus:${itemKeyHash(d.key)}`,
+        kind: 'item',
+        source: `m:${k}`,
+        target: surplusNodeId,
+        itemKey: d.key,
+        amount: d.surplusRate,
+        surplus: true,
+      });
+    });
+  });
 
   const amountByNodeId = new Map<string, number>();
   Array.from(edgeByKey.values()).forEach((e) => {
@@ -355,14 +504,15 @@ export function buildProductionLineModel(args: {
   let nodes: ProductionLineNode[] = [];
   itemByNodeKey.forEach((v, key) => {
     const nodeId = `i:${key}`;
-    const amount = amountByNodeId.get(nodeId) ?? 0;
+    const amount = v.isSurplus ? v.seedAmount : (amountByNodeId.get(nodeId) ?? 0);
     nodes.push({
       kind: 'item',
       nodeId,
       itemKey: v.itemKey,
       amount,
-      ...(v.seedAmount > 0 ? { seedAmount: v.seedAmount } : {}),
+      ...(v.seedAmount > 0 && !v.isSurplus ? { seedAmount: v.seedAmount } : {}),
       ...(v.isRoot ? { isRoot: true } : {}),
+      ...(v.isSurplus ? { isSurplus: true } : {}),
       ...(v.recovery ? { recovery: true } : {}),
       ...(v.recoverySourceItemKey ? { recoverySourceItemKey: v.recoverySourceItemKey } : {}),
       ...(v.recoverySourceRecipeId ? { recoverySourceRecipeId: v.recoverySourceRecipeId } : {}),
@@ -382,20 +532,7 @@ export function buildProductionLineModel(args: {
       amount,
     });
   });
-  machineByKey.forEach((v, k) => {
-    nodes.push({
-      kind: 'machine',
-      nodeId: `m:${k}`,
-      recipeId: v.recipeId,
-      ...(v.recipeTypeKey ? { recipeTypeKey: v.recipeTypeKey } : {}),
-      outputItemKey: v.outputItemKey,
-      amount: v.amount,
-      ...(v.machineItemId ? { machineItemId: v.machineItemId } : {}),
-      ...(v.machineName ? { machineName: v.machineName } : {}),
-      ...(v.machineCount !== undefined ? { machineCount: v.machineCount } : {}),
-      ...(v.machines !== undefined ? { machines: v.machines } : {}),
-    });
-  });
+  nodes.push(...machineNodes);
 
   let edges: ProductionLineEdge[] = Array.from(edgeByKey.values());
 

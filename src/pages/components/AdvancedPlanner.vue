@@ -243,6 +243,32 @@
           :disable="pendingDecisions.length > 0"
           @click="openSaveDialog"
         />
+        <q-btn-dropdown
+          dense
+          outline
+          icon="share"
+          label="分享"
+          :disable="pendingDecisions.length > 0"
+        >
+          <q-list dense style="min-width: 180px">
+            <q-item clickable v-close-popup @click="shareAsUrl">
+              <q-item-section avatar><q-icon name="link" /></q-item-section>
+              <q-item-section>复制分享链接</q-item-section>
+            </q-item>
+            <q-item clickable v-close-popup @click="copyShareJson">
+              <q-item-section avatar><q-icon name="data_object" /></q-item-section>
+              <q-item-section>复制 JSON</q-item-section>
+            </q-item>
+            <q-item clickable v-close-popup @click="shareByJsonUrl">
+              <q-item-section avatar><q-icon name="link" /></q-item-section>
+              <q-item-section>用 JSON 链接分享</q-item-section>
+            </q-item>
+            <q-item clickable v-close-popup @click="importShareJson">
+              <q-item-section avatar><q-icon name="upload_file" /></q-item-section>
+              <q-item-section>导入 JSON</q-item-section>
+            </q-item>
+          </q-list>
+        </q-btn-dropdown>
         <q-chip dense color="primary" text-color="white">
           {{ targets.length }} {{ t('targetCount') }}
         </q-chip>
@@ -928,6 +954,7 @@
               <quant-flow-view
                 :mode="settingsStore.quantFlowRenderer"
                 :model="quantModel"
+                :node-positions="nodePositionMapToRecord(quantNodePositions)"
                 :item-defs-by-key-hash="itemDefsByKeyHash"
                 :display-unit="quantDisplayUnit"
                 :width-by-rate="quantWidthByRate"
@@ -935,6 +962,7 @@
                 :line-width-curve-config="lineWidthCurveConfig"
                 :line-width-scale="settingsStore.quantLineWidthScale"
                 :machine-count-decimals="settingsStore.machineCountDecimals"
+                @node-drag-stop="onQuantNodeDragStop"
               />
             </div>
             <div v-else class="text-center text-grey q-pa-lg">暂无节点</div>
@@ -1281,6 +1309,7 @@ import {
 import { ObjectiveType } from 'src/jei/planner/types';
 import type { ObjectiveState, ObjectiveUnit, PlannerResult } from 'src/jei/planner/types';
 import { solveAdvanced } from 'src/jei/planner/advancedPlanner';
+import { normalizeRecipe } from 'src/jei/planner/recipeAdapter';
 import { rational } from 'src/jei/planner/rational';
 import StackView from 'src/jei/components/StackView.vue';
 import RecipeViewer from 'src/jei/components/RecipeViewer.vue';
@@ -1294,7 +1323,20 @@ import {
   evaluateLineWidthCurve,
   type LineWidthCurveConfig,
 } from 'src/jei/planner/lineWidthCurve';
-import type { PlannerLiveState, PlannerSavePayload } from 'src/jei/planner/plannerUi';
+import type {
+  AdvancedPlannerTab,
+  AdvancedPlannerViewState,
+  PlannerLiveState,
+  PlannerNodePosition,
+  PlannerRateDisplayUnit,
+  PlannerSavePayload,
+  PlannerTargetUnit,
+} from 'src/jei/planner/plannerUi';
+import {
+  createPlannerShareData,
+  parsePlannerShareJson,
+  stringifyPlannerShareJson,
+} from 'src/jei/planner/plannerShare';
 import { useSettingsStore } from 'src/stores/settings';
 import { Background } from '@vue-flow/background';
 import { Controls } from '@vue-flow/controls';
@@ -1342,6 +1384,8 @@ const beltSpeed = computed(() => {
 
 const emit = defineEmits<{
   'save-plan': [payload: PlannerSavePayload];
+  'share-plan': [payload: PlannerSavePayload];
+  'share-plan-json-url': [payload: PlannerSavePayload];
   'state-change': [state: PlannerLiveState];
 }>();
 
@@ -1403,6 +1447,7 @@ const forcedRawItemKeyHashes = ref<Set<string>>(new Set());
 const useProductRecovery = ref(false);
 const selectedLineNodeId = ref<string | null>(null);
 const lineNodePositions = ref(new Map<string, { x: number; y: number }>());
+const quantNodePositions = ref(new Map<string, { x: number; y: number }>());
 const calcDisplayUnit = ref<'per_second' | 'per_minute' | 'per_hour'>('per_minute');
 
 const graphPageFull = ref(false);
@@ -1418,12 +1463,243 @@ const quantFlowWrapEl = ref<HTMLElement | null>(null);
 const saveDialogOpen = ref(false);
 const saveName = ref('');
 
+const VALID_ADVANCED_PLANNER_TABS = new Set<AdvancedPlannerTab>([
+  'summary',
+  'tree',
+  'graph',
+  'line',
+  'quant',
+  'calc',
+]);
+
+const VALID_RATE_DISPLAY_UNITS = new Set<PlannerRateDisplayUnit>([
+  'per_second',
+  'per_minute',
+  'per_hour',
+]);
+const VALID_TARGET_UNITS = new Set<PlannerTargetUnit>([
+  'items',
+  'per_second',
+  'per_minute',
+  'per_hour',
+]);
+
 const pendingDecisions = computed(() => allDecisions.value);
+
+function nodePositionMapToRecord(
+  value: Map<string, PlannerNodePosition>,
+): Record<string, PlannerNodePosition> {
+  const out: Record<string, PlannerNodePosition> = {};
+  value.forEach((pos, id) => {
+    const x = finiteOr(pos?.x, Number.NaN);
+    const y = finiteOr(pos?.y, Number.NaN);
+    if (!Number.isFinite(x) || !Number.isFinite(y)) return;
+    out[id] = { x, y };
+  });
+  return out;
+}
+
+function recordToNodePositionMap(
+  value: Record<string, PlannerNodePosition> | undefined,
+): Map<string, PlannerNodePosition> {
+  const out = new Map<string, PlannerNodePosition>();
+  if (!value || typeof value !== 'object') return out;
+  Object.entries(value).forEach(([id, pos]) => {
+    const x = finiteOr(pos?.x, Number.NaN);
+    const y = finiteOr(pos?.y, Number.NaN);
+    if (!Number.isFinite(x) || !Number.isFinite(y)) return;
+    out.set(id, { x, y });
+  });
+  return out;
+}
+
+function isRateDisplayUnit(value: unknown): value is PlannerRateDisplayUnit {
+  return typeof value === 'string' && VALID_RATE_DISPLAY_UNITS.has(value as PlannerRateDisplayUnit);
+}
+
+function isAdvancedPlannerTab(value: unknown): value is AdvancedPlannerTab {
+  return typeof value === 'string' && VALID_ADVANCED_PLANNER_TABS.has(value as AdvancedPlannerTab);
+}
+
+function isPlannerTargetUnit(value: unknown): value is PlannerTargetUnit {
+  return typeof value === 'string' && VALID_TARGET_UNITS.has(value as PlannerTargetUnit);
+}
+
+async function copyText(text: string): Promise<void> {
+  if (typeof navigator !== 'undefined' && navigator.clipboard?.writeText) {
+    await navigator.clipboard.writeText(text);
+    return;
+  }
+  window.prompt('请复制以下内容', text);
+}
+
+function buildCurrentPlanPayload(
+  name = `${targets.value[0]?.itemName ?? '多目标规划'} 线路`,
+): PlannerSavePayload | null {
+  if (!targets.value.length) return null;
+  return {
+    name,
+    rootItemKey: targets.value[0]!.itemKey,
+    targetAmount: targets.value[0]!.rate,
+    ...(isPlannerTargetUnit(targets.value[0]!.unit) ? { targetUnit: targets.value[0]!.unit } : {}),
+    useProductRecovery: useProductRecovery.value,
+    selectedRecipeIdByItemKeyHash: mapToRecord(selectedRecipeIdByItemKeyHash.value),
+    selectedItemIdByTagId: mapToRecord(selectedItemIdByTagId.value),
+    kind: 'advanced',
+    forcedRawItemKeyHashes: Array.from(forcedRawItemKeyHashes.value),
+    viewState: buildSavedViewState(),
+    targets: targets.value.map((t) => ({
+      itemKey: t.itemKey,
+      itemName: t.itemName,
+      value: t.rate,
+      rate: t.rate,
+      unit: t.unit as ObjectiveUnit,
+      type: t.type,
+    })),
+  };
+}
+
+function shareAsUrl(): void {
+  const payload = buildCurrentPlanPayload();
+  if (!payload) return;
+  emit('share-plan', payload);
+}
+
+function shareByJsonUrl(): void {
+  const payload = buildCurrentPlanPayload();
+  if (!payload) return;
+  emit('share-plan-json-url', payload);
+}
+
+function copyShareJson(): void {
+  const payload = buildCurrentPlanPayload();
+  if (!payload || !props.pack) return;
+  const share = createPlannerShareData(props.pack.manifest.packId, payload);
+  void copyText(stringifyPlannerShareJson(share))
+    .then(() => {
+      $q.notify({ type: 'positive', message: '线路 JSON 已复制。' });
+    })
+    .catch(() => {
+      $q.notify({ type: 'negative', message: '复制线路 JSON 失败。' });
+    });
+}
+
+function importShareJson(): void {
+  $q.dialog({
+    title: '导入线路 JSON',
+    message: '粘贴分享出来的线路 JSON。',
+    prompt: {
+      model: '',
+      type: 'textarea',
+    },
+    cancel: true,
+    ok: { label: '导入' },
+  }).onOk((text: unknown) => {
+    try {
+      const share = parsePlannerShareJson(typeof text === 'string' ? text : '');
+      if (!props.pack || share.packId !== props.pack.manifest.packId) {
+        $q.notify({ type: 'negative', message: `分享线路属于包 ${share.packId}，当前包不匹配。` });
+        return;
+      }
+      if (share.plan.kind !== 'advanced' || !share.plan.targets?.length) {
+        $q.notify({ type: 'negative', message: '这不是高级规划器分享。' });
+        return;
+      }
+      loadSavedPlan(share.plan);
+      $q.notify({ type: 'positive', message: '线路 JSON 已导入。' });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      $q.notify({ type: 'negative', message });
+    }
+  });
+}
+
+function buildSavedViewState(): AdvancedPlannerViewState {
+  return {
+    activeTab: activeTab.value,
+    line: {
+      displayUnit: lineDisplayUnit.value,
+      collapseIntermediate: lineCollapseIntermediate.value,
+      includeCycleSeeds: lineIncludeCycleSeeds.value,
+      selectedNodeId: selectedLineNodeId.value,
+      nodePositions: nodePositionMapToRecord(lineNodePositions.value),
+    },
+    quant: {
+      displayUnit: quantDisplayUnit.value,
+      showFluids: quantShowFluids.value,
+      widthByRate: quantWidthByRate.value,
+      nodePositions: nodePositionMapToRecord(quantNodePositions.value),
+    },
+    calc: {
+      displayUnit: calcDisplayUnit.value,
+    },
+  };
+}
+
+function applySavedViewState(viewState: AdvancedPlannerViewState | undefined): void {
+  if (isAdvancedPlannerTab(viewState?.activeTab)) {
+    activeTab.value = viewState.activeTab;
+  }
+
+  const lineView = viewState?.line;
+  if (isRateDisplayUnit(lineView?.displayUnit)) {
+    lineDisplayUnit.value = lineView.displayUnit;
+  }
+  if (typeof lineView?.collapseIntermediate === 'boolean') {
+    lineCollapseIntermediate.value = lineView.collapseIntermediate;
+  }
+  if (typeof lineView?.includeCycleSeeds === 'boolean') {
+    lineIncludeCycleSeeds.value = lineView.includeCycleSeeds;
+  }
+  selectedLineNodeId.value =
+    typeof lineView?.selectedNodeId === 'string' ? lineView.selectedNodeId : null;
+  lineNodePositions.value = recordToNodePositionMap(lineView?.nodePositions);
+
+  const quantView = viewState?.quant;
+  if (isRateDisplayUnit(quantView?.displayUnit)) {
+    quantDisplayUnit.value = quantView.displayUnit;
+  }
+  if (typeof quantView?.showFluids === 'boolean') {
+    quantShowFluids.value = quantView.showFluids;
+  }
+  if (typeof quantView?.widthByRate === 'boolean') {
+    quantWidthByRate.value = quantView.widthByRate;
+  }
+  quantNodePositions.value = recordToNodePositionMap(quantView?.nodePositions);
+
+  const calcView = viewState?.calc;
+  if (isRateDisplayUnit(calcView?.displayUnit)) {
+    calcDisplayUnit.value = calcView.displayUnit;
+  }
+}
 
 const rawItemTotals = computed(() => {
   const totals = new Map<ItemId, number>();
   if (!mergedTree.value) return totals;
 
+  // Pre-pass: find the maximum machineCount for each recipeId across the entire merged tree.
+  // For multi-output recipes, different targets may compute different rates; only the
+  // highest-rate (binding) occurrence should contribute raw-material consumption.
+  const maxMachineCountByRecipe = new Map<string, number>();
+  const prepass = (node: RequirementNode): void => {
+    if (node.kind !== 'item') return;
+    const n = node as RequirementNode & {
+      recipeIdUsed?: string;
+      machineCount?: number;
+      cycle?: boolean;
+      recovery?: boolean;
+    };
+    if (n.recipeIdUsed && !n.cycle && !n.recovery) {
+      const mc = n.machineCount ?? 0;
+      const existing = maxMachineCountByRecipe.get(n.recipeIdUsed) ?? 0;
+      if (mc > existing) maxMachineCountByRecipe.set(n.recipeIdUsed, mc);
+    }
+    node.children.forEach(prepass);
+  };
+  prepass(mergedTree.value.root);
+
+  // Main walk: for each recipe, skip lower-rate occurrences and only count the max-rate one.
+  const seenRecipeIds = new Set<string>();
   const walk = (node: RequirementNode) => {
     if (node.kind === 'fluid') return;
     if (node.kind === 'item') {
@@ -1432,7 +1708,22 @@ const rawItemTotals = computed(() => {
         const prev = totals.get(node.itemKey.id) ?? 0;
         totals.set(node.itemKey.id, prev + (node.amount ?? 0));
       }
-      node.children.forEach(walk);
+      if (!isLeaf) {
+        const n = node as RequirementNode & {
+          recipeIdUsed?: string;
+          machineCount?: number;
+          cycle?: boolean;
+          recovery?: boolean;
+        };
+        if (n.recipeIdUsed && !n.cycle && !n.recovery) {
+          const mc = n.machineCount ?? 0;
+          const maxMc = maxMachineCountByRecipe.get(n.recipeIdUsed) ?? 0;
+          if (mc < maxMc - 1e-9) return; // not the highest-rate occurrence — skip
+          if (seenRecipeIds.has(n.recipeIdUsed)) return; // max already counted
+          seenRecipeIds.add(n.recipeIdUsed);
+        }
+        node.children.forEach(walk);
+      }
     }
   };
 
@@ -1444,13 +1735,48 @@ const rawFluidTotals = computed(() => {
   const totals = new Map<string, number>();
   if (!mergedTree.value) return totals;
 
+  // Same pre-pass as rawItemTotals: find max machineCount per recipeId.
+  const maxMachineCountByRecipe = new Map<string, number>();
+  const prepass = (node: RequirementNode): void => {
+    if (node.kind !== 'item') return;
+    const n = node as RequirementNode & {
+      recipeIdUsed?: string;
+      machineCount?: number;
+      cycle?: boolean;
+      recovery?: boolean;
+    };
+    if (n.recipeIdUsed && !n.cycle && !n.recovery) {
+      const mc = n.machineCount ?? 0;
+      const existing = maxMachineCountByRecipe.get(n.recipeIdUsed) ?? 0;
+      if (mc > existing) maxMachineCountByRecipe.set(n.recipeIdUsed, mc);
+    }
+    node.children.forEach(prepass);
+  };
+  prepass(mergedTree.value.root);
+
+  const seenRecipeIds = new Set<string>();
   const walk = (node: RequirementNode) => {
     if (node.kind === 'fluid') {
       const prev = totals.get(node.id) ?? 0;
       totals.set(node.id, prev + (node.amount ?? 0));
       return;
     }
-    if (node.kind === 'item') node.children.forEach(walk);
+    if (node.kind === 'item') {
+      const n = node as RequirementNode & {
+        recipeIdUsed?: string;
+        machineCount?: number;
+        cycle?: boolean;
+        recovery?: boolean;
+      };
+      if (n.recipeIdUsed && !n.cycle && !n.recovery) {
+        const mc = n.machineCount ?? 0;
+        const maxMc = maxMachineCountByRecipe.get(n.recipeIdUsed) ?? 0;
+        if (mc < maxMc - 1e-9) return;
+        if (seenRecipeIds.has(n.recipeIdUsed)) return;
+        seenRecipeIds.add(n.recipeIdUsed);
+      }
+      node.children.forEach(walk);
+    }
   };
 
   walk(mergedTree.value.root);
@@ -1625,15 +1951,38 @@ const buildMergedTree = () => {
       pollution: 0,
     } satisfies EnhancedBuildTreeResult['totals'];
 
+    // Merge machine counts by recipeId (same recipe in multiple trees → MAX, not SUM);
+    // different recipes sharing the same machine type are still summed correctly.
+    const mergedRecipeMachines = new Map<string, { machineItemId: ItemId; count: number }>();
     for (const tree of trees) {
-      for (const [itemId, count] of tree.totals.machines.entries()) {
-        totals.machines.set(itemId, (totals.machines.get(itemId) ?? 0) + count);
-      }
+      const walkRecipes = (node: RequirementNode): void => {
+        if (node.kind !== 'item') return;
+        const n = node as RequirementNode & {
+          recipeIdUsed?: string;
+          machineItemId?: ItemId;
+          machineCount?: number;
+          cycle?: boolean;
+          recovery?: boolean;
+        };
+        if (n.recipeIdUsed && n.machineItemId && !n.cycle && !n.recovery) {
+          const count = n.machineCount ?? 0;
+          const existing = mergedRecipeMachines.get(n.recipeIdUsed);
+          if (!existing || count > existing.count) {
+            mergedRecipeMachines.set(n.recipeIdUsed, { machineItemId: n.machineItemId, count });
+          }
+        }
+        node.children.forEach(walkRecipes);
+      };
+      walkRecipes(tree.root);
       for (const [itemId, perSecond] of tree.totals.perSecond.entries()) {
         totals.perSecond.set(itemId, (totals.perSecond.get(itemId) ?? 0) + perSecond);
       }
       totals.power += tree.totals.power;
       totals.pollution += tree.totals.pollution;
+    }
+    // Rebuild machines total from deduplicated per-recipe data.
+    for (const { machineItemId, count } of mergedRecipeMachines.values()) {
+      totals.machines.set(machineItemId, (totals.machines.get(machineItemId) ?? 0) + count);
     }
 
     if (trees.length === 1) {
@@ -1703,6 +2052,8 @@ const loadSavedPlan = (payload: PlannerSavePayload) => {
   );
   selectedItemIdByTagId.value = new Map(Object.entries(payload.selectedItemIdByTagId ?? {}));
   useProductRecovery.value = payload.useProductRecovery === true;
+  forcedRawItemKeyHashes.value = new Set(payload.forcedRawItemKeyHashes ?? []);
+  applySavedViewState(payload.viewState);
   emitLiveState();
 
   allDecisions.value = [];
@@ -1765,6 +2116,9 @@ const resetPlanning = () => {
   mergedTree.value = null;
   mergedRootItemKey.value = null;
   collapsed.value = new Set();
+  selectedLineNodeId.value = null;
+  lineNodePositions.value = new Map();
+  quantNodePositions.value = new Map();
 };
 
 const invalidatePlanningIfNeeded = () => {
@@ -1793,10 +2147,20 @@ const runLpSolve = () => {
     .then((result) => {
       lpResult.value = result;
       lpSolving.value = false;
-      // 把 LP 求出的配方选择全部回写，覆盖已有选择，保证树与 LP 结果一致
+      // 把 LP 求出的配方选择全部回写，覆盖已有选择，保证树与 LP 结果一致。
+      // 对于多产物配方（如精炼炉），LP 每条配方只生成一个 Step（主产物），
+      // 但副产物也需映射到同一配方；否则副产物目标会 fallback 到错误配方。
       const merged = new Map(selectedRecipeIdByItemKeyHash.value);
       for (const step of result.steps) {
-        if (step.recipeId && step.itemKey) {
+        if (!step.recipeId) continue;
+        const recipe = props.index!.recipesById.get(step.recipeId);
+        if (recipe) {
+          const recipeType = props.index!.recipeTypesByKey.get(recipe.type);
+          const norm = normalizeRecipe(recipe, recipeType);
+          for (const { key } of norm.outputItems) {
+            merged.set(itemKeyHash(key), step.recipeId);
+          }
+        } else if (step.itemKey) {
           merged.set(itemKeyHash(step.itemKey), step.recipeId);
         }
       }
@@ -2008,9 +2372,12 @@ function mapToRecord<V extends string>(m: Map<string, V>): Record<string, V> {
 function emitLiveState() {
   emit('state-change', {
     targetAmount: targets.value[0]?.rate ?? 1,
+    ...(isPlannerTargetUnit(targets.value[0]?.unit) ? { targetUnit: targets.value[0]?.unit } : {}),
     useProductRecovery: useProductRecovery.value,
     selectedRecipeIdByItemKeyHash: mapToRecord(selectedRecipeIdByItemKeyHash.value),
     selectedItemIdByTagId: mapToRecord(selectedItemIdByTagId.value),
+    forcedRawItemKeyHashes: Array.from(forcedRawItemKeyHashes.value),
+    viewState: buildSavedViewState(),
   });
 }
 
@@ -2021,24 +2388,8 @@ function openSaveDialog() {
 }
 
 function confirmSave() {
-  if (!targets.value.length) return;
-  const payload: PlannerSavePayload = {
-    name: saveName.value.trim(),
-    rootItemKey: targets.value[0]!.itemKey,
-    targetAmount: targets.value[0]!.rate,
-    useProductRecovery: useProductRecovery.value,
-    selectedRecipeIdByItemKeyHash: mapToRecord(selectedRecipeIdByItemKeyHash.value),
-    selectedItemIdByTagId: mapToRecord(selectedItemIdByTagId.value),
-    kind: 'advanced',
-    targets: targets.value.map((t) => ({
-      itemKey: t.itemKey,
-      itemName: t.itemName,
-      value: t.rate,
-      rate: t.rate,
-      unit: t.unit as ObjectiveUnit,
-      type: t.type,
-    })),
-  };
+  const payload = buildCurrentPlanPayload(saveName.value.trim());
+  if (!payload) return;
   emit('save-plan', payload);
   saveDialogOpen.value = false;
 }
@@ -2068,6 +2419,12 @@ function onLineNodeDragStop(evt: { node: Node }) {
   const next = new Map(lineNodePositions.value);
   next.set(evt.node.id, { ...evt.node.position });
   lineNodePositions.value = next;
+}
+
+function onQuantNodeDragStop(evt: { node: { id: string; position: { x: number; y: number } } }) {
+  const next = new Map(quantNodePositions.value);
+  next.set(evt.node.id, { ...evt.node.position });
+  quantNodePositions.value = next;
 }
 
 function onGraphNodeDragStop(evt: { node: Node }) {
@@ -2325,6 +2682,7 @@ type LineFlowItemData = {
   title: string;
   subtitle: string;
   isRoot: boolean;
+  isSurplus?: boolean;
   forcedRaw: boolean;
   recovery?: boolean;
   recoverySource?: string;
@@ -2336,7 +2694,18 @@ type LineFlowMachineData = {
   subtitle: string;
   machineItemId?: string;
   machineCount?: number;
-  outputItemKey: ItemKey;
+  outputItemKeys: ItemKey[];
+  outputDetails?: {
+    key: ItemKey;
+    demanded: number;
+    machineCountOwn: number;
+    surplusRate: number;
+    outputName?: string;
+    demandedText: string;
+    usedText?: string;
+    producedText?: string;
+    surplusText?: string;
+  }[];
   inPorts: number;
   outPorts: number;
 };
@@ -2351,6 +2720,7 @@ type LineFlowEdgeData = {
   itemKey?: ItemKey;
   fluidId?: string;
   recovery?: boolean;
+  surplus?: boolean;
 };
 
 const graphFlow = computed(() => {
@@ -2434,6 +2804,10 @@ const graphFlow = computed(() => {
 
   countLeaves(mergedTree.value.root);
 
+  // Deduplicate multi-output recipes: track first graph node created per recipeId.
+  // Secondary occurrences of the same recipe redirect to the existing node.
+  const seenRecipeToNodeId = new Map<string, string>();
+
   const walk = (
     node: RequirementNode,
     depth: number,
@@ -2487,6 +2861,22 @@ const graphFlow = computed(() => {
       const rate = nodeDisplayRateByUnit(node, graphDisplayUnit.value);
       const subtitle = `${formatAmount(rate)}${unitSuffix(graphDisplayUnit.value)}`;
       const recoverySource = node.recovery ? recoverySourceText(node) : '';
+
+      // Merge same-recipe nodes: if the recipe already has a node, reuse it.
+      if (!node.recovery && !node.cycle && node.recipeIdUsed) {
+        const existingId = seenRecipeToNodeId.get(node.recipeIdUsed);
+        if (existingId) {
+          // Secondary output of an already-placed recipe — point parent edge to the primary node.
+          const existingNode = nodes.find((n) => n.id === existingId);
+          if (existingNode && machineCount > 0) {
+            const existingMc = (existingNode.data as GraphNodeData).machineCount ?? 0;
+            if (machineCount > existingMc)
+              (existingNode.data as GraphNodeData).machineCount = Math.round(machineCount);
+          }
+          return existingId;
+        }
+        seenRecipeToNodeId.set(node.recipeIdUsed, nodeId);
+      }
 
       nodes.push({
         id: nodeId,
@@ -2730,6 +3120,24 @@ const lineModel = computed<ReturnType<typeof buildProductionLineModel>>(() => {
         }
         if (!prev.machineItemId && n.machineItemId) prev.machineItemId = n.machineItemId;
         if (!prev.machineName && n.machineName) prev.machineName = n.machineName;
+        n.outputItemKeys.forEach((k2) => {
+          const h2 = itemKeyHash(k2);
+          if (!prev.outputItemKeys.some((x) => itemKeyHash(x) === h2)) prev.outputItemKeys.push(k2);
+        });
+        if (n.outputDetails?.length) {
+          if (!prev.outputDetails) prev.outputDetails = [];
+          n.outputDetails.forEach((d) => {
+            const h2 = itemKeyHash(d.key);
+            const existing = prev.outputDetails!.find((x) => itemKeyHash(x.key) === h2);
+            if (!existing) {
+              prev.outputDetails!.push({ ...d });
+              return;
+            }
+            existing.demanded += d.demanded;
+            existing.machineCountOwn += d.machineCountOwn;
+            existing.surplusRate += d.surplusRate;
+          });
+        }
       }
     });
 
@@ -2769,7 +3177,7 @@ const lineFlow = computed(() => {
         lineIncludeCycleSeeds.value && n.seedAmount && n.seedAmount > 0
           ? ` (seed ${formatAmount(n.seedAmount)})`
           : '';
-      const subtitle = `${base}${seed}`;
+      const subtitle = n.isSurplus ? `冗余 +${base}` : `${base}${seed}`;
       const title = itemName(n.itemKey);
       const recoverySource = n.recovery ? recoverySourceText(n) : '';
       titleById.set(n.nodeId, title);
@@ -2784,7 +3192,8 @@ const lineFlow = computed(() => {
           title,
           subtitle,
           isRoot: !!n.isRoot,
-          forcedRaw: !n.recovery && isForcedRawKey(n.itemKey),
+          ...(n.isSurplus ? { isSurplus: true } : {}),
+          forcedRaw: !n.isSurplus && !n.recovery && isForcedRawKey(n.itemKey),
           ...(n.recovery ? { recovery: true, recoverySource } : {}),
           inPorts: 0,
           outPorts: 0,
@@ -2810,8 +3219,18 @@ const lineFlow = computed(() => {
     }
 
     const title = n.machineName ?? n.recipeTypeKey ?? n.recipeId;
-    const outName = itemName(n.outputItemKey);
-    const subtitle = `${outName} ${formatAmount(displayRateFromAmount(n.amount, unit))}${unitText}`;
+    const primaryOut = n.outputItemKeys[0];
+    const outName = primaryOut ? itemName(primaryOut) : title;
+    const outputDetails = n.outputDetails ?? [];
+    const totalProduced = outputDetails.reduce(
+      (acc, d) => acc + d.demanded + Math.max(0, d.surplusRate),
+      0,
+    );
+    const totalUsed = outputDetails.reduce((acc, d) => acc + d.demanded, 0);
+    const subtitle =
+      outputDetails.length > 0
+        ? `总产 ${formatAmount(displayRateFromAmount(totalProduced, unit))}${unitText} / 已用 ${formatAmount(displayRateFromAmount(totalUsed, unit))}${unitText}`
+        : `${outName} ${formatAmount(displayRateFromAmount(n.amount, unit))}${unitText}`;
     titleById.set(n.nodeId, title);
     return {
       id: n.nodeId,
@@ -2829,7 +3248,23 @@ const lineFlow = computed(() => {
               return machineCount > 0 ? { machineCount } : {};
             })()
           : {}),
-        outputItemKey: n.outputItemKey,
+        outputItemKeys: n.outputItemKeys,
+        ...(n.outputDetails
+          ? {
+              outputDetails: n.outputDetails.map((d) => ({
+                ...d,
+                outputName: itemName(d.key),
+                demandedText: `${formatAmount(displayRateFromAmount(d.demanded, unit))}${unitText}`,
+                usedText: `${formatAmount(displayRateFromAmount(d.demanded, unit))}${unitText}`,
+                producedText: `${formatAmount(displayRateFromAmount(d.demanded + Math.max(0, d.surplusRate), unit))}${unitText}`,
+                ...(d.surplusRate > 1e-9
+                  ? {
+                      surplusText: `${formatAmount(displayRateFromAmount(d.surplusRate, unit))}${unitText}`,
+                    }
+                  : {}),
+              })),
+            }
+          : {}),
         inPorts: 0,
         outPorts: 0,
       } satisfies LineFlowMachineData,
@@ -2838,7 +3273,8 @@ const lineFlow = computed(() => {
 
   const edges: Edge[] = model.edges.map((e) => {
     const recovery = e.kind === 'item' && e.recovery;
-    const label = `${formatAmount(displayRateFromAmount(e.amount, unit))}${unitText}${recovery ? ' ♻' : ''}`;
+    const surplus = e.kind === 'item' && e.surplus;
+    const label = `${formatAmount(displayRateFromAmount(e.amount, unit))}${unitText}${recovery ? ' ♻' : surplus ? ' □' : ''}`;
     return {
       id: e.id,
       source: e.source,
@@ -2852,11 +3288,13 @@ const lineFlow = computed(() => {
       style: {
         strokeWidth: lineEdgeBaseWidthFromRate(e.amount),
         ...(recovery ? { stroke: '#26a69a', strokeDasharray: '6 4' } : {}),
+        ...(surplus ? { stroke: '#f59e0b', strokeDasharray: '6 4', opacity: 0.75 } : {}),
       },
       data: {
         kind: e.kind,
         ...(e.kind === 'item' ? { itemKey: e.itemKey } : { fluidId: e.fluidId }),
         ...(recovery ? { recovery: true } : {}),
+        ...(surplus ? { surplus: true } : {}),
       } satisfies LineFlowEdgeData,
       markerEnd: {
         type: MarkerType.ArrowClosed,

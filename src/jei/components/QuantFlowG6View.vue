@@ -8,7 +8,7 @@
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import { Dark } from 'quasar';
 import { Graph } from '@antv/g6';
-import type { GraphData } from '@antv/g6';
+import type { EdgeData, GraphData } from '@antv/g6';
 import type { ItemDef, ItemKey } from 'src/jei/types';
 import type { QuantFlowEdge, QuantFlowNode } from 'src/jei/planner/quantFlow';
 import { itemKeyHash } from 'src/jei/indexing/key';
@@ -29,6 +29,7 @@ type QuantModel = {
 const props = withDefaults(
   defineProps<{
     model: QuantModel;
+    nodePositions?: Record<string, { x: number; y: number }>;
     itemDefsByKeyHash: Record<string, ItemDef>;
     displayUnit: DisplayUnit;
     widthByRate: boolean;
@@ -46,6 +47,7 @@ const props = withDefaults(
 );
 
 const emit = defineEmits<{
+  (e: 'node-drag-stop', evt: { node: { id: string; position: { x: number; y: number } } }): void;
   (e: 'item-click', itemKey: ItemKey): void;
   (e: 'item-mouseenter', keyHash: string): void;
   (e: 'item-mouseleave'): void;
@@ -108,10 +110,12 @@ function edgeBaseWidthFromRate(amountPerMinute: number): number {
 
 function edgeArrowSizeFromLineWidth(lineWidth: number): number {
   const w = Math.max(1, finiteOr(lineWidth, 2));
-  return Math.max(6, Math.min(26, Math.round(w * 1.9)));
+  return Math.max(10, Math.round(w + 8));
 }
 
 const modelNodeMap = computed(() => new Map(props.model.nodes.map((n) => [n.nodeId, n] as const)));
+
+const modelNodeIdSet = computed(() => new Set(props.model.nodes.map((node) => node.nodeId)));
 
 function itemColorOfDef(def?: ItemDef): string | null {
   const fromDef = (def as { color?: string } | undefined)?.color?.trim();
@@ -394,7 +398,7 @@ function toGraphData(): GraphData {
     };
   });
 
-  const edges = props.model.edges.map((edge) => {
+  const edges: EdgeData[] = props.model.edges.map((edge) => {
     const fluid = edge.kind === 'fluid';
     const recovery = edge.kind === 'item' && edge.recovery;
     const edgeItemColor =
@@ -447,6 +451,7 @@ function toGraphData(): GraphData {
         ...(recovery ? { lineDash: [6, 4] } : {}),
         curveOffset: 0,
         endArrow: true,
+        endArrowType: 'triangle',
         endArrowFill: stroke,
         endArrowSize: edgeArrowSizeFromLineWidth(edgeLineWidth),
         label: true,
@@ -468,11 +473,25 @@ function eventNodeId(event: unknown): string | null {
   return evt?.target?.id ?? evt?.data?.id ?? null;
 }
 
+async function applyPersistedNodePositions() {
+  if (!graph) return;
+  const positions = Object.entries(props.nodePositions ?? {})
+    .filter(([id, pos]) => {
+      if (!modelNodeIdSet.value.has(id)) return false;
+      return Number.isFinite(pos?.x) && Number.isFinite(pos?.y);
+    })
+    .map(([id, pos]) => [id, [pos.x, pos.y] as [number, number]]);
+  if (!positions.length) return;
+  await graph.translateElementTo(Object.fromEntries(positions), false);
+}
+
 async function renderGraph(fitView: boolean) {
   if (!graph) return;
   const token = ++renderToken;
   graph.setData(toGraphData());
   await graph.render();
+  if (token !== renderToken) return;
+  await applyPersistedNodePositions();
   if (token !== renderToken) return;
   if (fitView) {
     await graph.fitView();
@@ -545,6 +564,21 @@ onMounted(() => {
     clearHoverEmit();
   });
 
+  graph.on('node:dragend', (evt) => {
+    const id = eventNodeId(evt);
+    if (!id || !graph) return;
+    const position = graph.getElementPosition(id);
+    emit('node-drag-stop', {
+      node: {
+        id,
+        position: {
+          x: finiteOr(position[0], 0),
+          y: finiteOr(position[1], 0),
+        },
+      },
+    });
+  });
+
   void renderGraph(true);
   void ensureResolvedIcons().then(() => renderGraph(false));
 
@@ -566,6 +600,7 @@ onMounted(() => {
 watch(
   () => [
     props.model,
+    props.nodePositions,
     props.itemDefsByKeyHash,
     props.displayUnit,
     props.widthByRate,

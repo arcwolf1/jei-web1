@@ -2,6 +2,7 @@
   <quant-flow-g6-view
     v-if="mode === 'nodes'"
     :model="model"
+    :node-positions="nodePositions ?? {}"
     :item-defs-by-key-hash="itemDefsByKeyHash"
     :display-unit="displayUnit"
     :width-by-rate="widthByRate"
@@ -9,6 +10,7 @@
     :line-width-curve-config="lineWidthCurveConfig"
     :line-width-scale="lineWidthScale"
     :machine-count-decimals="machineCountDecimals"
+    @node-drag-stop="$emit('node-drag-stop', $event)"
     @item-click="$emit('item-click', $event)"
     @item-mouseenter="$emit('item-mouseenter', $event)"
     @item-mouseleave="$emit('item-mouseleave')"
@@ -38,6 +40,7 @@ type DisplayUnit = 'items' | 'per_second' | 'per_minute' | 'per_hour';
 defineProps<{
   mode: 'nodes' | 'sankey';
   model: { nodes: QuantFlowNode[]; edges: QuantFlowEdge[] };
+  nodePositions?: Record<string, { x: number; y: number }>;
   itemDefsByKeyHash: Record<string, ItemDef>;
   displayUnit: DisplayUnit;
   widthByRate: boolean;
@@ -48,6 +51,7 @@ defineProps<{
 }>();
 
 defineEmits<{
+  (e: 'node-drag-stop', evt: { node: { id: string; position: { x: number; y: number } } }): void;
   (e: 'item-click', itemKey: ItemKey): void;
   (e: 'item-mouseenter', keyHash: string): void;
   (e: 'item-mouseleave'): void;

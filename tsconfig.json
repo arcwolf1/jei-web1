@@ -2,5 +2,13 @@
   "extends": "./.quasar/tsconfig.json",
   "compilerOptions": {
     "allowImportingTsExtensions": true
-  }
+  },
+  "exclude": [
+    "dist",
+    "node_modules",
+    "scripts",
+    "warfarin-wiki-scraper",
+    "gamekee-data-source",
+    "scrapers"
+  ]
 }

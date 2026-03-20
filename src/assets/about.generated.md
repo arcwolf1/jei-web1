@@ -1,16 +1,47 @@
 # About
 
 ## Build
-- Version: fac9f72-dirty
-- Commit: fac9f72 (fac9f728c56bb84c8ab80b2daaf252a9df2f6918)
-- Commit count: 127
-- Subject: feat: 添加生产线G6缩放因子和机器数量小数位设置，优化相关组件
+- Version: f03863e-dirty
+- Commit: f03863e (f03863e8976e274a7c7b96dd8b622d535ab49b0c)
+- Commit count: 131
+- Subject: feat: 添加FreskyZ-flow-vue子模块，更新关于文档和tsconfig配置
 - Author: AndreaFrederica
-- Date: 2026-03-13T05:42:26+08:00
-- Generated at: 2026-03-12T21:54:23.917Z
+- Date: 2026-03-17T21:24:35+08:00
+- Generated at: 2026-03-17T16:56:52.660Z
 - Remote: https://github.com/AndreaFrederica/jei-web.git
 
 ## Version History
+
+### r131 (2026-03-17T21:24:35+08:00)
+- f03863e
+  feat: 添加FreskyZ-flow-vue子模块，更新关于文档和tsconfig配置
+
+### r130 (2026-03-17T18:36:15+08:00)
+- 36b8663
+  fix: 修复了多产物合成的正确表达和计算 但是lp模式仍存在部分问题 需要修复（lp的某些循环计算可能有bug 需要谨慎对待）
+
+### r129 (2026-03-14T04:18:50+08:00)
+- 57cb40d
+  feat(planner): implement advanced objective entries and recipe normalization
+  
+  - Introduced AdvancedObjectiveEntry type for multi-objective planning.
+  - Updated PlannerSavePayload to support advanced targets.
+  - Added recipeAdapter.ts to normalize recipes into a flat structure for linear programming.
+  - Enhanced IndexPage.vue to handle advanced objectives and their types.
+  - Modified AdvancedPlanner.vue to support LP optimization mode and display LP raw data.
+  - Updated settings store to include line width configuration and related methods.
+
+### r128 (2026-03-13T07:19:21+08:00)
+- f24abf0
+  feat(sankey-lib): implement Sankey diagram functionality and quant flow renderer settings
+  
+  - Added core functionalities for Sankey diagrams including node and link models, layout calculations, and rendering utilities.
+  - Introduced `constant` function for consistent value retrieval.
+  - Implemented `minFAS` for determining link directions to maintain acyclic graphs.
+  - Created `sankey` function to generate Sankey layouts with customizable node and link properties.
+  - Added `sankeyLinkHorizontal` and `BumpSankeyLoop` for horizontal link rendering.
+  - Enhanced settings management to include quant flow renderer options (nodes and sankey) in the application.
+  - Updated UI components to support new quant flow renderer settings and integrated them into the settings dialog.
 
 ### r127 (2026-03-13T05:42:26+08:00)
 - fac9f72

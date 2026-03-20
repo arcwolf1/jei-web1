@@ -26,6 +26,7 @@
         :class="{
           'planner__flow-node--selected': selectedNodeId === p.id,
           'planner__flow-node--recovery': p.data.recovery,
+          'planner__flow-node--surplus': p.data.isSurplus,
         }"
         @click.stop="emit('update:selected-node-id', p.id)"
       >
@@ -47,7 +48,10 @@
           class="planner__handle"
           :style="{ top: `${(i / (p.data.outPorts + 1)) * 100}%` }"
         />
-        <div class="planner__flow-node-icon cursor-pointer" @click="emit('item-click', p.data.itemKey)">
+        <div
+          class="planner__flow-node-icon cursor-pointer"
+          @click="emit('item-click', p.data.itemKey)"
+        >
           <stack-view
             class="nopan"
             :content="{
@@ -65,7 +69,11 @@
             @item-mouseleave="emit('item-mouseleave')"
           />
         </div>
-        <div class="planner__flow-node-text" @click.stop="emit('update:selected-node-id', p.id)" @dblclick.stop>
+        <div
+          class="planner__flow-node-text"
+          @click.stop="emit('update:selected-node-id', p.id)"
+          @dblclick.stop
+        >
           <div class="planner__flow-node-title">{{ p.data.title }}</div>
           <div class="planner__flow-node-sub">
             {{ p.data.subtitle }}
@@ -101,7 +109,9 @@
           type="source"
           :position="Position.Right"
           class="planner__handle"
-          :style="{ top: p.data.outPorts === 1 ? '50%' : `${((i - 0.5) / p.data.outPorts) * 100}%` }"
+          :style="{
+            top: p.data.outPorts === 1 ? '50%' : `${((i - 0.5) / p.data.outPorts) * 100}%`,
+          }"
         />
         <div class="planner__flow-node-icon">
           <stack-view
@@ -117,30 +127,55 @@
           />
           <div v-else class="planner__flow-node-icon-fallback">M</div>
         </div>
-        <div class="planner__flow-node-text" @click.stop="emit('update:selected-node-id', p.id)" @dblclick.stop>
-          <div class="planner__flow-node-title">{{ p.data.title }}</div>
-          <div class="planner__flow-node-sub">
-            {{ p.data.subtitle }}
-            <q-badge v-if="p.data.machineCount" color="accent" class="q-ml-xs">x{{ p.data.machineCount }}</q-badge>
+        <div
+          class="planner__flow-node-text"
+          @click.stop="emit('update:selected-node-id', p.id)"
+          @dblclick.stop
+        >
+          <div class="planner__flow-node-title">
+            {{ p.data.title }}
+            <q-badge v-if="p.data.machineCount" color="accent" class="q-ml-xs"
+              >x{{ p.data.machineCount }}</q-badge
+            >
           </div>
+          <div class="planner__flow-node-sub">{{ p.data.subtitle }}</div>
         </div>
-        <div class="planner__flow-node-icon cursor-pointer" @click="emit('item-click', p.data.outputItemKey)">
-          <stack-view
-            class="nopan"
-            :content="{
-              kind: 'item',
-              id: p.data.outputItemKey.id,
-              amount: 1,
-              ...(p.data.outputItemKey.meta !== undefined ? { meta: p.data.outputItemKey.meta } : {}),
-              ...(p.data.outputItemKey.nbt !== undefined ? { nbt: p.data.outputItemKey.nbt } : {}),
-            }"
-            :item-defs-by-key-hash="itemDefsByKeyHash"
-            variant="slot"
-            :show-name="false"
-            :show-subtitle="false"
-            @item-mouseenter="emit('item-mouseenter', $event)"
-            @item-mouseleave="emit('item-mouseleave')"
-          />
+        <div class="planner__flow-node-outputs">
+          <div
+            v-for="outDetail in getMachineOutputDetails(p.data)"
+            :key="`${outDetail.key.id}:${outDetail.key.meta ?? ''}:${outDetail.key.nbt ?? ''}`"
+            class="planner__flow-node-output-row cursor-pointer"
+            @click="emit('item-click', outDetail.key)"
+          >
+            <stack-view
+              class="nopan"
+              :content="{
+                kind: 'item',
+                id: outDetail.key.id,
+                amount: 1,
+                ...(outDetail.key.meta !== undefined ? { meta: outDetail.key.meta } : {}),
+                ...(outDetail.key.nbt !== undefined ? { nbt: outDetail.key.nbt } : {}),
+              }"
+              :item-defs-by-key-hash="itemDefsByKeyHash"
+              variant="slot"
+              :show-name="false"
+              :show-subtitle="false"
+              @item-mouseenter="emit('item-mouseenter', $event)"
+              @item-mouseleave="emit('item-mouseleave')"
+            />
+            <div class="planner__flow-node-output-meta">
+              <span class="planner__flow-node-output-name">{{ outputNameOf(outDetail) }}</span>
+              <span class="planner__flow-node-output-produced">
+                总 {{ outputProducedTextOf(outDetail) }}
+              </span>
+              <span class="planner__flow-node-output-used"
+                >用 {{ outputUsedTextOf(outDetail) }}</span
+              >
+              <span v-if="outDetail.surplusText" class="planner__flow-node-output-surplus">
+                余 {{ outDetail.surplusText }}
+              </span>
+            </div>
+          </div>
         </div>
       </div>
     </template>
@@ -166,9 +201,15 @@
           type="source"
           :position="Position.Right"
           class="planner__handle"
-          :style="{ top: p.data.outPorts === 1 ? '50%' : `${((i - 0.5) / p.data.outPorts) * 100}%` }"
+          :style="{
+            top: p.data.outPorts === 1 ? '50%' : `${((i - 0.5) / p.data.outPorts) * 100}%`,
+          }"
         />
-        <div class="planner__flow-node-text" @click.stop="emit('update:selected-node-id', p.id)" @dblclick.stop>
+        <div
+          class="planner__flow-node-text"
+          @click.stop="emit('update:selected-node-id', p.id)"
+          @dblclick.stop
+        >
           <div class="planner__flow-node-title">{{ p.data.title }}</div>
           <div class="planner__flow-node-sub">{{ p.data.subtitle }}</div>
         </div>
@@ -183,8 +224,57 @@ import { Handle, Position, VueFlow } from '@vue-flow/core';
 import { Background } from '@vue-flow/background';
 import { Controls } from '@vue-flow/controls';
 import { MiniMap } from '@vue-flow/minimap';
+import { itemKeyHash } from 'src/jei/indexing/key';
 import type { ItemDef, ItemKey } from 'src/jei/types';
 import StackView from 'src/jei/components/StackView.vue';
+
+type MachineOutputDetail = {
+  key: ItemKey;
+  demanded: number;
+  machineCountOwn: number;
+  surplusRate: number;
+  outputName?: string;
+  demandedText: string;
+  usedText?: string;
+  producedText?: string;
+  surplusText?: string;
+};
+
+function getMachineOutputDetails(data: unknown): MachineOutputDetail[] {
+  if (!data || typeof data !== 'object') return [];
+  const rec = data as Record<string, unknown>;
+  const arr = Array.isArray(rec.outputDetails) ? (rec.outputDetails as MachineOutputDetail[]) : [];
+  const keys = Array.isArray(rec.outputItemKeys) ? (rec.outputItemKeys as ItemKey[]) : [];
+  if (!keys.length) return arr;
+  const details = arr.map((d) => ({ ...d }));
+  const seen = new Set(details.map((d) => itemKeyHash(d.key)));
+  keys.forEach((key) => {
+    const h = itemKeyHash(key);
+    if (seen.has(h)) return;
+    details.push({
+      key,
+      demanded: 0,
+      machineCountOwn: 0,
+      surplusRate: 0,
+      demandedText: '-',
+      usedText: '-',
+      producedText: '-',
+    });
+  });
+  return details;
+}
+
+function outputNameOf(detail: MachineOutputDetail): string {
+  return detail.outputName || detail.key.id;
+}
+
+function outputProducedTextOf(detail: MachineOutputDetail): string {
+  return detail.producedText || detail.demandedText;
+}
+
+function outputUsedTextOf(detail: MachineOutputDetail): string {
+  return detail.usedText || detail.demandedText;
+}
 
 defineProps<{
   flowId: string;
@@ -246,6 +336,7 @@ function onNodeDragStop(evt: { node: Node }) {
 
 .planner__flow-node--machine {
   justify-content: space-between;
+  align-items: flex-start;
   gap: 10px;
 }
 
@@ -316,5 +407,78 @@ function onNodeDragStop(evt: { node: Node }) {
 .body--dark .planner__flow-node-icon-fallback {
   background: rgba(255, 255, 255, 0.08);
   color: rgba(229, 231, 235, 0.82);
+}
+
+/* Machine node: vertical output list on the right */
+.planner__flow-node-outputs {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  align-items: flex-start;
+  flex-shrink: 0;
+}
+
+.planner__flow-node-output-row {
+  display: flex;
+  flex-direction: row;
+  align-items: flex-start;
+  gap: 4px;
+}
+
+.planner__flow-node-output-meta {
+  display: flex;
+  flex-direction: column;
+  line-height: 1.2;
+  min-width: 0;
+}
+
+.planner__flow-node-output-name {
+  font-size: 10px;
+  font-weight: 600;
+  max-width: 130px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.planner__flow-node-output-produced,
+.planner__flow-node-output-used {
+  font-size: 10px;
+  color: rgba(0, 0, 0, 0.7);
+}
+
+.planner__flow-node-output-demanded {
+  font-size: 10px;
+  color: rgba(0, 0, 0, 0.7);
+}
+
+.planner__flow-node-output-surplus {
+  font-size: 10px;
+  color: #d97706;
+  font-weight: 600;
+}
+
+/* Surplus item nodes */
+.planner__flow-node--surplus {
+  border-color: #f59e0b !important;
+  background: rgba(245, 158, 11, 0.08);
+}
+
+.body--dark .planner__flow-node--surplus {
+  border-color: #fbbf24 !important;
+  background: rgba(245, 158, 11, 0.12);
+}
+
+.body--dark .planner__flow-node-output-demanded {
+  color: rgba(229, 231, 235, 0.72);
+}
+
+.body--dark .planner__flow-node-output-produced,
+.body--dark .planner__flow-node-output-used {
+  color: rgba(229, 231, 235, 0.72);
+}
+
+.body--dark .planner__flow-node-output-surplus {
+  color: #fbbf24;
 }
 </style>

@@ -1,0 +1,3 @@
+[submodule "submodules/FreskyZ-flow-vue"]
+	path = submodules/FreskyZ-flow-vue
+	url = https://github.com/TheJeiWebProject/FreskyZ-flow-vue.git

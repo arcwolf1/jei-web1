@@ -13,11 +13,11 @@
  *     max_h      ≥ 0   additional production for Maximize items (rewarded)
  *
  *   Material-balance equality for each tracked item h:
- *     Σ_r [ (out_r_h - in_r_h) / time_r ] × x_r
+ *     Σ_r (out_r_h - in_r_h) × x_r
  *       + ext_h + unprod_h - surplus_h - max_h  =  demand_h
  *
  *   Limit constraint for item h (ObjectiveType.Limit):
- *     Σ_r [ in_r_h / time_r ] × x_r  ≤  limit_h/s
+ *     Σ_r in_r_h × x_r  ≤  limit_h/s
  *
  *   Objective (minimize):
  *     Σ_r  (machineCost × time_r) × x_r
@@ -195,8 +195,8 @@ export async function solveLp(
       const netPerCraft = outAmt - inAmt;
       if (netPerCraft === 0) continue;
 
-      // x_r is crafts/s; multiply by net per craft → items/s
-      coeffs.push([xVar, netPerCraft / norm.time]);
+      // x_r is crafts/s; net items produced per craft × crafts/s = items/s
+      coeffs.push([xVar, netPerCraft]);
     }
 
     // ext_h (optional)
@@ -238,7 +238,7 @@ export async function solveLp(
       if (!xVar) continue;
       const inAmt = norm.inputByHash.get(h) ?? 0;
       if (inAmt <= 0) continue;
-      coeffs.push([xVar, inAmt / norm.time]);
+      coeffs.push([xVar, inAmt]);
     }
 
     if (coeffs.length === 0) continue;

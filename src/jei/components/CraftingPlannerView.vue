@@ -12,6 +12,26 @@
           :disable="!!decisions.length"
           @click="openSaveDialog"
         />
+        <q-btn-dropdown dense outline icon="share" label="分享" :disable="!!decisions.length">
+          <q-list dense style="min-width: 180px">
+            <q-item clickable v-close-popup @click="shareAsUrl">
+              <q-item-section avatar><q-icon name="link" /></q-item-section>
+              <q-item-section>复制分享链接</q-item-section>
+            </q-item>
+            <q-item clickable v-close-popup @click="copyShareJson">
+              <q-item-section avatar><q-icon name="data_object" /></q-item-section>
+              <q-item-section>复制 JSON</q-item-section>
+            </q-item>
+            <q-item clickable v-close-popup @click="shareByJsonUrl">
+              <q-item-section avatar><q-icon name="link" /></q-item-section>
+              <q-item-section>用 JSON 链接分享</q-item-section>
+            </q-item>
+            <q-item clickable v-close-popup @click="importShareJson">
+              <q-item-section avatar><q-icon name="upload_file" /></q-item-section>
+              <q-item-section>导入 JSON</q-item-section>
+            </q-item>
+          </q-list>
+        </q-btn-dropdown>
         <q-toggle v-model="useProductRecovery" dense label="使用产物回收" />
         <q-space />
         <q-badge v-if="decisions.length" color="warning"
@@ -125,7 +145,7 @@
         </div>
       </div>
 
-        <div v-else class="q-mt-md">
+      <div v-else class="q-mt-md">
         <q-tabs v-model="activeTab" dense outside-arrows mobile-arrows inline-label>
           <q-tab name="tree" :label="treeTabLabel" />
           <q-tab name="graph" :label="graphTabLabel" />
@@ -601,7 +621,9 @@
                         </q-badge>
                         <q-badge v-if="p.data.recovery" color="teal" class="q-ml-xs">
                           recovery
-                          <q-tooltip v-if="p.data.recoverySource">{{ p.data.recoverySource }}</q-tooltip>
+                          <q-tooltip v-if="p.data.recoverySource">{{
+                            p.data.recoverySource
+                          }}</q-tooltip>
                         </q-badge>
                         <q-badge
                           v-if="p.data.cycle"
@@ -703,7 +725,11 @@
                 @update:model-value="settingsStore.setLineIntermediateColoring(!!$event)"
               />
               <q-toggle
-                v-if="selectedLineItemData && !selectedLineItemData.isRoot && !selectedLineItemData.recovery"
+                v-if="
+                  selectedLineItemData &&
+                  !selectedLineItemData.isRoot &&
+                  !selectedLineItemData.recovery
+                "
                 :model-value="selectedLineItemForcedRaw"
                 dense
                 color="warning"
@@ -730,7 +756,9 @@
                   { label: 'G6', value: 'g6' },
                 ]"
                 @update:model-value="
-                  settingsStore.setProductionLineRenderer(($event as 'vue_flow' | 'g6') ?? 'vue_flow')
+                  settingsStore.setProductionLineRenderer(
+                    ($event as 'vue_flow' | 'g6') ?? 'vue_flow',
+                  )
                 "
               />
               <q-space />
@@ -866,6 +894,7 @@
               <quant-flow-view
                 :mode="settingsStore.quantFlowRenderer"
                 :model="quantModel"
+                :node-positions="nodePositionMapToRecord(quantNodePositions)"
                 :item-defs-by-key-hash="itemDefsByKeyHash"
                 :display-unit="targetUnit"
                 :width-by-rate="quantWidthByRate"
@@ -873,6 +902,7 @@
                 :line-width-curve-config="lineWidthCurveConfig"
                 :line-width-scale="settingsStore.quantLineWidthScale"
                 :machine-count-decimals="settingsStore.machineCountDecimals"
+                @node-drag-stop="onQuantNodeDragStop"
                 @item-click="emit('item-click', $event)"
                 @item-mouseenter="emit('item-mouseenter', $event)"
                 @item-mouseleave="emit('item-mouseleave')"
@@ -1205,10 +1235,18 @@ import {
   type LineWidthCurveConfig,
 } from 'src/jei/planner/lineWidthCurve';
 import type {
+  AdvancedPlannerViewState,
   PlannerInitialState,
   PlannerLiveState,
+  PlannerNodePosition,
   PlannerSavePayload,
+  PlannerTargetUnit,
 } from 'src/jei/planner/plannerUi';
+import {
+  createPlannerShareData,
+  parsePlannerShareJson,
+  stringifyPlannerShareJson,
+} from 'src/jei/planner/plannerShare';
 import { DEFAULT_BELT_SPEED } from 'src/jei/planner/units';
 import {
   autoPlanSelections,
@@ -1220,11 +1258,7 @@ import {
   type RequirementNode,
   type EnhancedRequirementNode,
 } from 'src/jei/planner/planner';
-import {
-  useKeyBindingsStore,
-  keyBindingToString,
-  type KeyAction,
-} from 'src/stores/keybindings';
+import { useKeyBindingsStore, keyBindingToString, type KeyAction } from 'src/stores/keybindings';
 import { useSettingsStore } from 'src/stores/settings';
 
 const { t } = useI18n();
@@ -1254,6 +1288,8 @@ const beltSpeed = computed(() => {
 const emit = defineEmits<{
   (e: 'item-click', itemKey: ItemKey): void;
   (e: 'save-plan', payload: PlannerSavePayload): void;
+  (e: 'share-plan', payload: PlannerSavePayload): void;
+  (e: 'share-plan-json-url', payload: PlannerSavePayload): void;
   (e: 'state-change', payload: PlannerLiveState): void;
   (e: 'item-mouseenter', keyHash: string): void;
   (e: 'item-mouseleave'): void;
@@ -1271,6 +1307,12 @@ const graphTabLabel = computed(() => labelWithShortcut(t('nodeGraph'), 'plannerG
 const lineTabLabel = computed(() => labelWithShortcut(t('productionLine'), 'plannerLine'));
 const calcTabLabel = computed(() => labelWithShortcut(t('calculator'), 'plannerCalc'));
 const quantTabLabel = computed(() => labelWithShortcut(t('quantificationView'), 'plannerQuant'));
+const VALID_TARGET_UNITS = new Set<PlannerTargetUnit>([
+  'items',
+  'per_second',
+  'per_minute',
+  'per_hour',
+]);
 
 const activeTab = ref<'tree' | 'graph' | 'line' | 'calc' | 'quant'>('tree');
 const targetAmount = ref(1);
@@ -1295,6 +1337,7 @@ const selectedGraphNodeId = ref<string | null>(null);
 const graphNodePositions = ref(new Map<string, { x: number; y: number }>());
 const selectedLineNodeId = ref<string | null>(null);
 const lineNodePositions = ref(new Map<string, { x: number; y: number }>());
+const quantNodePositions = ref(new Map<string, { x: number; y: number }>());
 const quantShowFluids = ref(true);
 
 const $q = useQuasar();
@@ -1311,14 +1354,8 @@ const targetRatePresets = computed(() => {
   const halfCandidate = Number(preset?.halfPerMinute);
   const fullCandidate = Number(preset?.fullPerMinute);
   return {
-    halfPerMinute:
-      Number.isFinite(halfCandidate) && halfCandidate > 0
-        ? halfCandidate
-        : null,
-    fullPerMinute:
-      Number.isFinite(fullCandidate) && fullCandidate > 0
-        ? fullCandidate
-        : null,
+    halfPerMinute: Number.isFinite(halfCandidate) && halfCandidate > 0 ? halfCandidate : null,
+    fullPerMinute: Number.isFinite(fullCandidate) && fullCandidate > 0 ? fullCandidate : null,
   };
 });
 
@@ -1360,6 +1397,12 @@ function onLineNodeDragStop(evt: { node: Node }) {
   lineNodePositions.value = next;
 }
 
+function onQuantNodeDragStop(evt: { node: { id: string; position: { x: number; y: number } } }) {
+  const next = new Map(quantNodePositions.value);
+  next.set(evt.node.id, { ...evt.node.position });
+  quantNodePositions.value = next;
+}
+
 function onGraphNodeDragStop(evt: { node: Node }) {
   const next = new Map(graphNodePositions.value);
   next.set(evt.node.id, { ...evt.node.position });
@@ -1394,12 +1437,180 @@ function mapToRecord<V extends string>(m: Map<string, V>): Record<string, V> {
   return Object.fromEntries(m.entries()) as Record<string, V>;
 }
 
-function emitLiveState() {
-  emit('state-change', {
+function nodePositionMapToRecord(
+  value: Map<string, PlannerNodePosition>,
+): Record<string, PlannerNodePosition> {
+  const out: Record<string, PlannerNodePosition> = {};
+  value.forEach((pos, id) => {
+    const x = Number(pos?.x);
+    const y = Number(pos?.y);
+    if (!Number.isFinite(x) || !Number.isFinite(y)) return;
+    out[id] = { x, y };
+  });
+  return out;
+}
+
+function recordToNodePositionMap(
+  value: Record<string, PlannerNodePosition> | undefined,
+): Map<string, PlannerNodePosition> {
+  const out = new Map<string, PlannerNodePosition>();
+  if (!value || typeof value !== 'object') return out;
+  Object.entries(value).forEach(([id, pos]) => {
+    const x = Number(pos?.x);
+    const y = Number(pos?.y);
+    if (!Number.isFinite(x) || !Number.isFinite(y)) return;
+    out.set(id, { x, y });
+  });
+  return out;
+}
+
+function buildSavedViewState(): AdvancedPlannerViewState {
+  return {
+    activeTab: activeTab.value,
+    line: {
+      collapseIntermediate: lineCollapseIntermediate.value,
+      selectedNodeId: selectedLineNodeId.value,
+      nodePositions: nodePositionMapToRecord(lineNodePositions.value),
+    },
+    quant: {
+      showFluids: quantShowFluids.value,
+      widthByRate: quantWidthByRate.value,
+      nodePositions: nodePositionMapToRecord(quantNodePositions.value),
+    },
+  };
+}
+
+function applySavedViewState(viewState: AdvancedPlannerViewState | undefined): void {
+  const activeTabValue = viewState?.activeTab;
+  if (
+    activeTabValue === 'tree' ||
+    activeTabValue === 'graph' ||
+    activeTabValue === 'line' ||
+    activeTabValue === 'calc' ||
+    activeTabValue === 'quant'
+  ) {
+    activeTab.value = activeTabValue;
+  }
+
+  const lineView = viewState?.line;
+  if (typeof lineView?.collapseIntermediate === 'boolean') {
+    lineCollapseIntermediate.value = lineView.collapseIntermediate;
+  }
+  selectedLineNodeId.value =
+    typeof lineView?.selectedNodeId === 'string' ? lineView.selectedNodeId : null;
+  lineNodePositions.value = recordToNodePositionMap(lineView?.nodePositions);
+
+  const quantView = viewState?.quant;
+  if (typeof quantView?.showFluids === 'boolean') {
+    quantShowFluids.value = quantView.showFluids;
+  }
+  if (typeof quantView?.widthByRate === 'boolean') {
+    quantWidthByRate.value = quantView.widthByRate;
+  }
+  quantNodePositions.value = recordToNodePositionMap(quantView?.nodePositions);
+}
+
+function isPlannerTargetUnit(value: unknown): value is PlannerTargetUnit {
+  return typeof value === 'string' && VALID_TARGET_UNITS.has(value as PlannerTargetUnit);
+}
+
+async function copyText(text: string): Promise<void> {
+  if (typeof navigator !== 'undefined' && navigator.clipboard?.writeText) {
+    await navigator.clipboard.writeText(text);
+    return;
+  }
+  window.prompt('请复制以下内容', text);
+}
+
+function buildCurrentPlanPayload(name = `${itemName(props.rootItemKey)} 线路`): PlannerSavePayload {
+  return {
+    name,
+    rootItemKey: props.rootItemKey,
     targetAmount: targetAmount.value,
+    targetUnit: targetUnit.value,
     useProductRecovery: useProductRecovery.value,
     selectedRecipeIdByItemKeyHash: mapToRecord(selectedRecipeIdByItemKeyHash.value),
     selectedItemIdByTagId: mapToRecord(selectedItemIdByTagId.value as Map<string, ItemId>),
+    forcedRawItemKeyHashes: Array.from(forcedRawItemKeyHashes.value),
+    viewState: buildSavedViewState(),
+  };
+}
+
+function loadSharedPlan(payload: PlannerSavePayload): void {
+  selectedRecipeIdByItemKeyHash.value = new Map(
+    Object.entries(payload.selectedRecipeIdByItemKeyHash ?? {}),
+  );
+  selectedItemIdByTagId.value = new Map(Object.entries(payload.selectedItemIdByTagId ?? {}));
+  targetAmount.value = Number(payload.targetAmount) || 1;
+  targetUnit.value = isPlannerTargetUnit(payload.targetUnit) ? payload.targetUnit : 'per_minute';
+  useProductRecovery.value = payload.useProductRecovery === true;
+  hasManualSelectionOverride.value = true;
+  activeTab.value = 'tree';
+  treeDisplayMode.value = 'list';
+  collapsed.value = new Set();
+  forcedRawItemKeyHashes.value = new Set(payload.forcedRawItemKeyHashes ?? []);
+  applySavedViewState(payload.viewState);
+  emitLiveState();
+}
+
+function shareAsUrl(): void {
+  emit('share-plan', buildCurrentPlanPayload());
+}
+
+function shareByJsonUrl(): void {
+  emit('share-plan-json-url', buildCurrentPlanPayload());
+}
+
+function copyShareJson(): void {
+  const share = createPlannerShareData(props.pack.manifest.packId, buildCurrentPlanPayload());
+  void copyText(stringifyPlannerShareJson(share))
+    .then(() => {
+      $q.notify({ type: 'positive', message: '线路 JSON 已复制。' });
+    })
+    .catch(() => {
+      $q.notify({ type: 'negative', message: '复制线路 JSON 失败。' });
+    });
+}
+
+function importShareJson(): void {
+  $q.dialog({
+    title: '导入线路 JSON',
+    message: '粘贴分享出来的线路 JSON。',
+    prompt: {
+      model: '',
+      type: 'textarea',
+    },
+    cancel: true,
+    ok: { label: '导入' },
+  }).onOk((text: unknown) => {
+    try {
+      const share = parsePlannerShareJson(typeof text === 'string' ? text : '');
+      if (share.packId !== props.pack.manifest.packId) {
+        $q.notify({ type: 'negative', message: `分享线路属于包 ${share.packId}，当前包不匹配。` });
+        return;
+      }
+      if (share.plan.kind === 'advanced') {
+        $q.notify({ type: 'negative', message: '这是高级规划器分享，请在高级规划器中导入。' });
+        return;
+      }
+      loadSharedPlan(share.plan);
+      $q.notify({ type: 'positive', message: '线路 JSON 已导入。' });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      $q.notify({ type: 'negative', message });
+    }
+  });
+}
+
+function emitLiveState() {
+  emit('state-change', {
+    targetAmount: targetAmount.value,
+    targetUnit: targetUnit.value,
+    useProductRecovery: useProductRecovery.value,
+    selectedRecipeIdByItemKeyHash: mapToRecord(selectedRecipeIdByItemKeyHash.value),
+    selectedItemIdByTagId: mapToRecord(selectedItemIdByTagId.value as Map<string, ItemId>),
+    forcedRawItemKeyHashes: Array.from(forcedRawItemKeyHashes.value),
+    viewState: buildSavedViewState(),
   });
 }
 
@@ -1411,24 +1622,30 @@ function applyInitialState() {
     );
     selectedItemIdByTagId.value = new Map(Object.entries(st.selectedItemIdByTagId ?? {}));
     targetAmount.value = Number(st.targetAmount) || 1;
+    targetUnit.value = isPlannerTargetUnit(st.targetUnit) ? st.targetUnit : 'per_minute';
     useProductRecovery.value = st.useProductRecovery === true;
     hasManualSelectionOverride.value = !st.loadKey.startsWith('auto:');
     activeTab.value = props.initialTab ?? 'tree';
     treeDisplayMode.value = 'list';
     collapsed.value = new Set();
-    forcedRawItemKeyHashes.value = new Set();
+    forcedRawItemKeyHashes.value = new Set(st.forcedRawItemKeyHashes ?? []);
+    applySavedViewState(st.viewState);
     emitLiveState();
     return;
   }
   selectedRecipeIdByItemKeyHash.value = new Map();
   selectedItemIdByTagId.value = new Map();
   targetAmount.value = 1;
+  targetUnit.value = 'per_minute';
   useProductRecovery.value = false;
   hasManualSelectionOverride.value = false;
   activeTab.value = props.initialTab ?? 'tree';
   treeDisplayMode.value = 'list';
   collapsed.value = new Set();
   forcedRawItemKeyHashes.value = new Set();
+  selectedLineNodeId.value = null;
+  lineNodePositions.value = new Map();
+  quantNodePositions.value = new Map();
   emitLiveState();
 }
 
@@ -1627,9 +1844,13 @@ function resetPlanner() {
   useProductRecovery.value = false;
   hasManualSelectionOverride.value = false;
   targetAmount.value = 1;
+  targetUnit.value = 'per_minute';
   activeTab.value = 'tree';
   treeDisplayMode.value = 'list';
   collapsed.value = new Set();
+  selectedLineNodeId.value = null;
+  lineNodePositions.value = new Map();
+  quantNodePositions.value = new Map();
   emitLiveState();
 }
 
@@ -1643,14 +1864,7 @@ function openSaveDialog() {
 }
 
 function confirmSave() {
-  const payload: PlannerSavePayload = {
-    name: saveName.value.trim(),
-    rootItemKey: props.rootItemKey,
-    targetAmount: targetAmount.value,
-    useProductRecovery: useProductRecovery.value,
-    selectedRecipeIdByItemKeyHash: mapToRecord(selectedRecipeIdByItemKeyHash.value),
-    selectedItemIdByTagId: mapToRecord(selectedItemIdByTagId.value as Map<string, ItemId>),
-  };
+  const payload = buildCurrentPlanPayload(saveName.value.trim());
   emit('save-plan', payload);
   saveDialogOpen.value = false;
 }
@@ -1712,7 +1926,8 @@ const recoveryProducedByNodeId = computed(() => {
     if (node.recovery && node.recoverySourceNodeId) {
       const sourceNodeId = node.recoverySourceNodeId;
       const itemHash = itemKeyHash(node.itemKey);
-      const bucket = byNodeAndItem.get(sourceNodeId) ?? new Map<string, { itemKey: ItemKey; amount: number }>();
+      const bucket =
+        byNodeAndItem.get(sourceNodeId) ?? new Map<string, { itemKey: ItemKey; amount: number }>();
       const prev = bucket.get(itemHash);
       if (prev) prev.amount += finiteOr(node.amount, 0);
       else bucket.set(itemHash, { itemKey: node.itemKey, amount: finiteOr(node.amount, 0) });
@@ -1805,7 +2020,10 @@ function lineEdgeStrokeWidth(
 function formatMachineCountForDisplay(value: unknown): number {
   const v = finiteOr(value, 0);
   if (!Number.isFinite(v) || v <= 0) return 0;
-  const decimals = Math.max(0, Math.min(4, Math.floor(finiteOr(settingsStore.machineCountDecimals, 0))));
+  const decimals = Math.max(
+    0,
+    Math.min(4, Math.floor(finiteOr(settingsStore.machineCountDecimals, 0))),
+  );
   if (decimals === 0) return Math.round(v);
   const factor = 10 ** decimals;
   return Math.round(v * factor) / factor;
@@ -1992,12 +2210,7 @@ const flow = computed(() => {
         zIndex: 2000,
         type: 'smoothstep',
       });
-      if (
-        c.kind === 'item' &&
-        c.recovery &&
-        c.recoverySourceRecipeId &&
-        c.recoverySourceItemKey
-      ) {
+      if (c.kind === 'item' && c.recovery && c.recoverySourceRecipeId && c.recoverySourceItemKey) {
         const key = recoverySourceKey(
           c.recoverySourceRecipeId,
           c.recoverySourceItemKey,
@@ -2223,6 +2436,7 @@ type LineFlowItemData = {
   title: string;
   subtitle: string;
   isRoot: boolean;
+  isSurplus?: boolean;
   forcedRaw: boolean;
   recovery?: boolean;
   recoverySource?: string;
@@ -2234,7 +2448,18 @@ type LineFlowMachineData = {
   subtitle: string;
   machineItemId?: string;
   machineCount?: number;
-  outputItemKey: ItemKey;
+  outputItemKeys: ItemKey[];
+  outputDetails?: {
+    key: ItemKey;
+    demanded: number;
+    machineCountOwn: number;
+    surplusRate: number;
+    outputName?: string;
+    demandedText: string;
+    usedText?: string;
+    producedText?: string;
+    surplusText?: string;
+  }[];
   inPorts: number;
   outPorts: number;
 };
@@ -2249,6 +2474,7 @@ type LineFlowEdgeData = {
   itemKey?: ItemKey;
   fluidId?: string;
   recovery?: boolean;
+  surplus?: boolean;
 };
 
 const lineFlow = computed(() => {
@@ -2270,7 +2496,7 @@ const lineFlow = computed(() => {
         targetUnit.value === 'items' && n.seedAmount && n.seedAmount > 0
           ? ` (seed ${formatAmount(n.seedAmount)})`
           : '';
-      const subtitle = `${base}${seed}`;
+      const subtitle = n.isSurplus ? `冗余 +${base}` : `${base}${seed}`;
       const title = itemName(n.itemKey);
       const recoverySource = n.recovery ? recoverySourceText(n) : '';
       titleById.set(n.nodeId, title);
@@ -2285,7 +2511,8 @@ const lineFlow = computed(() => {
           title,
           subtitle,
           isRoot: !!n.isRoot,
-          forcedRaw: !n.recovery && isForcedRawKey(n.itemKey),
+          ...(n.isSurplus ? { isSurplus: true } : {}),
+          forcedRaw: !n.isSurplus && !n.recovery && isForcedRawKey(n.itemKey),
           ...(n.recovery ? { recovery: true, recoverySource } : {}),
           inPorts: 0,
           outPorts: 0,
@@ -2311,8 +2538,18 @@ const lineFlow = computed(() => {
     }
 
     const title = n.machineName ?? n.recipeTypeKey ?? n.recipeId;
-    const outName = itemName(n.outputItemKey);
-    const subtitle = `${outName} ${formatAmount(displayRateFromAmount(n.amount))}${unitSuffix()}`;
+    const primaryOut = n.outputItemKeys[0];
+    const outName = primaryOut ? itemName(primaryOut) : title;
+    const outputDetails = n.outputDetails ?? [];
+    const totalProduced = outputDetails.reduce(
+      (acc, d) => acc + d.demanded + Math.max(0, d.surplusRate),
+      0,
+    );
+    const totalUsed = outputDetails.reduce((acc, d) => acc + d.demanded, 0);
+    const subtitle =
+      outputDetails.length > 0
+        ? `总产 ${formatAmount(displayRateFromAmount(totalProduced))}${unitSuffix()} / 已用 ${formatAmount(displayRateFromAmount(totalUsed))}${unitSuffix()}`
+        : `${outName} ${formatAmount(displayRateFromAmount(n.amount))}${unitSuffix()}`;
     titleById.set(n.nodeId, title);
     return {
       id: n.nodeId,
@@ -2330,7 +2567,23 @@ const lineFlow = computed(() => {
               return machineCount > 0 ? { machineCount } : {};
             })()
           : {}),
-        outputItemKey: n.outputItemKey,
+        outputItemKeys: n.outputItemKeys,
+        ...(n.outputDetails
+          ? {
+              outputDetails: n.outputDetails.map((d) => ({
+                ...d,
+                outputName: itemName(d.key),
+                demandedText: `${formatAmount(displayRateFromAmount(d.demanded))}${unitSuffix()}`,
+                usedText: `${formatAmount(displayRateFromAmount(d.demanded))}${unitSuffix()}`,
+                producedText: `${formatAmount(displayRateFromAmount(d.demanded + Math.max(0, d.surplusRate)))}${unitSuffix()}`,
+                ...(d.surplusRate > 1e-9
+                  ? {
+                      surplusText: `${formatAmount(displayRateFromAmount(d.surplusRate))}${unitSuffix()}`,
+                    }
+                  : {}),
+              })),
+            }
+          : {}),
         inPorts: 0,
         outPorts: 0,
       } satisfies LineFlowMachineData,
@@ -2339,7 +2592,8 @@ const lineFlow = computed(() => {
 
   const edges: Edge[] = model.edges.map((e) => {
     const recovery = e.kind === 'item' && e.recovery;
-    const label = `${formatAmount(displayRateFromAmount(e.amount))}${unitSuffix()}${recovery ? ' ♻' : ''}`;
+    const surplus = e.kind === 'item' && e.surplus;
+    const label = `${formatAmount(displayRateFromAmount(e.amount))}${unitSuffix()}${recovery ? ' ♻' : surplus ? ' □' : ''}`;
     return {
       id: e.id,
       source: e.source,
@@ -2353,11 +2607,13 @@ const lineFlow = computed(() => {
       style: {
         strokeWidth: lineEdgeBaseWidthFromRate(e.amount),
         ...(recovery ? { stroke: '#26a69a', strokeDasharray: '6 4' } : {}),
+        ...(surplus ? { stroke: '#f59e0b', strokeDasharray: '6 4', opacity: 0.75 } : {}),
       },
       data: {
         kind: e.kind,
         ...(e.kind === 'item' ? { itemKey: e.itemKey } : { fluidId: e.fluidId }),
         ...(recovery ? { recovery: true } : {}),
+        ...(surplus ? { surplus: true } : {}),
       } satisfies LineFlowEdgeData,
       markerEnd: {
         type: MarkerType.ArrowClosed,
@@ -3474,7 +3730,12 @@ const flowBackgroundPatternColor = computed(() =>
   height: 72px;
   border-radius: 50%;
   border: 1px solid rgba(0, 0, 0, 0.22);
-  background: radial-gradient(circle at 35% 30%, rgba(255, 255, 255, 0.95), rgba(236, 243, 255, 0.94) 60%, rgba(220, 232, 248, 0.92));
+  background: radial-gradient(
+    circle at 35% 30%,
+    rgba(255, 255, 255, 0.95),
+    rgba(236, 243, 255, 0.94) 60%,
+    rgba(220, 232, 248, 0.92)
+  );
   box-shadow: 0 8px 18px rgba(0, 0, 0, 0.14);
   display: flex;
   align-items: center;
@@ -3483,7 +3744,12 @@ const flowBackgroundPatternColor = computed(() =>
 }
 
 .planner__quant-node-circle--fluid {
-  background: radial-gradient(circle at 35% 30%, rgba(222, 250, 255, 0.95), rgba(186, 236, 245, 0.92) 62%, rgba(151, 208, 219, 0.9));
+  background: radial-gradient(
+    circle at 35% 30%,
+    rgba(222, 250, 255, 0.95),
+    rgba(186, 236, 245, 0.92) 62%,
+    rgba(151, 208, 219, 0.9)
+  );
 }
 
 .planner__quant-fluid-symbol {
@@ -3516,7 +3782,9 @@ const flowBackgroundPatternColor = computed(() =>
 
 .planner__quant-node--selected .planner__quant-node-circle {
   border-color: var(--q-primary);
-  box-shadow: 0 0 0 2px rgba(25, 118, 210, 0.25), 0 8px 18px rgba(0, 0, 0, 0.14);
+  box-shadow:
+    0 0 0 2px rgba(25, 118, 210, 0.25),
+    0 8px 18px rgba(0, 0, 0, 0.14);
 }
 
 .planner__quant-node--recovery .planner__quant-node-circle {

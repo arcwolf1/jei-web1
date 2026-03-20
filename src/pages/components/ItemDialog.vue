@@ -63,6 +63,8 @@
           @wiki-item-click="$emit('wiki-item-click', $event)"
           @machine-item-click="$emit('machine-item-click', $event)"
           @save-plan="$emit('save-plan', $event)"
+          @share-plan="$emit('share-plan', $event)"
+          @share-plan-json-url="$emit('share-plan-json-url', $event)"
           @state-change="$emit('state-change', $event)"
           @ensure-recipe-detail="$emit('ensure-recipe-detail', $event)"
           @item-mouseenter="$emit('item-mouseenter', $event)"
@@ -81,17 +83,9 @@ import { useI18n } from 'vue-i18n';
 import type { PackData, ItemDef, ItemKey } from 'src/jei/types';
 import type { JeiIndex } from 'src/jei/indexing/buildIndex';
 import type { PlannerInitialState, PlannerLiveState } from 'src/jei/planner/plannerUi';
-import type {
-  PluginApiResult,
-  PluginItemContext,
-  PluginTabRuntime,
-} from 'src/jei/plugins/types';
+import type { PluginApiResult, PluginItemContext, PluginTabRuntime } from 'src/jei/plugins/types';
 import RecipeContentView from './RecipeContentView.vue';
-import {
-  useKeyBindingsStore,
-  keyBindingToString,
-  type KeyAction,
-} from 'src/stores/keybindings';
+import { useKeyBindingsStore, keyBindingToString, type KeyAction } from 'src/stores/keybindings';
 
 const { t } = useI18n();
 const keyBindingsStore = useKeyBindingsStore();
@@ -163,6 +157,8 @@ defineEmits<{
   'wiki-item-click': [keyHash: ItemKey];
   'machine-item-click': [itemId: string];
   'save-plan': [payload: any]; // eslint-disable-line @typescript-eslint/no-explicit-any
+  'share-plan': [payload: any]; // eslint-disable-line @typescript-eslint/no-explicit-any
+  'share-plan-json-url': [payload: any]; // eslint-disable-line @typescript-eslint/no-explicit-any
   'state-change': [state: PlannerLiveState];
   'ensure-recipe-detail': [recipeId: string];
   'item-mouseenter': [keyHash: string];
