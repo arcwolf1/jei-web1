@@ -396,6 +396,11 @@ import {
   type KeyAction,
 } from 'src/stores/keybindings';
 import { usePackRoutingRuntimeStore, type PackSourceSnapshot } from 'src/stores/packRoutingRuntime';
+import {
+  evaluateSearchExpression,
+  parseSearchExpression,
+  type SearchTerm,
+} from 'src/utils/searchExpression';
 import { storage } from 'src/utils/storage';
 
 const settingsStore = useSettingsStore();
@@ -1186,14 +1191,7 @@ watch(
   { immediate: true },
 );
 
-type ParsedSearch = {
-  text: string[];
-  itemId: string[];
-  gameId: string[];
-  tag: string[];
-};
-
-const parsedSearch = computed<ParsedSearch>(() => parseSearch(filterText.value));
+const parsedSearch = computed(() => parseSearchExpression(filterText.value));
 
 type NameSearchKeys = {
   nameLower: string;
@@ -1265,11 +1263,11 @@ const filteredItems = computed(() => {
   const map = index.value?.itemsByKeyHash;
   if (!map) return [];
   const entries = Array.from(map.entries()).map(([keyHash, def]) => ({ keyHash, def }));
-  const search = parsedSearch.value;
+  const searchExpression = parsedSearch.value;
   const keysByKeyHash = nameSearchKeysByKeyHash.value;
 
   const filtered = entries.filter((e) =>
-    matchesSearch(e.def, search, keysByKeyHash.get(e.keyHash)),
+    matchesSearch(e.def, searchExpression, keysByKeyHash.get(e.keyHash)),
   );
   filtered.sort((a, b) => {
     return a.def.name.localeCompare(b.def.name);
@@ -3394,84 +3392,43 @@ function pushHistoryKeyHash(keyHash: string) {
   historyKeyHashes.value = next;
 }
 
-function parseSearch(input: string): ParsedSearch {
-  const tokens = input.trim().split(/\s+/).filter(Boolean);
-  const out: ParsedSearch = { text: [], itemId: [], gameId: [], tag: [] };
-
-  for (let i = 0; i < tokens.length; i += 1) {
-    const t = tokens[i];
-    if (!t) continue;
-    if (!t.startsWith('@')) {
-      out.text.push(t.toLowerCase());
-      continue;
-    }
-
-    const raw = t.slice(1);
-    const [nameRaw, valueInline] = splitDirective(raw);
-    const name = nameRaw.toLowerCase();
-    let value: string | undefined = valueInline || undefined;
-
-    const next = tokens[i + 1];
-    if (!value && next && !next.startsWith('@')) {
-      value = next;
-      i += 1;
-    }
-
-    const v = (value ?? '').trim();
-
-    if (name === 'itemid' || name === 'id') {
-      if (!v) continue;
-      out.itemId.push(v.toLowerCase());
-    } else if (name === 'gameid' || name === 'game') {
-      if (!v) continue;
-      out.gameId.push(v.toLowerCase());
-    } else if (name === 'tag' || name === 't') {
-      if (!v) continue;
-      out.tag.push(v.toLowerCase());
-    } else {
-      // 无前缀的 @xxx 直接作为标签包含搜索
-      out.tag.push(raw.toLowerCase());
-    }
-  }
-
-  return out;
-}
-
-function splitDirective(raw: string): [string, string] {
-  const idx = raw.search(/[:=]/);
-  if (idx < 0) return [raw, ''];
-  return [raw.slice(0, idx), raw.slice(idx + 1)];
-}
-
-function matchesSearch(def: ItemDef, search: ParsedSearch, nameKeys?: NameSearchKeys): boolean {
+function matchesSearch(
+  def: ItemDef,
+  searchExpression: ReturnType<typeof parseSearchExpression>,
+  nameKeys?: NameSearchKeys,
+): boolean {
   const name = nameKeys?.nameLower ?? (def.name ?? '').toLowerCase();
   const pinyinFull = nameKeys?.pinyinFull ?? '';
   const pinyinFirst = nameKeys?.pinyinFirst ?? '';
   const id = def.key.id.toLowerCase();
+  const gameId = (id.includes(':') ? id.split(':')[0] : id.split('.')[0]) ?? '';
+  const tags = index.value?.tagIdsByItemId.get(def.key.id);
 
-  for (const t of search.text) {
-    if (name.includes(t)) continue;
-    const q = normalizePinyinQuery(t);
-    if (q && (pinyinFull.includes(q) || pinyinFirst.includes(q))) continue;
-    return false;
-  }
-  for (const t of search.itemId) {
-    if (!id.includes(t)) return false;
-  }
-  for (const t of search.gameId) {
-    const gid = (id.includes(':') ? id.split(':')[0] : id.split('.')[0]) ?? '';
-    if (!gid.includes(t)) return false;
-  }
-  for (const t of search.tag) {
-    const tags = index.value?.tagIdsByItemId.get(def.key.id);
+  const tagMatches = (term: string): boolean => {
     if (!tags) return false;
-    // 使用包含匹配：检查是否有任何标签包含搜索词
-    const matchFound = Array.from(tags).some((tagId) =>
-      tagId.toLowerCase().includes(t.toLowerCase()),
-    );
-    if (!matchFound) return false;
-  }
-  return true;
+    return Array.from(tags).some((tagId) => tagId.toLowerCase().includes(term));
+  };
+
+  const matchesTerm = (term: SearchTerm): boolean => {
+    switch (term.field) {
+      case 'text': {
+        if (name.includes(term.value)) return true;
+        const q = normalizePinyinQuery(term.value);
+        if (q && (pinyinFull.includes(q) || pinyinFirst.includes(q))) return true;
+        if (id.includes(term.value)) return true;
+        if (tagMatches(term.value)) return true;
+        return false;
+      }
+      case 'itemId':
+        return id.includes(term.value);
+      case 'gameId':
+        return gameId.includes(term.value);
+      case 'tag':
+        return tagMatches(term.value);
+    }
+  };
+
+  return evaluateSearchExpression(searchExpression, matchesTerm);
 }
 </script>
 

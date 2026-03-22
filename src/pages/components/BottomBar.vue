@@ -23,6 +23,14 @@
         class="col"
       >
         <template #append>
+          <q-btn
+            flat
+            round
+            dense
+            icon="sell"
+            color="grey-7"
+            @click="quickTagDialogOpen = true"
+          />
           <q-icon
             v-if="filterText"
             name="filter_list"
@@ -49,53 +57,133 @@
       <q-card style="min-width: 400px; max-width: 500px">
         <q-card-section>
           <div class="text-h6">{{ t('advancedFilter') }}</div>
+          <div class="text-caption text-grey-7 q-mt-xs">{{ t('filterHelp') }}</div>
+          <div class="text-caption text-grey-7">{{ t('filterTagNote') }}</div>
+          <q-btn-toggle
+            v-model="filterMode"
+            class="q-mt-sm"
+            dense
+            unelevated
+            toggle-color="primary"
+            :options="[
+              { label: t('filterModeBuilder'), value: 'builder' },
+              { label: t('filterModeExpression'), value: 'expression' },
+            ]"
+          />
         </q-card-section>
 
-        <q-card-section class="q-pt-none column q-gutter-sm">
+        <q-card-section v-if="filterMode === 'expression'" class="q-pt-none column q-gutter-sm">
           <q-input
-            v-model="filterForm.text"
+            v-model="filterForm.expression"
+            type="textarea"
+            autogrow
             dense
             outlined
             clearable
-            :label="t('itemName')"
-            :placeholder="t('itemNamePlaceholder')"
+            :label="t('filterExpressionLabel')"
+            :placeholder="t('filterExpressionPlaceholder')"
           />
-          <q-select
-            v-model="filterForm.itemId"
-            :options="
-              availableItemIdsFiltered.length > 0
-                ? availableItemIdsFiltered
-                : availableItemIds.slice(0, 50)
-            "
-            dense
-            outlined
-            clearable
-            :label="t('itemId')"
-            :placeholder="t('itemIdPlaceholder')"
-            use-input
-            input-debounce="0"
-            :input-value="filterForm.itemId"
-            @input-value="filterForm.itemId = $event"
-            @filter="filterItemIds"
-          />
-          <q-select
-            v-model="filterForm.gameId"
-            :options="
-              availableGameIdsFiltered.length > 0 ? availableGameIdsFiltered : availableGameIds
-            "
-            dense
-            outlined
-            clearable
-            :label="t('namespace')"
-            :placeholder="t('namespacePlaceholder')"
-            use-input
-            input-debounce="0"
-            :input-value="filterForm.gameId"
-            @input-value="filterForm.gameId = $event"
-            @filter="filterGameIds"
-          />
+          <div class="text-caption text-grey-7">{{ t('filterExpressionHint') }}</div>
+          <div class="row q-gutter-xs">
+            <q-btn flat dense color="primary" label="(" @click="insertExpressionToken('()')" />
+            <q-btn flat dense color="primary" label="|" @click="insertExpressionToken(' | ')" />
+            <q-btn flat dense color="primary" label="!" @click="insertExpressionToken('!')" />
+            <q-btn
+              flat
+              dense
+              color="primary"
+              :label="t('itemId')"
+              @click="insertExpressionToken('@id:')"
+            />
+            <q-btn
+              flat
+              dense
+              color="primary"
+              :label="t('namespace')"
+              @click="insertExpressionToken('@game:')"
+            />
+            <q-btn
+              flat
+              dense
+              color="primary"
+              :label="t('tags')"
+              @click="insertExpressionToken('@tag:')"
+            />
+          </div>
+        </q-card-section>
+
+        <q-card-section v-else class="q-pt-none column q-gutter-sm">
+          <div class="row items-center q-gutter-sm">
+            <q-input
+              v-model="filterForm.text"
+              dense
+              outlined
+              clearable
+              :label="t('itemName')"
+              :placeholder="t('itemNamePlaceholder')"
+              class="col"
+            />
+            <q-toggle v-model="filterForm.textNegated" :label="t('filterNegate')" dense />
+          </div>
+          <div class="row items-center q-gutter-sm">
+            <q-select
+              v-model="filterForm.itemId"
+              :options="
+                availableItemIdsFiltered.length > 0
+                  ? availableItemIdsFiltered
+                  : availableItemIds.slice(0, 50)
+              "
+              dense
+              outlined
+              clearable
+              :label="t('itemId')"
+              :placeholder="t('itemIdPlaceholder')"
+              class="col"
+              use-input
+              input-debounce="0"
+              :input-value="filterForm.itemId"
+              @input-value="filterForm.itemId = $event"
+              @filter="filterItemIds"
+            />
+            <q-toggle v-model="filterForm.itemIdNegated" :label="t('filterNegate')" dense />
+          </div>
+          <div class="row items-center q-gutter-sm">
+            <q-select
+              v-model="filterForm.gameId"
+              :options="
+                availableGameIdsFiltered.length > 0 ? availableGameIdsFiltered : availableGameIds
+              "
+              dense
+              outlined
+              clearable
+              :label="t('namespace')"
+              :placeholder="t('namespacePlaceholder')"
+              class="col"
+              use-input
+              input-debounce="0"
+              :input-value="filterForm.gameId"
+              @input-value="filterForm.gameId = $event"
+              @filter="filterGameIds"
+            />
+            <q-toggle v-model="filterForm.gameIdNegated" :label="t('filterNegate')" dense />
+          </div>
           <div class="column q-gutter-xs">
-            <div class="text-subtitle2">{{ t('tags') }}</div>
+            <div class="row items-center justify-between q-gutter-sm">
+              <div class="text-subtitle2">{{ t('tags') }}</div>
+              <div class="row items-center q-gutter-sm">
+                <q-btn-toggle
+                  v-model="filterForm.tagJoinMode"
+                  dense
+                  unelevated
+                  toggle-color="primary"
+                  :options="[
+                    { label: t('filterTagModeOr'), value: 'or' },
+                    { label: t('filterTagModeAnd'), value: 'and' },
+                  ]"
+                />
+                <q-toggle v-model="filterForm.tagsNegated" :label="t('filterNegate')" dense />
+              </div>
+            </div>
             <div class="row q-gutter-sm items-center">
               <q-select
                 v-for="(tag, idx) in filterForm.tags"
@@ -141,6 +229,34 @@
         </q-card-actions>
       </q-card>
     </q-dialog>
+
+    <!-- 快速标签对话框 -->
+    <q-dialog v-model="quickTagDialogOpen">
+      <q-card style="min-width: 400px; max-width: 500px">
+        <q-card-section>
+          <div class="text-h6">{{ t('quickTagFilter') }}</div>
+        </q-card-section>
+        <q-card-section class="q-pt-none">
+          <div v-if="props.availableTags.length === 0" class="text-grey-7">{{ t('noOptions') }}</div>
+          <div v-else class="row q-gutter-xs wrap">
+            <q-chip
+              v-for="tag in props.availableTags"
+              :key="tag"
+              color="secondary"
+              text-color="white"
+              clickable
+              @click="applyQuickTag(tag)"
+            >
+              {{ tag }}
+            </q-chip>
+          </div>
+        </q-card-section>
+        <q-card-actions align="right">
+          <q-btn flat :label="t('clear')" color="grey-7" @click="clearQuickTag" />
+          <q-btn flat :label="t('cancel')" color="grey-7" v-close-popup />
+        </q-card-actions>
+      </q-card>
+    </q-dialog>
   </div>
 </template>
 
@@ -177,11 +293,19 @@ const emit = defineEmits<{
 }>();
 
 const filterDialogOpen = ref(false);
+const quickTagDialogOpen = ref(false);
+const filterMode = ref<'builder' | 'expression'>('builder');
 const filterForm = ref({
+  expression: '',
   text: '',
+  textNegated: false,
   itemId: '',
+  itemIdNegated: false,
   gameId: '',
+  gameIdNegated: false,
   tags: [] as string[],
+  tagsNegated: false,
+  tagJoinMode: 'or' as 'and' | 'or',
 });
 
 const availableItemIdsFiltered = ref<string[]>([]);
@@ -244,7 +368,11 @@ function filterTags(val: string, update: (callback: () => void) => void, idx: nu
 }
 
 function parseSearch(input: string): ParsedSearch {
-  const tokens = input.trim().split(/\s+/).filter(Boolean);
+  const normalized = input
+    .replace(/[()]/g, ' ')
+    .replace(/\|/g, ' ')
+    .replace(/(^|\s)[!-](?=\S)/g, '$1');
+  const tokens = normalized.trim().split(/\s+/).filter(Boolean);
   const out: ParsedSearch = { text: [], itemId: [], gameId: [], tag: [] };
 
   for (let i = 0; i < tokens.length; i += 1) {
@@ -293,36 +421,96 @@ function splitDirective(raw: string): [string, string] {
 
 function populateFilterFormFromText() {
   const search = parseSearch(props.filterText);
+  filterMode.value = hasComplexExpressionSyntax(props.filterText) ? 'expression' : 'builder';
   filterForm.value = {
+    expression: props.filterText,
     text: search.text.join(' ') || '',
+    textNegated: false,
     itemId: search.itemId.join(' ') || '',
+    itemIdNegated: false,
     gameId: search.gameId.join(' ') || '',
+    gameIdNegated: false,
     tags: [...search.tag],
+    tagsNegated: false,
+    tagJoinMode: props.filterText.includes('|') ? 'or' : 'and',
   };
 }
 
-function applyFilter() {
-  const parts: string[] = [];
-  const f = filterForm.value;
+function hasComplexExpressionSyntax(input: string): boolean {
+  return /[()|]|(^|\s)[!-](?=\S)/.test(input);
+}
 
-  if (f.text) parts.push(f.text);
-  if (f.itemId) parts.push(`@id:${f.itemId}`);
-  if (f.gameId) parts.push(`@game:${f.gameId}`);
-  for (const tag of f.tags) {
-    const t = tag.trim();
-    if (t) parts.push(`@tag:${t}`);
+function wrapExpression(expression: string, negated: boolean): string {
+  const trimmed = expression.trim();
+  if (!trimmed) return '';
+  if (!negated) return trimmed;
+  if (trimmed.startsWith('(') && trimmed.endsWith(')')) return `!${trimmed}`;
+  return `!(${trimmed})`;
+}
+
+function buildFilterExpression(): string {
+  const f = filterForm.value;
+  const parts: string[] = [];
+
+  if (f.text.trim()) parts.push(wrapExpression(f.text.trim(), f.textNegated));
+  if (f.itemId.trim()) parts.push(wrapExpression(`@id:${f.itemId.trim()}`, f.itemIdNegated));
+  if (f.gameId.trim()) {
+    parts.push(wrapExpression(`@game:${f.gameId.trim()}`, f.gameIdNegated));
   }
 
-  emit('update:filter-text', parts.join(' '));
+  const tagTerms = f.tags
+    .map((tag) => tag.trim())
+    .filter((tag) => tag.length > 0)
+    .map((tag) => `@tag:${tag}`);
+  if (tagTerms.length === 1) {
+    parts.push(wrapExpression(tagTerms[0]!, f.tagsNegated));
+  } else if (tagTerms.length > 1) {
+    const separator = f.tagJoinMode === 'or' ? ' | ' : ' ';
+    parts.push(wrapExpression(`(${tagTerms.join(separator)})`, f.tagsNegated));
+  }
+
+  return parts.join(' ').trim();
+}
+
+function applyFilter() {
+  const nextText =
+    filterMode.value === 'expression'
+      ? filterForm.value.expression.trim()
+      : buildFilterExpression();
+  emit('update:filter-text', nextText);
 }
 
 function resetFilterForm() {
   filterForm.value = {
+    expression: '',
     text: '',
+    textNegated: false,
     itemId: '',
+    itemIdNegated: false,
     gameId: '',
+    gameIdNegated: false,
     tags: [],
+    tagsNegated: false,
+    tagJoinMode: 'or',
   };
+}
+
+function insertExpressionToken(token: string) {
+  if (token === '()') {
+    filterForm.value.expression = `${filterForm.value.expression}()`.trim();
+    return;
+  }
+  filterForm.value.expression = `${filterForm.value.expression}${token}`;
+}
+
+function applyQuickTag(tag: string) {
+  emit('update:filter-text', `@tag:${tag}`);
+  quickTagDialogOpen.value = false;
+}
+
+function clearQuickTag() {
+  emit('update:filter-text', '');
+  quickTagDialogOpen.value = false;
 }
 </script>
 

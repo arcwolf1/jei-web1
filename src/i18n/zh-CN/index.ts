@@ -38,10 +38,22 @@ export default {
   middleAreaDesc: '右侧是物品列表，左侧是收藏夹；点击物品打开悬浮窗。',
 
   // Bottom Bar
-  filterPlaceholder: "输入名字过滤…（支持 {'@'}itemid/{'@'}gameid/{'@'}tag）",
+  filterPlaceholder:
+    "搜索：名称/拼音/ID/标签，空格=且，{'|'}=或，!/-=非，()=分组…（也支持 {'@'}itemid/{'@'}gameid/{'@'}tag）",
   advancedFilter: '高级过滤器',
+  filterHelp:
+    '普通搜索会匹配名称、拼音、物品 ID 和标签；空格表示且，{\'|\'} 表示或，! 或 - 表示取反，() 可分组；{\'@\'}itemid / {\'@\'}gameid / {\'@\'}tag 保留可用，也支持 {\'@\'}id foo 这类旧写法。',
+  filterModeBuilder: '条件模式',
+  filterModeExpression: '表达式模式',
+  filterExpressionLabel: '过滤表达式',
+  filterExpressionPlaceholder:
+    "例如：材料 !活动 ({'@'}tag:精英材料 {'|'} {'@'}tag:养成材料)",
+  filterExpressionHint: '复杂筛选请直接在这里写表达式；条件模式更适合快速拼简单规则。',
+  filterNegate: '排除',
+  filterTagModeAnd: '标签且',
+  filterTagModeOr: '标签或',
   itemName: '物品名称',
-  itemNamePlaceholder: '输入物品名称关键词',
+  itemNamePlaceholder: '输入物品名称关键词或拼音',
   itemId: '物品 ID',
   itemIdPlaceholder: '选择或输入物品 ID',
   namespace: '命名空间',
@@ -52,6 +64,8 @@ export default {
   cancel: '取消',
   apply: '应用',
   add: '添加',
+  filterTagNote: '标签即物品分类，用于按类别筛选',
+  quickTagFilter: '按分类筛选',
 
   // Settings
   settings: '设置',
