@@ -25,7 +25,9 @@
           aria-label="Fullscreen"
           @click="togglePageFullscreen"
         >
-          <q-tooltip>{{ isPageFullscreen ? '退出网页全屏' : '网页全屏' }}</q-tooltip>
+          <q-tooltip>{{
+            isPageFullscreen ? t('exitWebFullscreen') : t('webFullscreen')
+          }}</q-tooltip>
         </q-btn>
 
         <q-btn
@@ -77,7 +79,7 @@
                   <q-icon name="brightness_4" />
                 </q-item-section>
                 <q-item-section>
-                  <q-item-label>自动</q-item-label>
+                  <q-item-label>{{ t('auto') }}</q-item-label>
                 </q-item-section>
               </q-item>
               <q-item
@@ -89,7 +91,7 @@
                   <q-icon name="light_mode" />
                 </q-item-section>
                 <q-item-section>
-                  <q-item-label>亮色</q-item-label>
+                  <q-item-label>{{ t('light') }}</q-item-label>
                 </q-item-section>
               </q-item>
               <q-item
@@ -101,7 +103,7 @@
                   <q-icon name="dark_mode" />
                 </q-item-section>
                 <q-item-section>
-                  <q-item-label>暗色</q-item-label>
+                  <q-item-label>{{ t('dark') }}</q-item-label>
                 </q-item-section>
               </q-item>
             </q-list>
@@ -117,7 +119,7 @@
           aria-label="Import Shared Plan"
           @click="triggerPlannerShareImport"
         >
-          <q-tooltip>导入分享链接或 JSON</q-tooltip>
+          <q-tooltip>{{ t('importShareLinkOrJson') }}</q-tooltip>
         </q-btn>
 
         <div :class="$q.dark.isActive ? 'text-white' : 'text-grey-8'">v{{ appVersion }}</div>
@@ -143,14 +145,14 @@
 
         <q-separator />
 
-        <q-item-label header> 友情链接 </q-item-label>
+        <q-item-label header> {{ t('friendLinks') }} </q-item-label>
 
         <q-item clickable tag="a" target="_blank" href="https://www.gamekee.com/zmd">
           <q-item-section avatar>
             <q-icon name="link" />
           </q-item-section>
           <q-item-section>
-            <q-item-label>明日方舟:终末地非官方Wiki</q-item-label>
+            <q-item-label>{{ t('arknightsEndfieldWiki') }}</q-item-label>
             <q-item-label caption>GameKee</q-item-label>
           </q-item-section>
         </q-item>
@@ -159,14 +161,14 @@
             <q-icon name="link" />
           </q-item-section>
           <q-item-section>
-            <q-item-label>终末地-协议终端</q-item-label>
-            <q-item-label caption>熵增项目组</q-item-label>
+            <q-item-label>{{ t('endfieldProtocolTerminal') }}</q-item-label>
+            <q-item-label caption>{{ t('entropyProjectTeam') }}</q-item-label>
           </q-item-section>
         </q-item>
 
         <q-separator />
 
-        <q-item-label header> 官方QQ群 </q-item-label>
+        <q-item-label header> {{ t('officialQQGroupTitle') }} </q-item-label>
 
         <q-item
           clickable
@@ -178,22 +180,22 @@
             <q-icon name="group" />
           </q-item-section>
           <q-item-section>
-            <q-item-label>官方QQ群:1080814651</q-item-label>
-            <q-item-label caption>JEI Web官方群</q-item-label>
+            <q-item-label>{{ t('officialQQGroupLabel', { groupId: '1080814651' }) }}</q-item-label>
+            <q-item-label caption>{{ t('officialQQGroupCaption') }}</q-item-label>
           </q-item-section>
         </q-item>
 
         <q-separator />
 
-        <q-item-label header> 帮助 </q-item-label>
+        <q-item-label header> {{ t('help') }} </q-item-label>
 
         <q-item clickable @click="showTutorial">
           <q-item-section avatar>
             <q-icon name="school" />
           </q-item-section>
           <q-item-section>
-            <q-item-label>新手教程</q-item-label>
-            <q-item-label caption>学习如何使用 JEI Web</q-item-label>
+            <q-item-label>{{ t('tutorial') }}</q-item-label>
+            <q-item-label caption>{{ t('learnHowToUse') }}</q-item-label>
           </q-item-section>
         </q-item>
       </q-list>
@@ -239,7 +241,7 @@ const settingsStore = useSettingsStore();
 const dialogManager = useDialogManager();
 const tutorialManager = getTutorialManager();
 const $q = useQuasar();
-const { locale } = useI18n();
+const { t, locale } = useI18n();
 const route = useRoute();
 // 开发环境使用 package.json 版本，生产环境使用 git commit hash
 const appVersion = import.meta.env.DEV ? '0.0.1-dev' : (__APP_VERSION__ ?? 'unknown');

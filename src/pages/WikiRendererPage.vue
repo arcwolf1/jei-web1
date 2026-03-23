@@ -4,8 +4,8 @@
     <div v-if="!wikiItem" class="upload-section">
       <q-card class="upload-card">
         <q-card-section>
-          <div class="text-h5">Wiki 文档渲染器</div>
-          <div class="text-caption">支持块编辑器格式的文档渲染</div>
+          <div class="text-h5">{{ t('wikiDocRenderer') }}</div>
+          <div class="text-caption">{{ t('supportBlockEditorFormat') }}</div>
         </q-card-section>
 
         <q-card-section>
@@ -15,12 +15,12 @@
                 flat
                 color="primary"
                 icon="folder_open"
-                label="从目录选择 Wiki 文件"
+                :label="t('selectWikiFromDir')"
                 @click="loadWikiFileList(wikiFileDir)"
                 class="full-width"
                 :loading="loadingWikiFiles"
               >
-                <q-tooltip>自动列出 /temp/info 目录下的所有文件</q-tooltip>
+                <q-tooltip>{{ t('autoListTempInfo') }}</q-tooltip>
               </q-btn>
             </div>
             <div class="col-6">
@@ -28,12 +28,12 @@
                 flat
                 color="secondary"
                 icon="folder_open"
-                label="从目录选择目录文件"
+                :label="t('selectCatalogFromDir')"
                 @click="loadCatalogFileList(catalogFileDir)"
                 class="full-width"
                 :loading="loadingCatalogFiles"
               >
-                <q-tooltip>自动列出 /temp/catalog 目录下的所有文件</q-tooltip>
+                <q-tooltip>{{ t('autoListTempCatalog') }}</q-tooltip>
               </q-btn>
             </div>
           </div>
@@ -42,7 +42,7 @@
             <div class="col-6">
               <q-file
                 v-model="file"
-                label="或手动选择 Wiki JSON 文件"
+                :label="t('orManuallySelectWiki')"
                 accept=".json"
                 @update:model-value="loadFile"
                 :dark="$q.dark.isActive"
@@ -56,45 +56,42 @@
             <div class="col-6">
               <q-file
                 v-model="catalogFile"
-                label="或手动选择目录 JSON（full.json）"
+                :label="t('orManuallySelectCatalog')"
                 accept=".json"
                 @update:model-value="loadCatalogFile"
                 :dark="$q.dark.isActive"
                 outlined
               >
                 <template v-slot:prepend>
-                  <q-icon name="folder" />
+                  <q-icon name="attach_file" />
                 </template>
               </q-file>
             </div>
           </div>
 
-          <div class="image-proxy-settings q-mb-md">
-            <q-toggle v-model="imageUseProxy" label="图片走代理" color="primary" />
-            <q-input
-              v-model="imageProxyUrl"
-              dense
-              outlined
-              :dark="$q.dark.isActive"
-              label="代理地址"
-              placeholder="http://127.0.0.1:8088/?url="
-              class="q-mt-sm"
-            />
+          <div class="row q-col-gutter-md q-mb-md">
+            <div class="col-12">
+              <q-toggle v-model="imageUseProxy" :label="t('imageUseProxy')" color="primary" />
+            </div>
+            <div v-if="imageUseProxy" class="col-12">
+              <q-input
+                v-model="settingsStore.wikiImageProxyUrl"
+                :label="t('proxyAddress')"
+                dense
+                outlined
+              />
+            </div>
           </div>
 
-          <div class="text-caption text-grey-7">
-            提示：点击"从目录选择"按钮会自动读取 index.json 索引文件列出所有可用文件
+          <div class="text-caption text-grey">
+            {{ t('selectFromDirHint') }}
           </div>
 
-          <!-- 上次使用的目录文件提示 -->
-          <q-banner v-if="showSavedCatalogHint && savedCatalogFileName" class="q-mt-md bg-orange-1">
-            <template v-slot:avatar>
-              <q-icon name="info" color="orange" />
-            </template>
-            上次使用的目录文件: <strong>{{ savedCatalogFileName }}</strong
-            ><br />
-            <span class="text-caption">请重新选择该文件以继续使用</span>
-          </q-banner>
+          <div v-if="savedCatalogFileName" class="text-caption text-warning q-mt-sm">
+            {{ t('lastUsedCatalog') }}: <strong>{{ savedCatalogFileName }}</strong>
+            <br />
+            <span class="text-caption">{{ t('pleaseReselect') }}</span>
+          </div>
         </q-card-section>
       </q-card>
     </div>
@@ -112,7 +109,7 @@
                     dense
                     color="secondary"
                     icon="folder_open"
-                    label="从目录选择目录文件"
+                    :label="t('selectCatalogFromDir')"
                     @click="loadCatalogFileList(catalogFileDir)"
                     :loading="loadingCatalogFiles"
                     class="q-mb-xs"
@@ -121,7 +118,7 @@
 
                 <q-file
                   v-model="catalogFile"
-                  label="或手动选择目录 JSON（full.json，用于物品名称/图标还原）"
+                  :label="t('orManuallySelectCatalogFull')"
                   @update:model-value="loadCatalogFile"
                   :dark="$q.dark.isActive"
                   outlined
@@ -131,7 +128,7 @@
                   </template>
                 </q-file>
                 <div class="text-caption text-grey-7 q-mt-xs">
-                  当前目录：{{ catalogFile?.name || '未选择' }}（{{ catalogStatus }}）
+                  {{ t('currentCatalogStatus', { name: catalogFile?.name || t('notSelected'), status: catalogStatus }) }}
                 </div>
 
                 <!-- 显示上次使用的文件提示（如果当前未选择） -->
@@ -143,22 +140,22 @@
                   <template v-slot:avatar>
                     <q-icon name="history" color="blue" />
                   </template>
-                  上次使用: {{ savedCatalogFileName }}
+                  {{ t('lastUsedShort') }}: {{ savedCatalogFileName }}
                 </q-banner>
 
                 <div class="image-proxy-settings q-mt-md">
-                  <q-toggle v-model="imageUseProxy" label="图片走代理" color="primary" />
+                  <q-toggle v-model="imageUseProxy" :label="t('imageUseProxy')" color="primary" />
                   <q-input
                     v-model="imageProxyUrl"
                     dense
                     outlined
                     :dark="$q.dark.isActive"
-                    label="代理地址"
+                    :label="t('proxyAddress')"
                     placeholder="https://r.jina.ai/http://"
                     class="q-mt-sm"
                   />
                   <div class="text-caption text-grey-7 q-mt-xs">
-                    说明：某些图源有防盗链/跨域限制，可用代理加载
+                    {{ t('proxyNote') }}
                   </div>
                 </div>
               </div>
@@ -168,20 +165,20 @@
                   flat
                   color="primary"
                   icon="folder_open"
-                  label="更换 Wiki 文件"
+                  :label="t('changeWikiFile')"
                   @click="resetView"
                   class="q-mr-sm"
                 >
-                  <q-tooltip>返回文件选择页面</q-tooltip>
+                  <q-tooltip>{{ t('returnToFileSelection') }}</q-tooltip>
                 </q-btn>
                 <q-btn
                   flat
                   color="secondary"
                   icon="refresh"
-                  label="加载其他文件"
+                  :label="t('loadOtherFile')"
                   @click="loadWikiFileList(wikiFileDir)"
                 >
-                  <q-tooltip>从目录列表选择其他文件</q-tooltip>
+                  <q-tooltip>{{ t('selectFromCatalogList') }}</q-tooltip>
                 </q-btn>
               </div>
             </div>
@@ -278,20 +275,20 @@
       <q-card>
         <q-bar>
           <q-icon name="folder_open" />
-          <span class="q-ml-sm">从目录选择 Wiki 文件</span>
+          <span class="q-ml-sm">{{ t('selectWikiFromDirShort') }}</span>
           <q-space />
           <q-btn flat dense icon="close" v-close-popup>
-            <q-tooltip>关闭</q-tooltip>
+            <q-tooltip>{{ t('close') }}</q-tooltip>
           </q-btn>
         </q-bar>
 
         <q-card-section class="q-pt-none">
-          <div class="text-subtitle1 q-mb-md">目录: /temp/{{ wikiFileDir }}</div>
+          <div class="text-subtitle1 q-mb-md">{{ t('directory') }}: /temp/{{ wikiFileDir }}</div>
 
           <q-list bordered separator dense class="file-list">
             <q-item v-if="wikiFileList.length === 0">
               <q-item-section>
-                <q-item-label caption>没有找到文件</q-item-label>
+                <q-item-label caption>{{ t('noFilesFound') }}</q-item-label>
               </q-item-section>
             </q-item>
             <q-item
@@ -322,20 +319,20 @@
       <q-card>
         <q-bar>
           <q-icon name="folder_open" color="secondary" />
-          <span class="q-ml-sm">从目录选择目录文件（Catalog）</span>
+          <span class="q-ml-sm">{{ t('selectCatalogFromDirShort') }}</span>
           <q-space />
           <q-btn flat dense icon="close" v-close-popup>
-            <q-tooltip>关闭</q-tooltip>
+            <q-tooltip>{{ t('close') }}</q-tooltip>
           </q-btn>
         </q-bar>
 
         <q-card-section class="q-pt-none">
-          <div class="text-subtitle1 q-mb-md">目录: /temp/{{ catalogFileDir }}</div>
+          <div class="text-subtitle1 q-mb-md">{{ t('directory') }}: /temp/{{ catalogFileDir }}</div>
 
           <q-list bordered separator dense class="file-list">
             <q-item v-if="catalogFileList.length === 0">
               <q-item-section>
-                <q-item-label caption>没有找到文件</q-item-label>
+                <q-item-label caption>{{ t('noFilesFound') }}</q-item-label>
               </q-item-section>
             </q-item>
             <q-item
@@ -366,9 +363,12 @@
 <script setup lang="ts">
 import { ref, computed, provide, onMounted } from 'vue';
 import { useQuasar } from 'quasar';
+import { useI18n } from 'vue-i18n';
 import WikiDocument from '../components/wiki/WikiDocument.vue';
 import WikiChapterGroup from '../components/wiki/layout/WikiChapterGroup.vue';
 import { useSettingsStore } from '../stores/settings';
+
+const { t } = useI18n();
 import type {
   WikiData,
   WikiItem,
@@ -462,7 +462,7 @@ async function loadWikiFileList(dirPath: string) {
   } catch (error) {
     console.error('Failed to load wiki file list:', error);
     alert(
-      `无法加载目录文件列表: ${error instanceof Error ? error.message : '未知错误'}\n\n请确保已运行: pnpm run sync:temp`,
+      `${t('loadCatalogFileFailed')}: ${error instanceof Error ? error.message : t('unknownError')}\n\n${t('ensureSyncTemp')}`,
     );
   } finally {
     loadingWikiFiles.value = false;
@@ -492,7 +492,7 @@ async function loadCatalogFileList(dirPath: string) {
   } catch (error) {
     console.error('Failed to load catalog file list:', error);
     alert(
-      `无法加载目录文件列表: ${error instanceof Error ? error.message : '未知错误'}\n\n请确保已运行: pnpm run sync:temp`,
+      `${t('loadCatalogFileFailed')}: ${error instanceof Error ? error.message : t('unknownError')}\n\n${t('ensureSyncTemp')}`,
     );
   } finally {
     loadingCatalogFiles.value = false;
@@ -524,7 +524,7 @@ async function loadWikiFileFromDir(filePath: string, fileName: string) {
     }
   } catch (error) {
     console.error('Failed to load wiki file from dir:', error);
-    alert(`加载文件失败: ${error instanceof Error ? error.message : '未知错误'}`);
+    alert(`${t('loadFileFailed')}: ${error instanceof Error ? error.message : t('unknownError')}`);
   }
 }
 
@@ -552,7 +552,7 @@ async function loadCatalogFileFromDir(filePath: string, fileName: string) {
     console.log('Catalog file loaded successfully:', fileName);
   } catch (error) {
     console.error('Failed to load catalog file from dir:', error);
-    alert(`加载目录文件失败: ${error instanceof Error ? error.message : '未知错误'}`);
+    alert(`${t('loadCatalogFileFailed')}: ${error instanceof Error ? error.message : t('unknownError')}`);
   }
 }
 
@@ -561,12 +561,12 @@ const catalogCount = computed(() => Object.keys(catalogMap.value).length);
 const catalogStatus = computed(() => {
   if (!catalogFile.value) {
     if (savedCatalogFileName.value) {
-      return `上次使用: ${savedCatalogFileName.value}`;
+      return `${t('lastUsedShort')}: ${savedCatalogFileName.value}`;
     }
-    return '未选择';
+    return t('notSelected');
   }
-  if (!catalogCount.value) return '解析失败或为空';
-  return `已加载 ${catalogCount.value} 条`;
+  if (!catalogCount.value) return t('parseFailedOrEmpty');
+  return t('loadedCount', { count: catalogCount.value });
 });
 
 const caption = computed(() => wikiItem.value?.caption);

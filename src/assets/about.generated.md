@@ -1,16 +1,40 @@
 # About
 
 ## Build
-- Version: 39325f9-dirty
-- Commit: 39325f9 (39325f9837f5afed88477987cd20f8f416d5f25e)
-- Commit count: 133
-- Subject: feat: 添加FreskyZ-flow-vue子模块同步脚本
+- Version: 268f948-dirty
+- Commit: 268f948 (268f948874884dfca3320382215fb30ab08d00a8)
+- Commit count: 135
+- Subject: feat: enhance search functionality with advanced filtering options
 - Author: AndreaFrederica
-- Date: 2026-03-18T03:27:45+08:00
-- Generated at: 2026-03-21T22:03:11.664Z
+- Date: 2026-03-23T00:58:57+08:00
+- Generated at: 2026-03-23T19:51:18.837Z
 - Remote: https://github.com/AndreaFrederica/jei-web.git
 
 ## Version History
+
+### r135 (2026-03-23T00:58:57+08:00)
+- 268f948
+  feat: enhance search functionality with advanced filtering options
+  
+  - Updated Japanese and Chinese translations for filter placeholders and help texts.
+  - Refactored search parsing logic to support complex expressions using a new search expression parser.
+  - Introduced a new filter mode toggle (builder and expression) in the BottomBar and ItemEditorPage components.
+  - Added UI elements for quick tag filtering and expression token insertion.
+  - Improved search matching logic to accommodate new expression syntax.
+  - Enhanced filter form to handle negation and tag join modes.
+
+### r134 (2026-03-22T06:09:54+08:00)
+- 82ea775
+  feat: add SimpleWikiRenderer component for rendering various wiki content types
+  
+  - Introduced SimpleWikiRenderer.vue to handle markdown, quotes, tables, lists, and dividers.
+  - Implemented normalization functions for input blocks and wiki content.
+  - Enhanced i18n support by adding new translations for dev mirrors in English, Japanese, and Chinese.
+  - Updated PackSource interface to include optional devMirrors.
+  - Added functionality to enable and manage dev mirrors in the settings and pack routing.
+  - Enhanced RecipeContentView to support new wiki renderers and improved rendering logic.
+  - Updated settings dialog to include a toggle for enabling dev mirrors.
+  - Refactored pack routing runtime store to handle dev mirrors in mirror URL retrieval.
 
 ### r133 (2026-03-18T03:27:45+08:00)
 - 39325f9

@@ -819,6 +819,47 @@ function mergeItemExtensionsForAggregate(
   ) as ItemDef['extensions'] | undefined;
 }
 
+function mergeItemI18nForAggregate(
+  a: ItemDef['i18n'] | undefined,
+  b: ItemDef['i18n'] | undefined,
+): ItemDef['i18n'] | undefined {
+  if (!a && !b) return undefined;
+  if (!a) return { ...b };
+  if (!b) return { ...a };
+  const out: NonNullable<ItemDef['i18n']> = { ...a };
+  Object.keys(b).forEach((locale) => {
+    const incomingEntry = b[locale];
+    if (!incomingEntry) return;
+    const existingEntry = out[locale];
+    if (!existingEntry) {
+      out[locale] = { ...incomingEntry };
+      return;
+    }
+    const mergedDescription = pickPreferLongerString(
+      existingEntry.description,
+      incomingEntry.description,
+    );
+    const mergedWiki = mergeWikiForAggregate(existingEntry.wiki, incomingEntry.wiki);
+    const mergedWikis = mergeWikiForAggregate(
+      existingEntry.wikis as Record<string, unknown> | undefined,
+      incomingEntry.wikis as Record<string, unknown> | undefined,
+    ) as NonNullable<NonNullable<ItemDef['i18n']>[string]>['wikis'];
+    const mergedSource = mergeWikiForAggregate(existingEntry.source, incomingEntry.source);
+    const mergedSources = mergeWikiForAggregate(existingEntry.sources, incomingEntry.sources);
+    out[locale] = {
+      ...existingEntry,
+      ...incomingEntry,
+      name: pickPreferLongerString(existingEntry.name, incomingEntry.name) ?? existingEntry.name,
+      ...(mergedDescription !== undefined ? { description: mergedDescription } : {}),
+      ...(mergedWiki !== undefined ? { wiki: mergedWiki } : {}),
+      ...(mergedWikis !== undefined ? { wikis: mergedWikis } : {}),
+      ...(mergedSource !== undefined ? { source: mergedSource } : {}),
+      ...(mergedSources !== undefined ? { sources: mergedSources } : {}),
+    };
+  });
+  return out;
+}
+
 function mergePackTagsForAggregate(
   base: PackTags | undefined,
   incoming: PackTags | undefined,
@@ -838,6 +879,7 @@ function mergePackTagsForAggregate(
       out.item![tagId] = {
         ...(incomingTag.replace !== undefined ? { replace: incomingTag.replace } : {}),
         values: [...incomingTag.values],
+        ...(incomingTag.i18n ? { i18n: { ...incomingTag.i18n } } : {}),
       };
       return;
     }
@@ -849,10 +891,16 @@ function mergePackTagsForAggregate(
       seen.add(key);
       mergedValues.push(value);
     });
-    out.item![tagId] = {
+    const mergedTag: NonNullable<PackTags['item']>[string] = {
       ...(existing.replace === true || incomingTag.replace === true ? { replace: true } : {}),
       values: mergedValues,
     };
+    const mergedI18n = mergeWikiForAggregate(
+      existing.i18n as Record<string, unknown> | undefined,
+      incomingTag.i18n as Record<string, unknown> | undefined,
+    ) as NonNullable<PackTags['item']>[string]['i18n'] | undefined;
+    if (mergedI18n) mergedTag.i18n = mergedI18n;
+    out.item![tagId] = mergedTag;
   });
 
   return out;
@@ -885,6 +933,8 @@ function mergeItemForAggregate(base: ItemDef, incoming: ItemDef): ItemDef {
   if (base.rarity) out.rarity = { ...base.rarity };
   if (base.belt) out.belt = { ...base.belt };
   if (base.wiki) out.wiki = { ...base.wiki };
+  if (base.wikis) out.wikis = { ...base.wikis };
+  if (base.i18n) out.i18n = { ...base.i18n };
   if (base.extensions) out.extensions = { ...base.extensions };
   if (base.recipes) out.recipes = [...base.recipes];
 
@@ -944,6 +994,15 @@ function mergeItemForAggregate(base: ItemDef, incoming: ItemDef): ItemDef {
   const wiki = mergeWikiForAggregate(out.wiki, incoming.wiki);
   if (wiki !== undefined) out.wiki = wiki;
   else delete out.wiki;
+  const wikis = mergeWikiForAggregate(
+    out.wikis as Record<string, unknown> | undefined,
+    incoming.wikis as Record<string, unknown> | undefined,
+  ) as ItemDef['wikis'] | undefined;
+  if (wikis !== undefined) out.wikis = wikis;
+  else delete out.wikis;
+  const i18n = mergeItemI18nForAggregate(out.i18n, incoming.i18n);
+  if (i18n !== undefined) out.i18n = i18n;
+  else delete out.i18n;
   const extensions = mergeItemExtensionsForAggregate(out.extensions, incoming.extensions);
   if (extensions !== undefined) out.extensions = extensions;
   else delete out.extensions;

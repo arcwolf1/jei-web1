@@ -9,6 +9,7 @@ import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import { Dark } from 'quasar';
 import { Graph } from '@antv/g6';
 import type { EdgeData, GraphData } from '@antv/g6';
+import { useI18n } from 'vue-i18n';
 import type { ItemDef, ItemKey } from 'src/jei/types';
 import type { QuantFlowEdge, QuantFlowNode } from 'src/jei/planner/quantFlow';
 import { itemKeyHash } from 'src/jei/indexing/key';
@@ -18,6 +19,8 @@ import {
   evaluateLineWidthCurve,
   type LineWidthCurveConfig,
 } from 'src/jei/planner/lineWidthCurve';
+
+const { t } = useI18n();
 
 type DisplayUnit = 'items' | 'per_second' | 'per_minute' | 'per_hour';
 
@@ -391,7 +394,7 @@ function toGraphData(): GraphData {
         labelFontSize: 14,
         labelLineHeight: 18,
         icon: true,
-        iconText: '液',
+        iconText: t('liquid'),
         iconFontSize: 28,
         iconFill: isDark ? '#d1f5ff' : '#0c4a6e',
       },
@@ -438,7 +441,11 @@ function toGraphData(): GraphData {
     const labelCore = machineLabel ? `${rateLabel}\n${machineLabel}` : rateLabel;
     const recoveryFirstLeg =
       edge.kind === 'item' && !!(edge as { recoveryFirstLeg?: true }).recoveryFirstLeg;
-    const label = recoveryFirstLeg ? '副产物' : recovery ? `${labelCore}\nrecovery` : labelCore;
+    const label = recoveryFirstLeg
+      ? t('byproduct')
+      : recovery
+        ? `${labelCore}\nrecovery`
+        : labelCore;
     const edgeLineWidth = edgeBaseWidthFromRate(amount);
     return {
       id: edge.id,

@@ -619,6 +619,14 @@
                   </div>
                 </q-card-section>
               </q-card>
+
+              <div v-if="showSection('i18n')">
+                <I18nSettingsPanel
+                  :items="i18nItems"
+                  :current-language="language"
+                  @update:language="$emit('update:language', $event)"
+                />
+              </div>
             </div>
           </q-scroll-area>
         </div>
@@ -637,18 +645,34 @@
 import { computed, onUnmounted, ref, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
 import type { KeyAction, KeyBinding } from 'src/stores/keybindings';
+import type { ItemDef } from 'src/jei/types';
+import type { Language } from 'src/stores/settings';
+import I18nSettingsPanel from './I18nSettingsPanel.vue';
 
 const { t } = useI18n();
 
-type SectionKey = 'plugins' | 'general' | 'keybindings' | 'data' | 'mirror' | 'proxy';
+type SectionKey = 'plugins' | 'general' | 'keybindings' | 'data' | 'mirror' | 'proxy' | 'i18n';
 
 const sectionDefs: Array<{ key: SectionKey; label: string; keywords: string[] }> = [
-  { key: 'plugins', label: '插件管理', keywords: ['插件', 'plugin', '扩展', 'tab'] },
-  { key: 'general', label: '基础设置', keywords: ['基础', '显示', '调试', '快捷键', '历史'] },
-  { key: 'keybindings', label: '快捷键', keywords: ['快捷键', '键位', 'keybinding', 'hotkey'] },
-  { key: 'data', label: '数据源', keywords: ['数据源', 'source', 'pack', '地址'] },
-  { key: 'mirror', label: '镜像路由', keywords: ['镜像', 'mirror', '延迟', '测速', 'dev'] },
-  { key: 'proxy', label: '图片代理', keywords: ['代理', 'proxy', 'token', '图片'] },
+  { key: 'plugins', label: t('sectionPlugins'), keywords: ['插件', 'plugin', '扩展', 'tab'] },
+  {
+    key: 'general',
+    label: t('sectionGeneral'),
+    keywords: ['基础', '显示', '调试', '快捷键', '历史'],
+  },
+  {
+    key: 'keybindings',
+    label: t('sectionKeybindings'),
+    keywords: ['快捷键', '键位', 'keybinding', 'hotkey'],
+  },
+  { key: 'data', label: t('sectionData'), keywords: ['数据源', 'source', 'pack', '地址'] },
+  { key: 'mirror', label: t('sectionMirror'), keywords: ['镜像', 'mirror', '延迟', '测速', 'dev'] },
+  { key: 'proxy', label: t('sectionProxy'), keywords: ['代理', 'proxy', 'token', '图片'] },
+  {
+    key: 'i18n',
+    label: t('sectionI18n'),
+    keywords: ['i18n', '语言', 'language', '翻译', 'locale', '国际化'],
+  },
 ];
 
 const props = defineProps<{
@@ -717,6 +741,8 @@ const props = defineProps<{
   packMirrorSelectionMode: 'auto' | 'manual';
   packManualMirror: string;
   mirrorLatencyLoading: boolean;
+  language: Language;
+  i18nItems: ItemDef[];
 }>();
 
 const emit = defineEmits<{
@@ -754,6 +780,7 @@ const emit = defineEmits<{
   'update:pack-mirror-selection-mode': [value: 'auto' | 'manual'];
   'update:pack-manual-mirror': [value: string];
   'refresh-mirror-latency': [];
+  'update:language': [value: Language];
 }>();
 
 const activeSection = ref<SectionKey>('plugins');

@@ -20,12 +20,12 @@
           <q-card-section>
             <div class="text-h6">
               <q-icon name="school" class="q-mr-sm" />
-              新手教程
+              {{ t('interactiveTour') }}
             </div>
             <!-- 阶段进度节点图 -->
             <div v-if="progress" class="tutorial-progress q-mt-md">
               <div class="text-caption text-grey-7 q-mb-xs">
-                阶段 {{ progress.currentStage + 1 }}/{{ progress.totalStages }}:
+                {{ t('stage') }} {{ progress.currentStage + 1 }}/{{ progress.totalStages }}:
                 {{ progress.stageName }}
               </div>
               <div class="progress-dots">
@@ -41,13 +41,13 @@
                 />
               </div>
               <div class="text-caption text-grey-7 q-mt-xs">
-                步骤 {{ currentStepIndex + 1 }}/{{ steps.length }}
+                {{ t('step') }} {{ currentStepIndex + 1 }}/{{ steps.length }}
               </div>
             </div>
             <div v-else class="text-subtitle2 text-grey-7">
-              步骤 {{ currentStepIndex + 1 }}/{{ steps.length }}
+              {{ t('step') }} {{ currentStepIndex + 1 }}/{{ steps.length }}
             </div>
-            <p>如果教程卡住了，请多次点击下一步/下一阶段或者跳过教程。</p>
+            <p>{{ t('tourStuckHint') }}</p>
           </q-card-section>
 
           <q-card-section>
@@ -60,8 +60,8 @@
               <q-icon :name="interactionCompleted ? 'check_circle' : 'touch_app'" class="q-mr-xs" />
               {{
                 interactionCompleted
-                  ? '✔ 已完成，请继续'
-                  : currentStep.interactionHint || '请完成上述操作以继续'
+                  ? `✔ ${t('completedPleaseContinue')}`
+                  : currentStep.interactionHint || t('pleaseCompleteOperation')
               }}
             </p>
           </q-card-section>
@@ -70,23 +70,23 @@
             <q-btn
               v-if="currentStepIndex > 0 && !currentStep.waitForInteraction"
               flat
-              label="上一步"
+              :label="t('previousStep')"
               @click="previousStep"
             />
             <q-space v-if="!currentStep.waitForInteraction" />
-            <q-btn flat label="跳过教程" color="grey" @click="skipTour" />
+            <q-btn flat :label="t('skipTour')" color="grey" @click="skipTour" />
             <q-btn
               v-if="!currentStep.waitForInteraction"
               v-show="currentStepIndex < steps.length - 1"
               flat
-              label="下一步"
+              :label="t('nextStep')"
               color="primary"
               @click="nextStep"
             />
             <q-btn
               v-if="currentStepIndex >= steps.length - 1"
               flat
-              :label="isLastStage ? '完成' : '下一阶段'"
+              :label="isLastStage ? t('complete') : t('nextStage')"
               :color="isLastStage ? 'positive' : 'primary'"
               @click="isLastStage ? finishTour() : nextStep()"
             />
@@ -99,6 +99,9 @@
 
 <script setup lang="ts">
 import { ref, computed, watch, onMounted, onUnmounted, nextTick } from 'vue';
+import { useI18n } from 'vue-i18n';
+
+const { t } = useI18n();
 
 export type TourStepPosition = 'top' | 'bottom' | 'left' | 'right' | 'center';
 export type TourStepInteractionType = 'click' | 'keypress' | 'custom';

@@ -12,27 +12,33 @@
           :disable="!!decisions.length"
           @click="openSaveDialog"
         />
-        <q-btn-dropdown dense outline icon="share" label="分享" :disable="!!decisions.length">
+        <q-btn-dropdown
+          dense
+          outline
+          icon="share"
+          :label="t('share')"
+          :disable="!!decisions.length"
+        >
           <q-list dense style="min-width: 180px">
             <q-item clickable v-close-popup @click="shareAsUrl">
               <q-item-section avatar><q-icon name="link" /></q-item-section>
-              <q-item-section>复制分享链接</q-item-section>
+              <q-item-section>{{ t('copyShareLink') }}</q-item-section>
             </q-item>
             <q-item clickable v-close-popup @click="copyShareJson">
               <q-item-section avatar><q-icon name="data_object" /></q-item-section>
-              <q-item-section>复制 JSON</q-item-section>
+              <q-item-section>{{ t('copyJson') }}</q-item-section>
             </q-item>
             <q-item clickable v-close-popup @click="shareByJsonUrl">
               <q-item-section avatar><q-icon name="link" /></q-item-section>
-              <q-item-section>用 JSON 链接分享</q-item-section>
+              <q-item-section>{{ t('shareWithJsonUrl') }}</q-item-section>
             </q-item>
             <q-item clickable v-close-popup @click="importShareJson">
               <q-item-section avatar><q-icon name="upload_file" /></q-item-section>
-              <q-item-section>导入 JSON</q-item-section>
+              <q-item-section>{{ t('importJson') }}</q-item-section>
             </q-item>
           </q-list>
         </q-btn-dropdown>
-        <q-toggle v-model="useProductRecovery" dense label="使用产物回收" />
+        <q-toggle v-model="useProductRecovery" dense :label="t('useProductRecovery')" />
         <q-space />
         <q-badge v-if="decisions.length" color="warning"
           >{{ t('pendingChoices') }}{{ decisions.length }}</q-badge
@@ -127,7 +133,9 @@
 
           <div v-else class="column q-gutter-sm">
             <div class="row items-center q-gutter-sm">
-              <div class="text-caption text-grey-8">tag {{ d.tagId }}：选择具体物品</div>
+              <div class="text-caption text-grey-8">
+                tag {{ getTagDisplayName(d.tagId) }} - {{ t('chooseSpecificItem') }}
+              </div>
               <q-badge v-if="!d.candidateItemIds.length" color="negative">{{
                 t('noOptions')
               }}</q-badge>
@@ -157,7 +165,7 @@
 
         <div v-if="activeTab === 'tree'" class="q-mt-md">
           <div class="row items-center q-gutter-sm">
-            <div class="text-caption text-grey-8">目标产出</div>
+            <div class="text-caption text-grey-8">{{ t('targetOutput') }}</div>
             <q-input
               dense
               filled
@@ -202,21 +210,29 @@
               outline
               toggle-color="primary"
               :options="[
-                { label: '列表', value: 'list' },
-                { label: '紧凑', value: 'compact' },
+                { label: t('displayModeList'), value: 'list' },
+                { label: t('displayModeCompact'), value: 'compact' },
               ]"
             />
           </div>
           <div v-if="treeResult" class="q-mt-md">
             <div v-if="treeDisplayMode === 'list'" class="planner__tree-table">
               <div class="planner__tree-table-header">
-                <div class="planner__tree-col planner__tree-col--tree">树结构</div>
+                <div class="planner__tree-col planner__tree-col--tree">
+                  {{ t('treeStructure') }}
+                </div>
                 <div class="planner__tree-col planner__tree-col--rate text-right">
                   {{ rateColumnLabel }}
                 </div>
-                <div class="planner__tree-col planner__tree-col--belts text-right">传送带</div>
-                <div class="planner__tree-col planner__tree-col--machines text-right">设备</div>
-                <div class="planner__tree-col planner__tree-col--power text-right">电量</div>
+                <div class="planner__tree-col planner__tree-col--belts text-right">
+                  {{ t('conveyorBelt') }}
+                </div>
+                <div class="planner__tree-col planner__tree-col--machines text-right">
+                  {{ t('equipment') }}
+                </div>
+                <div class="planner__tree-col planner__tree-col--power text-right">
+                  {{ t('power') }}
+                </div>
               </div>
               <div
                 v-for="row in treeListRows"
@@ -295,7 +311,7 @@
                         "
                         class="planner__tree-name-sub text-caption text-teal-8"
                       >
-                        回收产出：{{ recoveryProducedText(row.node.nodeId) }}
+                        {{ t('recoveryOutput') }}：{{ recoveryProducedText(row.node.nodeId) }}
                       </div>
                     </div>
                     <q-badge
@@ -313,7 +329,7 @@
                       color="teal-6"
                       class="q-ml-sm"
                     >
-                      回收产出
+                      {{ t('recoveryOutput') }}
                       <q-tooltip>{{ recoveryProducedText(row.node.nodeId) }}</q-tooltip>
                     </q-badge>
                     <q-badge
@@ -355,10 +371,12 @@
               </div>
               <div v-if="enhancedTreeResult?.totals" class="planner__tree-table-footer">
                 <div class="planner__tree-footer-row">
-                  <div class="planner__tree-footer-label">总计</div>
+                  <div class="planner__tree-footer-label">{{ t('total') }}</div>
                   <div class="planner__tree-footer-values">
-                    <span class="monospace">电力 {{ totalPower }} kW</span>
-                    <span class="monospace">污染 {{ totalPollution }}/分</span>
+                    <span class="monospace">{{ t('powerUsage') }} {{ totalPower }} kW</span>
+                    <span class="monospace"
+                      >{{ t('pollution') }} {{ totalPollution }}{{ t('pollutionPerMinute') }}</span
+                    >
                   </div>
                 </div>
               </div>
@@ -447,7 +465,7 @@
                     color="teal-6"
                     class="q-ml-sm"
                   >
-                    回收产出
+                    {{ t('recoveryOutput') }}
                     <q-tooltip>{{ recoveryProducedText(row.node.nodeId) }}</q-tooltip>
                   </q-badge>
                   <q-badge
@@ -475,7 +493,7 @@
                       "
                     >
                       <q-badge color="accent" class="q-ml-sm">
-                        {{ formatAmount(row.node.machines) }} 机器
+                        {{ formatAmount(row.node.machines) }} {{ t('machines') }}
                       </q-badge>
                     </template>
                   </template>
@@ -488,7 +506,7 @@
         <div v-else-if="activeTab === 'graph'" class="q-mt-md">
           <div :class="['planner__pagefull', { 'planner__pagefull--active': graphPageFull }]">
             <div class="row items-center q-gutter-sm">
-              <div class="text-caption text-grey-8">目标产出</div>
+              <div class="text-caption text-grey-8">{{ t('targetOutput') }}</div>
               <q-input
                 dense
                 filled
@@ -538,7 +556,9 @@
                 :icon="graphPageFull ? 'close_fullscreen' : 'fit_screen'"
                 @click="graphPageFull = !graphPageFull"
               >
-                <q-tooltip>{{ graphPageFull ? '退出页面内全屏' : '页面内全屏' }}</q-tooltip>
+                <q-tooltip>{{
+                  graphPageFull ? t('exitPageFullscreen') : t('pageFullscreen')
+                }}</q-tooltip>
               </q-btn>
               <q-btn
                 flat
@@ -547,7 +567,7 @@
                 :icon="graphFullscreen ? 'fullscreen_exit' : 'fullscreen'"
                 @click="toggleGraphFullscreen"
               >
-                <q-tooltip>{{ graphFullscreen ? '退出全屏' : '全屏' }}</q-tooltip>
+                <q-tooltip>{{ graphFullscreen ? t('exitFullscreen') : t('fullscreen') }}</q-tooltip>
               </q-btn>
             </div>
             <div
@@ -676,7 +696,7 @@
         <div v-else-if="activeTab === 'line'" class="q-mt-md">
           <div :class="['planner__pagefull', { 'planner__pagefull--active': linePageFull }]">
             <div class="row items-center q-gutter-sm">
-              <div class="text-caption text-grey-8">目标产出</div>
+              <div class="text-caption text-grey-8">{{ t('targetOutput') }}</div>
               <q-input
                 dense
                 filled
@@ -721,7 +741,7 @@
               <q-toggle
                 :model-value="settingsStore.lineIntermediateColoring"
                 dense
-                label="中间产物着色"
+                :label="t('intermediateColoring')"
                 @update:model-value="settingsStore.setLineIntermediateColoring(!!$event)"
               />
               <q-toggle
@@ -733,7 +753,7 @@
                 :model-value="selectedLineItemForcedRaw"
                 dense
                 color="warning"
-                label="视为原料"
+                :label="t('treatAsRawMaterial')"
                 @update:model-value="(v) => setSelectedLineItemForcedRaw(!!v)"
               />
               <q-btn
@@ -769,7 +789,9 @@
                 :icon="linePageFull ? 'close_fullscreen' : 'fit_screen'"
                 @click="linePageFull = !linePageFull"
               >
-                <q-tooltip>{{ linePageFull ? '退出页面内全屏' : '页面内全屏' }}</q-tooltip>
+                <q-tooltip>{{
+                  linePageFull ? t('exitPageFullscreen') : t('pageFullscreen')
+                }}</q-tooltip>
               </q-btn>
               <q-btn
                 flat
@@ -778,7 +800,7 @@
                 :icon="lineFullscreen ? 'fullscreen_exit' : 'fullscreen'"
                 @click="toggleLineFullscreen"
               >
-                <q-tooltip>{{ lineFullscreen ? '退出全屏' : '全屏' }}</q-tooltip>
+                <q-tooltip>{{ lineFullscreen ? t('exitFullscreen') : t('fullscreen') }}</q-tooltip>
               </q-btn>
             </div>
             <div
@@ -809,7 +831,7 @@
         <div v-else-if="activeTab === 'quant'" class="q-mt-md">
           <div :class="['planner__pagefull', { 'planner__pagefull--active': quantPageFull }]">
             <div class="row items-center q-gutter-sm">
-              <div class="text-caption text-grey-8">目标产出</div>
+              <div class="text-caption text-grey-8">{{ t('targetOutput') }}</div>
               <q-input
                 dense
                 filled
@@ -858,8 +880,8 @@
                 toggle-color="primary"
                 :model-value="settingsStore.quantFlowRenderer"
                 :options="[
-                  { label: '节点图', value: 'nodes' },
-                  { label: '桑基图', value: 'sankey' },
+                  { label: t('nodeGraph'), value: 'nodes' },
+                  { label: t('sankeyGraph'), value: 'sankey' },
                 ]"
                 @update:model-value="
                   settingsStore.setQuantFlowRenderer(($event as 'nodes' | 'sankey') ?? 'nodes')
@@ -873,7 +895,9 @@
                 :icon="quantPageFull ? 'close_fullscreen' : 'fit_screen'"
                 @click="quantPageFull = !quantPageFull"
               >
-                <q-tooltip>{{ quantPageFull ? '退出页面内全屏' : '页面内全屏' }}</q-tooltip>
+                <q-tooltip>{{
+                  quantPageFull ? t('exitPageFullscreen') : t('pageFullscreen')
+                }}</q-tooltip>
               </q-btn>
               <q-btn
                 flat
@@ -882,7 +906,7 @@
                 :icon="quantFullscreen ? 'fullscreen_exit' : 'fullscreen'"
                 @click="toggleQuantFullscreen"
               >
-                <q-tooltip>{{ quantFullscreen ? '退出全屏' : '全屏' }}</q-tooltip>
+                <q-tooltip>{{ quantFullscreen ? t('exitFullscreen') : t('fullscreen') }}</q-tooltip>
               </q-btn>
             </div>
             <div
@@ -908,13 +932,15 @@
                 @item-mouseleave="emit('item-mouseleave')"
               />
             </div>
-            <div v-else-if="treeResult" class="q-mt-md text-center text-grey q-pa-lg">暂无节点</div>
+            <div v-else-if="treeResult" class="q-mt-md text-center text-grey q-pa-lg">
+              {{ t('noNodes') }}
+            </div>
           </div>
         </div>
 
         <div v-else class="q-mt-md">
           <div class="row items-center q-gutter-sm">
-            <div class="text-caption text-grey-8">目标产出</div>
+            <div class="text-caption text-grey-8">{{ t('targetOutput') }}</div>
             <q-input
               dense
               filled
@@ -954,7 +980,7 @@
             </q-btn-group>
           </div>
           <div v-if="treeResult" class="q-mt-md">
-            <div class="text-caption text-grey-8 q-mb-sm">所需原料</div>
+            <div class="text-caption text-grey-8 q-mb-sm">{{ t('requiredMaterials') }}</div>
             <q-table
               flat
               bordered
@@ -985,7 +1011,7 @@
               </template>
             </q-table>
             <div v-if="forcedRawRowsWithRates.length" class="q-mt-md">
-              <div class="text-caption text-grey-8 q-mb-sm">视为原料清单（可取消）</div>
+              <div class="text-caption text-grey-8 q-mb-sm">{{ t('rawMaterialList') }}</div>
               <q-table
                 flat
                 bordered
@@ -1032,7 +1058,7 @@
                       size="sm"
                       color="warning"
                       icon="undo"
-                      label="取消原料"
+                      :label="t('cancelRawMaterial')"
                       @click="setForcedRawByKeyHash(props.row.keyHash, false)"
                     />
                   </q-td>
@@ -1040,7 +1066,9 @@
               </q-table>
             </div>
             <div v-if="intermediateRowsWithRates.length" class="q-mt-md">
-              <div class="text-caption text-grey-8 q-mb-sm">中间产物生产计数</div>
+              <div class="text-caption text-grey-8 q-mb-sm">
+                {{ t('intermediateProductionCount') }}
+              </div>
               <q-table
                 flat
                 bordered
@@ -1078,7 +1106,7 @@
                       size="sm"
                       :color="props.row.forcedRaw ? 'warning' : 'primary'"
                       :icon="props.row.forcedRaw ? 'undo' : 'inventory_2'"
-                      :label="props.row.forcedRaw ? '取消原料' : '设为原料'"
+                      :label="props.row.forcedRaw ? t('cancelRawMaterial') : t('setAsRawMaterial')"
                       @click="setForcedRawForItemId(props.row.itemId, !props.row.forcedRaw)"
                     />
                   </q-td>
@@ -1086,7 +1114,7 @@
               </q-table>
             </div>
             <div v-if="machineRows.length" class="q-mt-md">
-              <div class="text-caption text-grey-8 q-mb-sm">所需机器</div>
+              <div class="text-caption text-grey-8 q-mb-sm">{{ t('requiredMachines') }}</div>
               <q-table
                 flat
                 bordered
@@ -1118,7 +1146,7 @@
             </div>
             <div v-if="catalystRows.length" class="q-mt-md">
               <div class="text-caption text-grey-8 q-mb-sm">
-                催化剂（不计入消耗，总需求取最大值）
+                {{ t('catalystInfo') }}
               </div>
               <q-table
                 flat
@@ -1151,15 +1179,15 @@
               </q-table>
             </div>
             <div v-if="enhancedTreeResult?.totals" class="q-mt-md">
-              <div class="text-caption text-grey-8 q-mb-sm">总消耗</div>
+              <div class="text-caption text-grey-8 q-mb-sm">{{ t('totalConsumption') }}</div>
               <div class="row q-gutter-md">
                 <div class="col">
-                  <div class="text-caption text-grey-7">电力</div>
+                  <div class="text-caption text-grey-7">{{ t('powerUsage') }}</div>
                   <div class="text-body2">{{ totalPower }} kW</div>
                 </div>
                 <div class="col">
-                  <div class="text-caption text-grey-7">污染</div>
-                  <div class="text-body2">{{ totalPollution }}/分</div>
+                  <div class="text-caption text-grey-7">{{ t('pollution') }}</div>
+                  <div class="text-body2">{{ totalPollution }}{{ t('pollutionPerMinute') }}</div>
                 </div>
               </div>
             </div>
@@ -1170,7 +1198,7 @@
       <q-dialog v-model="saveDialogOpen">
         <q-card style="min-width: 420px">
           <q-card-section class="row items-center q-gutter-sm">
-            <div class="text-subtitle2">保存合成线路</div>
+            <div class="text-subtitle2">{{ t('saveSynthesisLine') }}</div>
             <q-space />
             <q-btn flat round icon="close" v-close-popup />
           </q-card-section>
@@ -1270,6 +1298,7 @@ const props = defineProps<{
   index: JeiIndex;
   rootItemKey: ItemKey;
   itemDefsByKeyHash: Record<string, ItemDef>;
+  getTagDisplayName: (tagId: string) => string;
   initialState?: PlannerInitialState | null;
   initialTab?: 'tree' | 'graph' | 'line' | 'calc' | 'quant' | null;
 }>();
@@ -1297,6 +1326,8 @@ const emit = defineEmits<{
 
 const selectedRecipeIdByItemKeyHash = ref<Map<string, string>>(new Map());
 const selectedItemIdByTagId = ref<Map<string, ItemId>>(new Map());
+
+const getTagDisplayName = (tagId: string): string => props.getTagDisplayName(tagId);
 
 function labelWithShortcut(label: string, action: KeyAction) {
   return `${label} (${keyBindingToString(keyBindingsStore.getBinding(action))})`;
@@ -1427,10 +1458,10 @@ onUnmounted(() => {
 
 // Unit options for the dropdown
 const unitOptions = [
-  { label: '个', value: 'items' },
-  { label: '个/秒', value: 'per_second' },
-  { label: '个/分', value: 'per_minute' },
-  { label: '个/时', value: 'per_hour' },
+  { label: t('itemUnit'), value: 'items' },
+  { label: t('itemsPerSecond'), value: 'per_second' },
+  { label: t('itemsPerMinute'), value: 'per_minute' },
+  { label: t('itemsPerHour'), value: 'per_hour' },
 ] as const;
 
 function mapToRecord<V extends string>(m: Map<string, V>): Record<string, V> {
@@ -1522,7 +1553,9 @@ async function copyText(text: string): Promise<void> {
   window.prompt('请复制以下内容', text);
 }
 
-function buildCurrentPlanPayload(name = `${itemName(props.rootItemKey)} 线路`): PlannerSavePayload {
+function buildCurrentPlanPayload(
+  name = `${itemName(props.rootItemKey)} ${t('savedLines')}`,
+): PlannerSavePayload {
   return {
     name,
     rootItemKey: props.rootItemKey,
@@ -1565,36 +1598,36 @@ function copyShareJson(): void {
   const share = createPlannerShareData(props.pack.manifest.packId, buildCurrentPlanPayload());
   void copyText(stringifyPlannerShareJson(share))
     .then(() => {
-      $q.notify({ type: 'positive', message: '线路 JSON 已复制。' });
+      $q.notify({ type: 'positive', message: t('lineJsonCopied') });
     })
     .catch(() => {
-      $q.notify({ type: 'negative', message: '复制线路 JSON 失败。' });
+      $q.notify({ type: 'negative', message: t('copyLineJsonFailed') });
     });
 }
 
 function importShareJson(): void {
   $q.dialog({
-    title: '导入线路 JSON',
-    message: '粘贴分享出来的线路 JSON。',
+    title: t('importLineJsonTitle'),
+    message: t('importLineJsonMessage'),
     prompt: {
       model: '',
       type: 'textarea',
     },
     cancel: true,
-    ok: { label: '导入' },
+    ok: { label: t('import') },
   }).onOk((text: unknown) => {
     try {
       const share = parsePlannerShareJson(typeof text === 'string' ? text : '');
       if (share.packId !== props.pack.manifest.packId) {
-        $q.notify({ type: 'negative', message: `分享线路属于包 ${share.packId}，当前包不匹配。` });
+        $q.notify({ type: 'negative', message: t('sharePackMismatch', { packId: share.packId }) });
         return;
       }
       if (share.plan.kind === 'advanced') {
-        $q.notify({ type: 'negative', message: '这是高级规划器分享，请在高级规划器中导入。' });
+        $q.notify({ type: 'negative', message: t('notAdvancedPlannerShare') });
         return;
       }
       loadSharedPlan(share.plan);
-      $q.notify({ type: 'positive', message: '线路 JSON 已导入。' });
+      $q.notify({ type: 'positive', message: t('lineJsonImported') });
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       $q.notify({ type: 'negative', message });
@@ -1752,10 +1785,11 @@ function recoverySourceText(node: {
   if (!node.recovery) return '';
   const sourceItem = node.recoverySourceItemKey ? itemName(node.recoverySourceItemKey) : '';
   const sourceRecipe = node.recoverySourceRecipeTypeKey ?? node.recoverySourceRecipeId ?? '';
-  if (sourceItem && sourceRecipe) return `回收自 ${sourceItem} (${sourceRecipe})`;
-  if (sourceItem) return `回收自 ${sourceItem}`;
-  if (sourceRecipe) return `回收自 ${sourceRecipe}`;
-  return '回收';
+  if (sourceItem && sourceRecipe)
+    return t('recoveredFrom', { source: `${sourceItem} (${sourceRecipe})` });
+  if (sourceItem) return t('recoveredFrom', { source: sourceItem });
+  if (sourceRecipe) return t('recoveredFrom', { source: sourceRecipe });
+  return t('recovery');
 }
 
 function isForcedRawKey(key: ItemKey): boolean {
@@ -1859,7 +1893,7 @@ const saveName = ref('');
 
 function openSaveDialog() {
   const base = itemName(props.rootItemKey);
-  saveName.value = `${base} 线路`;
+  saveName.value = `${base} ${t('savedLines')}`;
   saveDialogOpen.value = true;
 }
 
@@ -1952,10 +1986,10 @@ function recoveryProducedText(nodeId: string): string {
 }
 
 const rateColumnLabel = computed(() => {
-  if (targetUnit.value === 'items') return '数量';
-  if (targetUnit.value === 'per_second') return '物品/秒';
-  if (targetUnit.value === 'per_hour') return '物品/时';
-  return '物品/分';
+  if (targetUnit.value === 'items') return t('itemCount');
+  if (targetUnit.value === 'per_second') return t('itemsPerSecond');
+  if (targetUnit.value === 'per_hour') return t('itemsPerHour');
+  return t('itemsPerMinute');
 });
 
 function finiteOr(n: unknown, fallback: number): number {
@@ -2496,7 +2530,7 @@ const lineFlow = computed(() => {
         targetUnit.value === 'items' && n.seedAmount && n.seedAmount > 0
           ? ` (seed ${formatAmount(n.seedAmount)})`
           : '';
-      const subtitle = n.isSurplus ? `冗余 +${base}` : `${base}${seed}`;
+      const subtitle = n.isSurplus ? `${t('redundancy')} +${base}` : `${base}${seed}`;
       const title = itemName(n.itemKey);
       const recoverySource = n.recovery ? recoverySourceText(n) : '';
       titleById.set(n.nodeId, title);
@@ -2548,7 +2582,7 @@ const lineFlow = computed(() => {
     const totalUsed = outputDetails.reduce((acc, d) => acc + d.demanded, 0);
     const subtitle =
       outputDetails.length > 0
-        ? `总产 ${formatAmount(displayRateFromAmount(totalProduced))}${unitSuffix()} / 已用 ${formatAmount(displayRateFromAmount(totalUsed))}${unitSuffix()}`
+        ? `${t('totalProduced')} ${formatAmount(displayRateFromAmount(totalProduced))}${unitSuffix()} / ${t('totalUsed')} ${formatAmount(displayRateFromAmount(totalUsed))}${unitSuffix()}`
         : `${outName} ${formatAmount(displayRateFromAmount(n.amount))}${unitSuffix()}`;
     titleById.set(n.nodeId, title);
     return {
@@ -3203,8 +3237,8 @@ const quantModel = computed(() => {
 });
 
 const leafColumns = [
-  { name: 'name', label: '物品', field: 'name', align: 'left' as const },
-  { name: 'amount', label: '数量', field: 'amount', align: 'right' as const },
+  { name: 'name', label: t('item'), field: 'name', align: 'left' as const },
+  { name: 'amount', label: t('itemCount'), field: 'amount', align: 'right' as const },
   { name: 'id', label: 'ID', field: 'id', align: 'left' as const },
 ];
 
@@ -3231,9 +3265,9 @@ const catalystRows = computed<LeafRow[]>(() => {
 
 // Enhanced columns with rate information
 const leafColumnsWithRates = [
-  { name: 'name', label: '物品', field: 'name', align: 'left' as const },
-  { name: 'amount', label: '数量', field: 'amount', align: 'right' as const },
-  { name: 'rate', label: '速率/分', field: 'rate', align: 'right' as const },
+  { name: 'name', label: t('item'), field: 'name', align: 'left' as const },
+  { name: 'amount', label: t('itemCount'), field: 'amount', align: 'right' as const },
+  { name: 'rate', label: t('ratePerMinute'), field: 'rate', align: 'right' as const },
   { name: 'id', label: 'ID', field: 'id', align: 'left' as const },
 ];
 
@@ -3294,11 +3328,11 @@ const leafRowsWithRates = computed<LeafRowWithRate[]>(() => {
 });
 
 const intermediateColumnsWithRates = [
-  { name: 'name', label: '物品', field: 'name', align: 'left' as const },
-  { name: 'amount', label: '数量', field: 'amount', align: 'right' as const },
-  { name: 'rate', label: '速率/分', field: 'rate', align: 'right' as const },
+  { name: 'name', label: t('item'), field: 'name', align: 'left' as const },
+  { name: 'amount', label: t('itemCount'), field: 'amount', align: 'right' as const },
+  { name: 'rate', label: t('ratePerMinute'), field: 'rate', align: 'right' as const },
   { name: 'id', label: 'ID', field: 'id', align: 'left' as const },
-  { name: 'action', label: '操作', field: 'action', align: 'right' as const },
+  { name: 'action', label: t('action'), field: 'action', align: 'right' as const },
 ];
 
 type IntermediateRowWithRate = {
@@ -3311,10 +3345,10 @@ type IntermediateRowWithRate = {
 };
 
 const forcedRawColumnsWithRates = [
-  { name: 'name', label: '物品', field: 'name', align: 'left' as const },
-  { name: 'amount', label: '数量', field: 'amount', align: 'right' as const },
-  { name: 'rate', label: '速率/分', field: 'rate', align: 'right' as const },
-  { name: 'action', label: '操作', field: 'action', align: 'right' as const },
+  { name: 'name', label: t('item'), field: 'name', align: 'left' as const },
+  { name: 'amount', label: t('itemCount'), field: 'amount', align: 'right' as const },
+  { name: 'rate', label: t('ratePerMinute'), field: 'rate', align: 'right' as const },
+  { name: 'action', label: t('action'), field: 'action', align: 'right' as const },
 ];
 
 type ForcedRawRowWithRate = {
@@ -3399,8 +3433,8 @@ const forcedRawRowsWithRates = computed<ForcedRawRowWithRate[]>(() => {
 
 // Machine columns and rows
 const machineColumns = [
-  { name: 'name', label: '机器', field: 'name', align: 'left' as const },
-  { name: 'count', label: '数量', field: 'count', align: 'right' as const },
+  { name: 'name', label: t('equipment'), field: 'name', align: 'left' as const },
+  { name: 'count', label: t('itemCount'), field: 'count', align: 'right' as const },
 ];
 
 type MachineRow = { id: string; name: string; count: number };

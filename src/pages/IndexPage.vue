@@ -167,6 +167,7 @@
       :available-item-ids="availableItemIds"
       :available-game-ids="availableGameIds"
       :available-tags="availableTags"
+      :get-tag-display-name="getTagDisplayName"
       @open-settings="settingsOpen = true"
     />
 
@@ -253,6 +254,9 @@
       @update:keybinding="onKeybindingChange"
       @reset:keybindings="onResetKeybindings"
       @refresh-mirror-latency="refreshActivePackMirrorLatency"
+      :language="settingsStore.language"
+      :i18n-items="pack?.items ?? []"
+      @update:language="onLanguageChange"
     />
 
     <pre v-if="settingsStore.debugLayout" class="jei-debug-overlay">{{ debugText }}</pre>
@@ -335,6 +339,13 @@ import {
   type LoadProgress,
 } from 'src/jei/pack/loader';
 import {
+  resolveItemLocale,
+  resolveAllItemsLocale,
+  resolveAllRecipeTypesLocale,
+  getTagDisplayName as getTagDisplayNameFromDef,
+  resolveTagDef,
+} from 'src/jei/i18n-resolver';
+import {
   applyImageProxyToPack,
   ensurePackImageProxyTokens,
   resolveImageUrl,
@@ -388,7 +399,7 @@ import type {
   PluginSettingValue,
   PluginTabRuntime,
 } from 'src/jei/plugins/types';
-import { useSettingsStore } from 'src/stores/settings';
+import { useSettingsStore, type Language } from 'src/stores/settings';
 import {
   useKeyBindingsStore,
   eventMatchesBinding,
@@ -407,7 +418,7 @@ const settingsStore = useSettingsStore();
 const keyBindingsStore = useKeyBindingsStore();
 const packRoutingRuntimeStore = usePackRoutingRuntimeStore();
 const dialogManager = useDialogManager();
-const { t } = useI18n();
+const { t, locale } = useI18n();
 const pluginManager = new PluginManager();
 for (const plugin of builtinPlugins) {
   pluginManager.register(plugin);
@@ -1014,6 +1025,11 @@ function onResetKeybindings() {
   keyBindingsStore.resetToDefaults();
 }
 
+function onLanguageChange(lang: Language) {
+  settingsStore.setLanguage(lang);
+  locale.value = lang;
+}
+
 // 更新网页标题
 watch(
   () => {
@@ -1085,6 +1101,7 @@ async function ensureItemDetailLoadedByKeyHash(keyHash: string): Promise<void> {
         detailPath,
         detailLoaded: true,
       };
+      resolveItemLocale(merged, settingsStore.language);
 
       const nextItems = currentPack.items.map((it) =>
         itemKeyHash(it.key) === keyHash ? merged : it,
@@ -1194,28 +1211,38 @@ watch(
 const parsedSearch = computed(() => parseSearchExpression(filterText.value));
 
 type NameSearchKeys = {
-  nameLower: string;
-  pinyinFull: string;
-  pinyinFirst: string;
+  namesLower: string[];
+  pinyinFulls: string[];
+  pinyinFirsts: string[];
 };
 
 function normalizePinyinQuery(input: string): string {
   return input.toLowerCase().replace(/[^a-z0-9]+/g, '');
 }
 
-function buildNameSearchKeys(name: string): NameSearchKeys {
-  const nameLower = (name ?? '').toLowerCase();
-  try {
-    const pinyinFull = normalizePinyinQuery(
-      pinyin(name ?? '', { toneType: 'none', nonZh: 'consecutive' }),
-    );
-    const pinyinFirst = normalizePinyinQuery(
-      pinyin(name ?? '', { toneType: 'none', pattern: 'first', nonZh: 'consecutive' }),
-    );
-    return { nameLower, pinyinFull, pinyinFirst };
-  } catch {
-    return { nameLower, pinyinFull: '', pinyinFirst: '' };
+function buildNameSearchKeys(names: string[]): NameSearchKeys {
+  const namesLower: string[] = [];
+  const pinyinFulls: string[] = [];
+  const pinyinFirsts: string[] = [];
+
+  for (const name of names) {
+    if (!name) continue;
+    namesLower.push(name.toLowerCase());
+    try {
+      pinyinFulls.push(
+        normalizePinyinQuery(pinyin(name, { toneType: 'none', nonZh: 'consecutive' })),
+      );
+      pinyinFirsts.push(
+        normalizePinyinQuery(
+          pinyin(name, { toneType: 'none', pattern: 'first', nonZh: 'consecutive' }),
+        ),
+      );
+    } catch {
+      // ignore pinyin errors for non-Chinese names
+    }
   }
+
+  return { namesLower, pinyinFulls, pinyinFirsts };
 }
 
 const nameSearchKeysByKeyHash = computed(() => {
@@ -1223,7 +1250,15 @@ const nameSearchKeysByKeyHash = computed(() => {
   const out = new Map<string, NameSearchKeys>();
   if (!map) return out;
   for (const [keyHash, def] of map.entries()) {
-    out.set(keyHash, buildNameSearchKeys(def.name ?? ''));
+    const allNames = new Set<string>();
+    if (def.name) allNames.add(def.name);
+    const i18n = def.i18n ?? def.extensions?.jeiweb?.i18n;
+    if (i18n) {
+      for (const entry of Object.values(i18n)) {
+        if (entry?.name) allNames.add(entry.name);
+      }
+    }
+    out.set(keyHash, buildNameSearchKeys(Array.from(allNames)));
   }
   return out;
 });
@@ -1238,6 +1273,15 @@ const availableTags = computed(() => {
   }
   return Array.from(tags).sort();
 });
+
+const getTagDisplayName = (tagId: string): string => {
+  const tagDef = resolveTagDef(
+    tagId,
+    pack.value?.tags?.item,
+    pack.value?.manifest.gameId ?? undefined,
+  );
+  return getTagDisplayNameFromDef(tagId, tagDef, settingsStore.language);
+};
 
 // 所有可用的物品 ID（去重）
 const availableItemIds = computed(() => {
@@ -1900,6 +1944,23 @@ watch(activePackId, async (next) => {
   void recomputePageSize(); // 切 pack 后重新计算一次
 });
 watch(
+  () => settingsStore.language,
+  (lang) => {
+    const p = pack.value;
+    if (!p) return;
+    resolveAllItemsLocale(p.items, lang);
+    resolveAllRecipeTypesLocale(p.recipeTypes, lang);
+    const wikiMap: Record<string, Record<string, unknown>> = {};
+    for (const item of p.items) {
+      if (item.wiki && item.key.id) {
+        wikiMap[item.key.id] = item.wiki;
+      }
+    }
+    p.wiki = wikiMap;
+    index.value = buildJeiIndex(p);
+  },
+);
+watch(
   () => [settingsOpen.value, activePackId.value] as const,
   async ([open]) => {
     if (!open) return;
@@ -1951,6 +2012,8 @@ async function reloadPack(packId: string) {
     });
     runtimePackDispose.value = loaded.dispose;
     pack.value = loaded.pack;
+    resolveAllItemsLocale(loaded.pack.items, settingsStore.language);
+    resolveAllRecipeTypesLocale(loaded.pack.recipeTypes, settingsStore.language);
     packRoutingRuntimeStore.setActiveBaseUrl(packId, getActivePackBaseUrl(packId));
 
     const startupDialog = loaded.pack.manifest.startupDialog;
@@ -3397,24 +3460,29 @@ function matchesSearch(
   searchExpression: ReturnType<typeof parseSearchExpression>,
   nameKeys?: NameSearchKeys,
 ): boolean {
-  const name = nameKeys?.nameLower ?? (def.name ?? '').toLowerCase();
-  const pinyinFull = nameKeys?.pinyinFull ?? '';
-  const pinyinFirst = nameKeys?.pinyinFirst ?? '';
+  const namesLower = nameKeys?.namesLower ?? [(def.name ?? '').toLowerCase()];
+  const pinyinFulls = nameKeys?.pinyinFulls ?? [];
+  const pinyinFirsts = nameKeys?.pinyinFirsts ?? [];
   const id = def.key.id.toLowerCase();
   const gameId = (id.includes(':') ? id.split(':')[0] : id.split('.')[0]) ?? '';
   const tags = index.value?.tagIdsByItemId.get(def.key.id);
 
   const tagMatches = (term: string): boolean => {
     if (!tags) return false;
-    return Array.from(tags).some((tagId) => tagId.toLowerCase().includes(term));
+    return Array.from(tags).some((tagId) => {
+      if (tagId.toLowerCase().includes(term)) return true;
+      const localized = getTagDisplayName(tagId).toLowerCase();
+      return localized.includes(term);
+    });
   };
 
   const matchesTerm = (term: SearchTerm): boolean => {
     switch (term.field) {
       case 'text': {
-        if (name.includes(term.value)) return true;
+        if (namesLower.some((n) => n.includes(term.value))) return true;
         const q = normalizePinyinQuery(term.value);
-        if (q && (pinyinFull.includes(q) || pinyinFirst.includes(q))) return true;
+        if (q && pinyinFulls.some((p) => p.includes(q))) return true;
+        if (q && pinyinFirsts.some((p) => p.includes(q))) return true;
         if (id.includes(term.value)) return true;
         if (tagMatches(term.value)) return true;
         return false;

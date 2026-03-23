@@ -372,13 +372,13 @@ const isCenterPluginTabActive = computed(() =>
 
 const currentViewTitle = computed(() => {
   if (props.centerTab === 'advanced') {
-    return '高级计划器';
+    return t('advancedPlannerTitle');
   }
   const centerPluginTab = props.centerPluginTabs.find((tab) => tab.tabKey === props.centerTab);
   if (centerPluginTab) {
     return centerPluginTab.tabLabel;
   }
-  return props.navStackLength ? props.currentItemTitle : '中间区域';
+  return props.navStackLength ? props.currentItemTitle : t('middleArea');
 });
 
 function isCenterPluginTabMounted(tabKey: string): boolean {
