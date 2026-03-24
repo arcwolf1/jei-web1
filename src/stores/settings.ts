@@ -118,6 +118,7 @@ export const useSettingsStore = defineStore('settings', {
       circuitEditorPiecePanelSplitRatio: 0.5,
       detectPcDisableMobile: true,
       customPackSources: [] as Array<{ packId: string; label: string; mirrors: string[] }>,
+      useDevPackMirrors: false,
       packMirrorSelectionModeByPack: {} as Record<string, 'auto' | 'manual'>,
       packManualMirrorByPack: {} as Record<string, string>,
       showLoadingOverlay: true,
@@ -266,6 +267,10 @@ export const useSettingsStore = defineStore('settings', {
             .map((x) => normalizeCustomPackSource(x))
             .filter((x): x is { packId: string; label: string; mirrors: string[] } => x !== null)
           : defaults.customPackSources,
+        useDevPackMirrors:
+          typeof parsed.useDevPackMirrors === 'boolean'
+            ? parsed.useDevPackMirrors
+            : defaults.useDevPackMirrors,
         packMirrorSelectionModeByPack:
           parsed.packMirrorSelectionModeByPack && typeof parsed.packMirrorSelectionModeByPack === 'object'
             ? Object.fromEntries(
@@ -507,6 +512,10 @@ export const useSettingsStore = defineStore('settings', {
       this.customPackSources = this.customPackSources.filter((s) => s.packId !== packId);
       void this.save();
     },
+    setUseDevPackMirrors(value: boolean) {
+      this.useDevPackMirrors = value;
+      void this.save();
+    },
     setPackMirrorSelectionMode(packId: string, mode: 'auto' | 'manual') {
       this.packMirrorSelectionModeByPack = {
         ...this.packMirrorSelectionModeByPack,
@@ -613,6 +622,7 @@ export const useSettingsStore = defineStore('settings', {
         circuitEditorPiecePanelSplitRatio: this.circuitEditorPiecePanelSplitRatio,
         detectPcDisableMobile: this.detectPcDisableMobile,
         customPackSources: this.customPackSources,
+        useDevPackMirrors: this.useDevPackMirrors,
         packMirrorSelectionModeByPack: this.packMirrorSelectionModeByPack,
         packManualMirrorByPack: this.packManualMirrorByPack,
         showLoadingOverlay: this.showLoadingOverlay,
@@ -715,6 +725,9 @@ export const useSettingsStore = defineStore('settings', {
         this.customPackSources = parsed.customPackSources
           .map((x) => normalizeCustomPackSource(x))
           .filter((x): x is { packId: string; label: string; mirrors: string[] } => x !== null);
+      }
+      if (typeof parsed.useDevPackMirrors === 'boolean') {
+        this.useDevPackMirrors = parsed.useDevPackMirrors;
       }
       if (parsed.packMirrorSelectionModeByPack && typeof parsed.packMirrorSelectionModeByPack === 'object') {
         this.packMirrorSelectionModeByPack = Object.fromEntries(

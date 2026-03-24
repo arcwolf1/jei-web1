@@ -129,6 +129,7 @@ export function assertItemDef(value: unknown, jsonPath: string): ItemDef {
   }
   const detailPath = assertOptionalString(obj.detailPath, `${jsonPath}.detailPath`);
   const wikiRaw = assertOptionalRecord(obj.wiki, `${jsonPath}.wiki`);
+  const extensionsRaw = assertOptionalRecord(obj.extensions, `${jsonPath}.extensions`);
   const recipesRaw = assertOptionalArray(obj.recipes, `${jsonPath}.recipes`);
   const recipes = recipesRaw?.map((r, i) => assertRecipe(r, `${jsonPath}.recipes[${i}]`));
 
@@ -145,6 +146,9 @@ export function assertItemDef(value: unknown, jsonPath: string): ItemDef {
   if (detailPath !== undefined) def.detailPath = detailPath;
   if (belt !== undefined) def.belt = belt;
   if (wikiRaw !== undefined) def.wiki = wikiRaw;
+  if (extensionsRaw !== undefined) {
+    def.extensions = extensionsRaw as NonNullable<ItemDef['extensions']>;
+  }
   if (recipes !== undefined) def.recipes = recipes;
   return def;
 }

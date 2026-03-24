@@ -20,6 +20,16 @@
       "packId": "aef-aggregated",
       "label": "Arknights:Endfield (Aggregated)",
       "aggregateDescriptor": "aggregates/aef-aggregated.json"
+    },
+    {
+      "packId": "warfarin-next",
+      "label": "Warfarin Wiki (Next Gen)",
+      "mirrors": [
+        "https://warfarin.api.jeiweb.sirrus.cc/"
+      ],
+      "devMirrors": [
+        "http://127.0.0.1:4179/"
+      ]
     }
   ]
 }

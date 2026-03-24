@@ -54,7 +54,74 @@
         </div>
         <q-separator />
 
-        <template v-if="hasStructuredWiki">
+        <template v-if="hasExtensionWikiRenderers">
+          <div class="wiki-renderer-stack column q-gutter-lg">
+            <section
+              v-for="renderer in extensionWikiRenderers"
+              :key="renderer.id"
+              class="wiki-renderer-section"
+            >
+              <div v-if="renderer.title" class="text-subtitle2 q-mb-sm">{{ renderer.title }}</div>
+
+              <template v-if="renderer.type === 'structured-wiki' && renderer.structured">
+                <div v-if="renderer.structured.briefDescriptionDocument" class="wiki-brief">
+                  <div class="text-subtitle2 q-mb-sm">{{ t('description') }}</div>
+                  <WikiDocument :document="renderer.structured.briefDescriptionDocument" />
+                </div>
+
+                <div class="wiki-body">
+                  <template v-if="renderer.structured.chapterGroup.length">
+                    <WikiChapterGroup
+                      v-for="group in renderer.structured.chapterGroup"
+                      :key="group.title"
+                      :group="group"
+                      :widget-common-map="renderer.structured.widgetCommonMap"
+                      :document-map="renderer.structured.documentMap"
+                    />
+                  </template>
+
+                  <template v-else>
+                    <div class="fallback-docs">
+                      <section
+                        v-for="(doc, docId) in renderer.structured.documentMap"
+                        :key="docId"
+                        class="fallback-section q-mb-md"
+                      >
+                        <div class="text-subtitle2 q-mb-sm">{{ getDocumentTitle(doc, docId) }}</div>
+                        <WikiDocument :document="doc" />
+                      </section>
+                    </div>
+                  </template>
+                </div>
+              </template>
+
+              <div
+                v-else-if="renderer.type === 'markdown'"
+                class="wiki-description"
+                v-html="renderer.markdownHtml"
+                @click="handleWikiDescriptionClick"
+              ></div>
+
+              <div
+                v-else-if="renderer.type === 'description'"
+                class="wiki-description"
+                v-html="renderer.markdownHtml"
+                @click="handleWikiDescriptionClick"
+              ></div>
+
+              <div
+                v-else-if="renderer.type === 'simple-v1'"
+                class="wiki-simple"
+                @click="handleWikiDescriptionClick"
+              >
+                <SimpleWikiRenderer :source="renderer.simpleSource" />
+              </div>
+            </section>
+          </div>
+          <q-separator />
+        </template>
+
+        <template v-else-if="hasStructuredWiki">
           <div v-if="briefDescriptionDocument" class="wiki-brief">
             <div class="text-subtitle2 q-mb-sm">{{ t('description') }}</div>
             <WikiDocument :document="briefDescriptionDocument" />
@@ -366,7 +433,8 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, provide, ref, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
-import type { PackData, ItemDef, ItemKey } from 'src/jei/types';
+import MarkdownIt from 'markdown-it';
+import type { PackData, ItemDef, ItemKey, ItemExtensions, JeiWebWikiRendererDef } from 'src/jei/types';
 import type { JeiIndex } from 'src/jei/indexing/buildIndex';
 import { itemKeyHash } from 'src/jei/indexing/key';
 import type { PlannerInitialState, PlannerLiveState } from 'src/jei/planner/plannerUi';
@@ -377,6 +445,7 @@ import RecipeViewer from 'src/jei/components/RecipeViewer.vue';
 import CraftingPlannerView from 'src/jei/components/CraftingPlannerView.vue';
 import WikiDocument from 'src/components/wiki/WikiDocument.vue';
 import WikiChapterGroup from 'src/components/wiki/layout/WikiChapterGroup.vue';
+import SimpleWikiRenderer from 'src/components/wiki/SimpleWikiRenderer.vue';
 import InlineImageViewer from 'src/components/InlineImageViewer.vue';
 import PluginIframeTab from './PluginIframeTab.vue';
 import { useCachedImageUrl, useRuntimeImageUrl } from 'src/jei/pack/runtimeImage';
@@ -462,6 +531,35 @@ function isPluginTabMounted(tabKey: string, keepAlive?: boolean): boolean {
   return false;
 }
 
+const markdownRenderer = new MarkdownIt({
+  html: true,
+  linkify: true,
+  typographer: true,
+});
+
+type SupportedWikiRendererType = 'structured-wiki' | 'simple-v1' | 'markdown' | 'description';
+
+interface StructuredWikiRenderData {
+  briefDescriptionDocument: Document | null;
+  documentMap: Record<string, Document>;
+  chapterGroup: ChapterGroup[];
+  widgetCommonMap: Record<string, WidgetCommon>;
+}
+
+interface PreparedWikiRenderer {
+  id: string;
+  type: SupportedWikiRendererType;
+  order: number;
+  title?: string;
+  markdownHtml?: string;
+  simpleSource?: unknown;
+  structured?: StructuredWikiRenderData;
+}
+
+function isRecordLike(value: unknown): value is Record<string, unknown> {
+  return !!value && typeof value === 'object' && !Array.isArray(value);
+}
+
 function normalizeWikiItem(raw: unknown): WikiItem | null {
   if (!raw || typeof raw !== 'object') return null;
   const dataItem = (raw as { data?: { item?: unknown } }).data?.item;
@@ -472,28 +570,203 @@ function normalizeWikiItem(raw: unknown): WikiItem | null {
   return null;
 }
 
-const wikiItem = computed(() => normalizeWikiItem(props.currentItemDef?.wiki));
-const hasStructuredWiki = computed(() => Boolean(wikiItem.value?.document?.documentMap));
+function normalizeDocument(raw: unknown): Document | null {
+  if (!isRecordLike(raw)) return null;
+  if (!Array.isArray(raw.blockIds)) return null;
+  if (!isRecordLike(raw.blockMap)) return null;
+  return raw as unknown as Document;
+}
+
+function buildStructuredWikiRenderData(raw: unknown): StructuredWikiRenderData | null {
+  const item = normalizeWikiItem(raw);
+  if (!item) return null;
+  const documentMap = isRecordLike(item.document?.documentMap) ? item.document.documentMap : {};
+  const chapterGroup = Array.isArray(item.document?.chapterGroup) ? item.document.chapterGroup : [];
+  const widgetCommonMap = isRecordLike(item.document?.widgetCommonMap)
+    ? item.document.widgetCommonMap
+    : {};
+  const briefDescriptionDocument = normalizeDocument(item.brief?.description);
+  if (!Object.keys(documentMap).length && !briefDescriptionDocument) return null;
+  return {
+    briefDescriptionDocument,
+    documentMap,
+    chapterGroup,
+    widgetCommonMap,
+  };
+}
+
+function normalizeRendererType(rawType: unknown): SupportedWikiRendererType | null {
+  if (typeof rawType !== 'string') return null;
+  const type = rawType.trim().toLowerCase();
+  if (!type) return null;
+  if (
+    type === 'structured-wiki' ||
+    type === 'structured' ||
+    type === 'wiki-document' ||
+    type === 'legacy-structured'
+  ) {
+    return 'structured-wiki';
+  }
+  if (type === 'simple-v1' || type === 'simple' || type === 'legacy-simple') {
+    return 'simple-v1';
+  }
+  if (type === 'markdown' || type === 'md') {
+    return 'markdown';
+  }
+  if (type === 'description' || type === 'legacy-description') {
+    return 'description';
+  }
+  return null;
+}
+
+function pickTextContent(raw: unknown): string {
+  if (typeof raw === 'string') return raw.trim();
+  if (!isRecordLike(raw)) return '';
+  if (typeof raw.content === 'string') return raw.content.trim();
+  if (typeof raw.text === 'string') return raw.text.trim();
+  if (typeof raw.markdown === 'string') return raw.markdown.trim();
+  return '';
+}
+
+function renderMarkdownHtml(raw: unknown): string {
+  const text = pickTextContent(raw);
+  if (!text) return '';
+  return markdownRenderer.render(text).trim();
+}
+
+function hasSimpleWikiContent(raw: unknown): boolean {
+  if (typeof raw === 'string') return raw.trim().length > 0;
+  if (Array.isArray(raw)) return raw.length > 0;
+  if (!isRecordLike(raw)) return false;
+  if (Array.isArray(raw.blocks)) return raw.blocks.length > 0;
+  return pickTextContent(raw).length > 0;
+}
+
+function resolveLegacyRendererSource(type: SupportedWikiRendererType): unknown {
+  if (type === 'structured-wiki' || type === 'simple-v1') return props.currentItemDef?.wiki;
+  return props.currentItemDef?.description;
+}
+
+function resolveRendererSourceFromRef(
+  sourceRef: string | undefined,
+  sources: Record<string, unknown>,
+): unknown {
+  if (!sourceRef) return undefined;
+  if (sourceRef === '$legacy.wiki') return props.currentItemDef?.wiki;
+  if (sourceRef === '$legacy.description') return props.currentItemDef?.description;
+  return sources[sourceRef];
+}
+
+function getJeiwebWikiConfig(
+  extensions: ItemExtensions | undefined,
+): { renderers: JeiWebWikiRendererDef[]; sources: Record<string, unknown> } | null {
+  const jeiweb = extensions?.jeiweb;
+  if (!isRecordLike(jeiweb)) return null;
+  const wiki = jeiweb.wiki;
+  if (!isRecordLike(wiki)) return null;
+  const renderers = Array.isArray(wiki.renderers)
+    ? (wiki.renderers.filter((entry) => isRecordLike(entry)) as JeiWebWikiRendererDef[])
+    : [];
+  const sources = isRecordLike(wiki.sources) ? wiki.sources : {};
+  return { renderers, sources };
+}
+
+const legacyStructuredWikiData = computed(() =>
+  buildStructuredWikiRenderData(props.currentItemDef?.wiki),
+);
+const hasStructuredWiki = computed(() => Boolean(legacyStructuredWikiData.value));
 
 const documentMap = computed<Record<string, Document>>(() => {
-  return wikiItem.value?.document?.documentMap || {};
+  return legacyStructuredWikiData.value?.documentMap || {};
 });
 
 const chapterGroup = computed<ChapterGroup[]>(() => {
-  return wikiItem.value?.document?.chapterGroup || [];
+  return legacyStructuredWikiData.value?.chapterGroup || [];
 });
 
 const widgetCommonMap = computed<Record<string, WidgetCommon>>(() => {
-  return wikiItem.value?.document?.widgetCommonMap || {};
+  return legacyStructuredWikiData.value?.widgetCommonMap || {};
 });
 
 const briefDescriptionDocument = computed<Document | null>(() => {
-  const desc = wikiItem.value?.brief?.description;
-  if (desc && typeof desc === 'object' && 'blockIds' in desc && 'blockMap' in desc) {
-    return desc;
-  }
-  return null;
+  return legacyStructuredWikiData.value?.briefDescriptionDocument || null;
 });
+
+const extensionWikiRenderers = computed<PreparedWikiRenderer[]>(() => {
+  const config = getJeiwebWikiConfig(props.currentItemDef?.extensions);
+  if (!config?.renderers.length) return [];
+
+  const prepared = config.renderers
+    .map((entry, index): { index: number; renderer: PreparedWikiRenderer } | null => {
+      if (entry.enabled === false) return null;
+      const type = normalizeRendererType(entry.type);
+      if (!type) return null;
+      const order =
+        typeof entry.order === 'number' && Number.isFinite(entry.order) ? entry.order : index * 10;
+      const title =
+        typeof entry.title === 'string' && entry.title.trim().length > 0
+          ? entry.title.trim()
+          : undefined;
+      const sourceRef = typeof entry.source === 'string' ? entry.source.trim() : undefined;
+      const source =
+        entry.data !== undefined
+          ? entry.data
+          : (resolveRendererSourceFromRef(sourceRef, config.sources) ??
+            resolveLegacyRendererSource(type));
+
+      if (type === 'structured-wiki') {
+        const structured = buildStructuredWikiRenderData(source);
+        if (!structured) return null;
+        return {
+          index,
+          renderer: {
+            id: entry.id || `renderer-${index}`,
+            type,
+            order,
+            ...(title !== undefined ? { title } : {}),
+            structured,
+          },
+        };
+      }
+
+      if (type === 'simple-v1') {
+        if (!hasSimpleWikiContent(source)) return null;
+        return {
+          index,
+          renderer: {
+            id: entry.id || `renderer-${index}`,
+            type,
+            order,
+            ...(title !== undefined ? { title } : {}),
+            simpleSource: source,
+          },
+        };
+      }
+
+      const markdownHtml =
+        type === 'description' && source === props.currentItemDef?.description
+          ? (props.renderedDescription || renderMarkdownHtml(source))
+          : renderMarkdownHtml(source);
+      if (!markdownHtml) return null;
+      return {
+        index,
+        renderer: {
+          id: entry.id || `renderer-${index}`,
+          type,
+          order,
+          ...(title !== undefined ? { title } : {}),
+          markdownHtml,
+        },
+      };
+    })
+    .filter((entry): entry is { index: number; renderer: PreparedWikiRenderer } => entry !== null)
+    .sort((a, b) => a.renderer.order - b.renderer.order || a.index - b.index)
+    .map((entry) => entry.renderer);
+
+  return prepared;
+});
+
+const hasExtensionWikiRenderers = computed(() => extensionWikiRenderers.value.length > 0);
 
 function getDocumentTitle(doc: Document, fallback: string) {
   for (const blockId of doc.blockIds || []) {
@@ -690,7 +963,20 @@ provide('wikiImageOpen', openViewer);
 </script>
 
 <style scoped>
+.wiki-renderer-stack {
+  width: 100%;
+}
+
+.wiki-renderer-section + .wiki-renderer-section {
+  padding-top: 0.75rem;
+  border-top: 1px solid rgba(0, 0, 0, 0.06);
+}
+
 .wiki-description {
+  line-height: 1.6;
+}
+
+.wiki-simple {
   line-height: 1.6;
 }
 

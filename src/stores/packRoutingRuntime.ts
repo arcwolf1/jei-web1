@@ -5,12 +5,20 @@ export type MirrorMode = 'auto' | 'manual';
 export type PackSourceSnapshot = {
   label: string;
   mirrors: string[];
+  devMirrors?: string[];
 };
 
 function normalizeMirrorUrls(urls: string[]): string[] {
   return Array.from(
     new Set(urls.map((m) => m.replace(/\/+$/, '').trim()).filter((m) => m.length > 0)),
   );
+}
+
+function getSourceMirrors(source: PackSourceSnapshot, includeDevMirrors = false): string[] {
+  return normalizeMirrorUrls([
+    ...(source.mirrors ?? []),
+    ...(includeDevMirrors ? (source.devMirrors ?? []) : []),
+  ]);
 }
 
 export const usePackRoutingRuntimeStore = defineStore('packRoutingRuntime', {
@@ -27,6 +35,7 @@ export const usePackRoutingRuntimeStore = defineStore('packRoutingRuntime', {
           {
             label: source.label,
             mirrors: normalizeMirrorUrls(source.mirrors),
+            devMirrors: normalizeMirrorUrls(source.devMirrors ?? []),
           },
         ]),
       );
@@ -78,10 +87,11 @@ export const usePackRoutingRuntimeStore = defineStore('packRoutingRuntime', {
       packId: string,
       mode: MirrorMode = 'auto',
       manualMirror?: string,
+      includeDevMirrors = false,
     ): string[] {
       const source = this.sourcesByPack[packId];
-      if (!source?.mirrors?.length) return [];
-      const mirrors = normalizeMirrorUrls(source.mirrors);
+      if (!source) return [];
+      const mirrors = getSourceMirrors(source, includeDevMirrors);
       if (!mirrors.length) return [];
 
       const manual = (manualMirror ?? '').replace(/\/+$/, '').trim();

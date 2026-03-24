@@ -236,6 +236,7 @@
           label: s.label,
         }))
       "
+      :use-dev-pack-mirrors="settingsStore.useDevPackMirrors"
       :pack-mirrors="activePackMirrorRows"
       :active-pack-mirror-url="activePackMirrorUrl"
       :pack-mirror-selection-mode="activePackMirrorMode"
@@ -244,6 +245,7 @@
       @add-custom-source="onAddCustomSource"
       @remove-custom-source="onRemoveCustomSource"
       @refresh-pack-cache="onRefreshPackCache"
+      @update:use-dev-pack-mirrors="onUpdateUseDevPackMirrors"
       @update:pack-mirror-selection-mode="onUpdatePackMirrorSelectionMode"
       @update:pack-manual-mirror="onUpdatePackManualMirror"
       @update:plugin-enabled="onPluginEnabledChange"
@@ -327,6 +329,7 @@ import {
   loadPackRecipeDetail,
   loadRuntimePack,
   registerPackSource,
+  setPackDevMirrorsEnabled,
   setPackMirrorLatencyHint,
   setPackMirrorPreference,
   type LoadProgress,
@@ -393,6 +396,11 @@ import {
   type KeyAction,
 } from 'src/stores/keybindings';
 import { usePackRoutingRuntimeStore, type PackSourceSnapshot } from 'src/stores/packRoutingRuntime';
+import {
+  evaluateSearchExpression,
+  parseSearchExpression,
+  type SearchTerm,
+} from 'src/utils/searchExpression';
 import { storage } from 'src/utils/storage';
 
 const settingsStore = useSettingsStore();
@@ -585,6 +593,7 @@ type MirrorRouteEntry = {
   sourcePackId: string;
   sourceLabel: string;
   url: string;
+  isDev: boolean;
 };
 
 function buildMirrorRouteEntriesForPack(packId: string): MirrorRouteEntry[] {
@@ -596,14 +605,22 @@ function buildMirrorRouteEntriesForPack(packId: string): MirrorRouteEntry[] {
     if (sourcePackId.startsWith('local:')) return;
     const mode = settingsStore.packMirrorSelectionModeByPack[sourcePackId] ?? 'auto';
     const manual = settingsStore.packManualMirrorByPack[sourcePackId];
-    const mirrors = packRoutingRuntimeStore.getMirrorsForPack(sourcePackId, mode, manual);
+    const source = packRoutingRuntimeStore.sourcesByPack[sourcePackId];
+    const devMirrors = new Set(source?.devMirrors ?? []);
+    const mirrors = packRoutingRuntimeStore.getMirrorsForPack(
+      sourcePackId,
+      mode,
+      manual,
+      settingsStore.useDevPackMirrors,
+    );
     const resolvedMirrors = mirrors.length > 0 ? mirrors : getPackBaseUrls(sourcePackId);
-    const sourceLabel = packRoutingRuntimeStore.sourcesByPack[sourcePackId]?.label ?? sourcePackId;
+    const sourceLabel = source?.label ?? sourcePackId;
     resolvedMirrors.forEach((url) => {
       out.push({
         sourcePackId,
         sourceLabel,
         url,
+        isDev: settingsStore.useDevPackMirrors && devMirrors.has(url),
       });
     });
   });
@@ -631,6 +648,7 @@ const activePackMirrorRows = computed(() =>
     sourcePackId: entry.sourcePackId,
     sourceLabel: entry.sourceLabel,
     url: entry.url,
+    isDev: entry.isDev,
     latencyMs: packRoutingRuntimeStore.getLatency(entry.sourcePackId, entry.url),
   })),
 );
@@ -1173,14 +1191,7 @@ watch(
   { immediate: true },
 );
 
-type ParsedSearch = {
-  text: string[];
-  itemId: string[];
-  gameId: string[];
-  tag: string[];
-};
-
-const parsedSearch = computed<ParsedSearch>(() => parseSearch(filterText.value));
+const parsedSearch = computed(() => parseSearchExpression(filterText.value));
 
 type NameSearchKeys = {
   nameLower: string;
@@ -1252,11 +1263,11 @@ const filteredItems = computed(() => {
   const map = index.value?.itemsByKeyHash;
   if (!map) return [];
   const entries = Array.from(map.entries()).map(([keyHash, def]) => ({ keyHash, def }));
-  const search = parsedSearch.value;
+  const searchExpression = parsedSearch.value;
   const keysByKeyHash = nameSearchKeysByKeyHash.value;
 
   const filtered = entries.filter((e) =>
-    matchesSearch(e.def, search, keysByKeyHash.get(e.keyHash)),
+    matchesSearch(e.def, searchExpression, keysByKeyHash.get(e.keyHash)),
   );
   filtered.sort((a, b) => {
     return a.def.name.localeCompare(b.def.name);
@@ -1896,6 +1907,13 @@ watch(
   },
 );
 watch(
+  () => settingsStore.useDevPackMirrors,
+  (enabled) => {
+    setPackDevMirrorsEnabled(enabled);
+  },
+  { immediate: true },
+);
+watch(
   () =>
     [
       settingsStore.packImageProxyUsePackProvided,
@@ -2024,6 +2042,7 @@ async function loadPacksIndex() {
         packId: string;
         label: string;
         mirrors?: string[];
+        devMirrors?: string[];
         aggregateDescriptor?: string;
       }>;
     };
@@ -2038,6 +2057,7 @@ async function loadPacksIndex() {
       const remoteSources: Record<string, PackSourceSnapshot> = {};
       const remote = data.packs.map((p) => {
         const mirrors = normalizeMirrorUrls(p.mirrors ?? []);
+        const devMirrors = normalizeMirrorUrls(p.devMirrors ?? []);
         const aggregateDescriptor =
           typeof p.aggregateDescriptor === 'string' && p.aggregateDescriptor.trim().length > 0
             ? p.aggregateDescriptor.trim()
@@ -2051,11 +2071,13 @@ async function loadPacksIndex() {
         remoteSources[p.packId] = {
           label: p.label,
           mirrors: effectiveMirrors,
+          devMirrors,
         };
         registerPackSource({
           packId: p.packId,
           label: p.label,
           mirrors: effectiveMirrors,
+          ...(devMirrors.length > 0 ? { devMirrors } : {}),
           ...(aggregateDescriptor ? { aggregateDescriptor } : {}),
         });
         return { label: p.label, value: p.packId };
@@ -2183,6 +2205,19 @@ async function onUpdatePackMirrorSelectionMode(mode: 'auto' | 'manual') {
     if (first) settingsStore.setPackManualMirror(activePackId.value, first);
   }
   applyMirrorPreference(activePackId.value);
+  clearPackRuntimeCache(activePackId.value);
+  await reloadPack(activePackId.value);
+}
+
+async function onUpdateUseDevPackMirrors(enabled: boolean) {
+  settingsStore.setUseDevPackMirrors(enabled);
+  const availableMirrors = buildMirrorRouteEntriesForPack(activePackId.value).map(
+    (entry) => entry.url,
+  );
+  const savedManualMirror = settingsStore.packManualMirrorByPack[activePackId.value];
+  if (savedManualMirror && !availableMirrors.includes(savedManualMirror)) {
+    settingsStore.setPackManualMirror(activePackId.value, availableMirrors[0] ?? '');
+  }
   clearPackRuntimeCache(activePackId.value);
   await reloadPack(activePackId.value);
 }
@@ -3357,84 +3392,43 @@ function pushHistoryKeyHash(keyHash: string) {
   historyKeyHashes.value = next;
 }
 
-function parseSearch(input: string): ParsedSearch {
-  const tokens = input.trim().split(/\s+/).filter(Boolean);
-  const out: ParsedSearch = { text: [], itemId: [], gameId: [], tag: [] };
-
-  for (let i = 0; i < tokens.length; i += 1) {
-    const t = tokens[i];
-    if (!t) continue;
-    if (!t.startsWith('@')) {
-      out.text.push(t.toLowerCase());
-      continue;
-    }
-
-    const raw = t.slice(1);
-    const [nameRaw, valueInline] = splitDirective(raw);
-    const name = nameRaw.toLowerCase();
-    let value: string | undefined = valueInline || undefined;
-
-    const next = tokens[i + 1];
-    if (!value && next && !next.startsWith('@')) {
-      value = next;
-      i += 1;
-    }
-
-    const v = (value ?? '').trim();
-
-    if (name === 'itemid' || name === 'id') {
-      if (!v) continue;
-      out.itemId.push(v.toLowerCase());
-    } else if (name === 'gameid' || name === 'game') {
-      if (!v) continue;
-      out.gameId.push(v.toLowerCase());
-    } else if (name === 'tag' || name === 't') {
-      if (!v) continue;
-      out.tag.push(v.toLowerCase());
-    } else {
-      // 无前缀的 @xxx 直接作为标签包含搜索
-      out.tag.push(raw.toLowerCase());
-    }
-  }
-
-  return out;
-}
-
-function splitDirective(raw: string): [string, string] {
-  const idx = raw.search(/[:=]/);
-  if (idx < 0) return [raw, ''];
-  return [raw.slice(0, idx), raw.slice(idx + 1)];
-}
-
-function matchesSearch(def: ItemDef, search: ParsedSearch, nameKeys?: NameSearchKeys): boolean {
+function matchesSearch(
+  def: ItemDef,
+  searchExpression: ReturnType<typeof parseSearchExpression>,
+  nameKeys?: NameSearchKeys,
+): boolean {
   const name = nameKeys?.nameLower ?? (def.name ?? '').toLowerCase();
   const pinyinFull = nameKeys?.pinyinFull ?? '';
   const pinyinFirst = nameKeys?.pinyinFirst ?? '';
   const id = def.key.id.toLowerCase();
+  const gameId = (id.includes(':') ? id.split(':')[0] : id.split('.')[0]) ?? '';
+  const tags = index.value?.tagIdsByItemId.get(def.key.id);
 
-  for (const t of search.text) {
-    if (name.includes(t)) continue;
-    const q = normalizePinyinQuery(t);
-    if (q && (pinyinFull.includes(q) || pinyinFirst.includes(q))) continue;
-    return false;
-  }
-  for (const t of search.itemId) {
-    if (!id.includes(t)) return false;
-  }
-  for (const t of search.gameId) {
-    const gid = (id.includes(':') ? id.split(':')[0] : id.split('.')[0]) ?? '';
-    if (!gid.includes(t)) return false;
-  }
-  for (const t of search.tag) {
-    const tags = index.value?.tagIdsByItemId.get(def.key.id);
+  const tagMatches = (term: string): boolean => {
     if (!tags) return false;
-    // 使用包含匹配：检查是否有任何标签包含搜索词
-    const matchFound = Array.from(tags).some((tagId) =>
-      tagId.toLowerCase().includes(t.toLowerCase()),
-    );
-    if (!matchFound) return false;
-  }
-  return true;
+    return Array.from(tags).some((tagId) => tagId.toLowerCase().includes(term));
+  };
+
+  const matchesTerm = (term: SearchTerm): boolean => {
+    switch (term.field) {
+      case 'text': {
+        if (name.includes(term.value)) return true;
+        const q = normalizePinyinQuery(term.value);
+        if (q && (pinyinFull.includes(q) || pinyinFirst.includes(q))) return true;
+        if (id.includes(term.value)) return true;
+        if (tagMatches(term.value)) return true;
+        return false;
+      }
+      case 'itemId':
+        return id.includes(term.value);
+      case 'gameId':
+        return gameId.includes(term.value);
+      case 'tag':
+        return tagMatches(term.value);
+    }
+  };
+
+  return evaluateSearchExpression(searchExpression, matchesTerm);
 }
 </script>
 

@@ -38,10 +38,23 @@ export default {
   middleAreaDesc: '右側がアイテムリスト、左側がお気に入り；アイテムをクリックしてポップアップを開く。',
 
   // Bottom Bar
-  filterPlaceholder: "名前を入力してフィルタ…（{'@'}itemid/{'@'}gameid/{'@'}tag に対応）",
+  filterPlaceholder:
+    "検索：名前/拼音/ID/タグ、空白=AND、{'|'}=OR、!/-=NOT、()=グループ…（{'@'}itemid/{'@'}gameid/{'@'}tag にも対応）",
   advancedFilter: '高度なフィルタ',
+  filterHelp:
+    "通常検索では名前・拼音・アイテム ID・タグを検索できます。空白は AND、{'|'} は OR、! または - は NOT、() でグループ化できます。{'@'}itemid / {'@'}gameid / {'@'}tag の従来ルールも維持し、{'@'}id foo のような旧書式も使えます。",
+  filterModeBuilder: '条件モード',
+  filterModeExpression: '式モード',
+  filterExpressionLabel: 'フィルタ式',
+  filterExpressionPlaceholder:
+    "例：素材 !イベント ({'@'}tag:昇進素材 {'|'} {'@'}tag:育成素材)",
+  filterExpressionHint:
+    '複雑な条件はここに直接式を書いてください。条件モードは簡単な絞り込み向けです。',
+  filterNegate: '除外',
+  filterTagModeAnd: 'タグ AND',
+  filterTagModeOr: 'タグ OR',
   itemName: 'アイテム名',
-  itemNamePlaceholder: 'アイテム名のキーワードを入力',
+  itemNamePlaceholder: 'アイテム名のキーワードまたは拼音を入力',
   itemId: 'アイテム ID',
   itemIdPlaceholder: 'アイテム ID を選択または入力',
   namespace: '名前空間',
@@ -52,6 +65,8 @@ export default {
   cancel: 'キャンセル',
   apply: '適用',
   add: '追加',
+  filterTagNote: 'タグはアイテムの分類です。タイプ別にフィルタリングできます',
+  quickTagFilter: 'カテゴリでフィルタ',
 
   // Settings
   settings: '設定',
@@ -77,6 +92,7 @@ export default {
   packImageProxyAnonymousToken: 'Anonymous Token',
   packImageProxyFrameworkToken: 'Framework Token',
   packMirrorRoutingTitle: 'パックミラールーティング',
+  packMirrorUseDev: 'Dev ミラーを有効化',
   packMirrorMode: 'ミラー選択モード',
   packMirrorModeAuto: '自動選択（スマート）',
   packMirrorModeManual: '手動選択',
@@ -85,6 +101,7 @@ export default {
   packMirrorLatencyLabel: '遅延',
   packMirrorLatencyUnknown: '到達不可',
   packMirrorNoMirrors: '現在のソースにはミラーがありません',
+  packMirrorDevBadge: 'Dev',
   packMirrorCurrentUsed: '使用中',
   refreshPackCache: '現在のパックキャッシュを更新',
   packCacheRefreshed: 'キャッシュを削除して現在のパックを再読み込みしました',

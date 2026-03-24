@@ -95,54 +95,133 @@
     <q-dialog v-model="filterDialogOpen">
       <q-card style="min-width: 400px; max-width: 500px">
         <q-card-section>
-          <div class="text-h6">高级过滤器</div>
+          <div class="text-h6">{{ t('advancedFilter') }}</div>
+          <div class="text-caption text-grey-7 q-mt-xs">{{ t('filterHelp') }}</div>
+          <q-btn-toggle
+            v-model="filterMode"
+            class="q-mt-sm"
+            dense
+            unelevated
+            toggle-color="primary"
+            :options="[
+              { label: t('filterModeBuilder'), value: 'builder' },
+              { label: t('filterModeExpression'), value: 'expression' },
+            ]"
+          />
         </q-card-section>
 
-        <q-card-section class="q-pt-none column q-gutter-sm">
+        <q-card-section v-if="filterMode === 'expression'" class="q-pt-none column q-gutter-sm">
           <q-input
-            v-model="filterForm.text"
+            v-model="filterForm.expression"
+            type="textarea"
+            autogrow
             dense
             outlined
             clearable
-            :label="t('itemName')"
-            :placeholder="t('itemNamePlaceholder')"
+            :label="t('filterExpressionLabel')"
+            :placeholder="t('filterExpressionPlaceholder')"
           />
-          <q-select
-            v-model="filterForm.itemId"
-            :options="
-              availableItemIdsFiltered.length > 0
-                ? availableItemIdsFiltered
-                : availableItemIds.slice(0, 50)
-            "
-            dense
-            outlined
-            clearable
-            :label="t('itemId')"
-            :placeholder="t('itemIdPlaceholder')"
-            use-input
-            input-debounce="0"
-            :input-value="filterForm.itemId"
-            @input-value="filterForm.itemId = $event"
-            @filter="filterItemIds"
-          />
-          <q-select
-            v-model="filterForm.gameId"
-            :options="
-              availableGameIdsFiltered.length > 0 ? availableGameIdsFiltered : availableGameIds
-            "
-            dense
-            outlined
-            clearable
-            :label="t('namespace')"
-            :placeholder="t('namespacePlaceholder')"
-            use-input
-            input-debounce="0"
-            :input-value="filterForm.gameId"
-            @input-value="filterForm.gameId = $event"
-            @filter="filterGameIds"
-          />
+          <div class="text-caption text-grey-7">{{ t('filterExpressionHint') }}</div>
+          <div class="row q-gutter-xs">
+            <q-btn flat dense color="primary" label="(" @click="insertExpressionToken('()')" />
+            <q-btn flat dense color="primary" label="|" @click="insertExpressionToken(' | ')" />
+            <q-btn flat dense color="primary" label="!" @click="insertExpressionToken('!')" />
+            <q-btn
+              flat
+              dense
+              color="primary"
+              :label="t('itemId')"
+              @click="insertExpressionToken('@id:')"
+            />
+            <q-btn
+              flat
+              dense
+              color="primary"
+              :label="t('namespace')"
+              @click="insertExpressionToken('@game:')"
+            />
+            <q-btn
+              flat
+              dense
+              color="primary"
+              :label="t('tags')"
+              @click="insertExpressionToken('@tag:')"
+            />
+          </div>
+        </q-card-section>
+
+        <q-card-section v-else class="q-pt-none column q-gutter-sm">
+          <div class="row items-center q-gutter-sm">
+            <q-input
+              v-model="filterForm.text"
+              dense
+              outlined
+              clearable
+              :label="t('itemName')"
+              :placeholder="t('itemNamePlaceholder')"
+              class="col"
+            />
+            <q-toggle v-model="filterForm.textNegated" :label="t('filterNegate')" dense />
+          </div>
+          <div class="row items-center q-gutter-sm">
+            <q-select
+              v-model="filterForm.itemId"
+              :options="
+                availableItemIdsFiltered.length > 0
+                  ? availableItemIdsFiltered
+                  : availableItemIds.slice(0, 50)
+              "
+              dense
+              outlined
+              clearable
+              :label="t('itemId')"
+              :placeholder="t('itemIdPlaceholder')"
+              class="col"
+              use-input
+              input-debounce="0"
+              :input-value="filterForm.itemId"
+              @input-value="filterForm.itemId = $event"
+              @filter="filterItemIds"
+            />
+            <q-toggle v-model="filterForm.itemIdNegated" :label="t('filterNegate')" dense />
+          </div>
+          <div class="row items-center q-gutter-sm">
+            <q-select
+              v-model="filterForm.gameId"
+              :options="
+                availableGameIdsFiltered.length > 0 ? availableGameIdsFiltered : availableGameIds
+              "
+              dense
+              outlined
+              clearable
+              :label="t('namespace')"
+              :placeholder="t('namespacePlaceholder')"
+              class="col"
+              use-input
+              input-debounce="0"
+              :input-value="filterForm.gameId"
+              @input-value="filterForm.gameId = $event"
+              @filter="filterGameIds"
+            />
+            <q-toggle v-model="filterForm.gameIdNegated" :label="t('filterNegate')" dense />
+          </div>
           <div class="column q-gutter-xs">
-            <div class="text-subtitle2">{{ t('tags') }}</div>
+            <div class="row items-center justify-between q-gutter-sm">
+              <div class="text-subtitle2">{{ t('tags') }}</div>
+              <div class="row items-center q-gutter-sm">
+                <q-btn-toggle
+                  v-model="filterForm.tagJoinMode"
+                  dense
+                  unelevated
+                  toggle-color="primary"
+                  :options="[
+                    { label: t('filterTagModeOr'), value: 'or' },
+                    { label: t('filterTagModeAnd'), value: 'and' },
+                  ]"
+                />
+                <q-toggle v-model="filterForm.tagsNegated" :label="t('filterNegate')" dense />
+              </div>
+            </div>
             <div class="row q-gutter-sm items-center">
               <q-select
                 v-for="(tag, idx) in filterForm.tags"
@@ -268,6 +347,11 @@ import { useQuasar } from 'quasar';
 import type { QTableColumn } from 'quasar';
 import { buildTagIndex } from 'src/jei/tags/resolve';
 import { pinyin } from 'pinyin-pro';
+import {
+  evaluateSearchExpression,
+  parseSearchExpression,
+  type SearchTerm,
+} from 'src/utils/searchExpression';
 
 const { t } = useI18n();
 const store = useEditorStore();
@@ -275,11 +359,18 @@ const $q = useQuasar();
 
 const filterText = ref('');
 const filterDialogOpen = ref(false);
+const filterMode = ref<'builder' | 'expression'>('builder');
 const filterForm = ref({
+  expression: '',
   text: '',
+  textNegated: false,
   itemId: '',
+  itemIdNegated: false,
   gameId: '',
+  gameIdNegated: false,
   tags: [] as string[],
+  tagsNegated: false,
+  tagJoinMode: 'or' as 'and' | 'or',
 });
 
 const dialogOpen = ref(false);
@@ -312,6 +403,7 @@ type ParsedSearch = {
 
 const tagIndex = computed(() => buildTagIndex(store.exportPack()));
 
+const parsedSearchExpression = computed(() => parseSearchExpression(filterText.value));
 const parsedSearch = computed<ParsedSearch>(() => parseSearch(filterText.value));
 
 type NameSearchKeys = {
@@ -372,45 +464,96 @@ const availableGameIds = computed(() => {
 });
 
 const filteredItems = computed(() => {
-  const search = parsedSearch.value;
+  const searchExpression = parsedSearchExpression.value;
   const keysByItemId = nameSearchKeysByItemId.value;
   const filtered = store.items.filter((def) =>
-    matchesSearch(def, search, keysByItemId.get(def.key.id)),
+    matchesSearch(def, searchExpression, keysByItemId.get(def.key.id)),
   );
   filtered.sort((a, b) => a.name.localeCompare(b.name));
   return filtered;
 });
 
 function applyFilter() {
-  const parts: string[] = [];
-  const f = filterForm.value;
-  if (f.text) parts.push(f.text);
-  if (f.itemId) parts.push(`@id:${f.itemId}`);
-  if (f.gameId) parts.push(`@game:${f.gameId}`);
-  for (const tag of f.tags) {
-    const t = tag.trim();
-    if (t) parts.push(`@tag:${t}`);
-  }
-  filterText.value = parts.join(' ');
+  filterText.value =
+    filterMode.value === 'expression'
+      ? filterForm.value.expression.trim()
+      : buildFilterExpression();
 }
 
 function resetFilterForm() {
   filterForm.value = {
+    expression: '',
     text: '',
+    textNegated: false,
     itemId: '',
+    itemIdNegated: false,
     gameId: '',
+    gameIdNegated: false,
     tags: [],
+    tagsNegated: false,
+    tagJoinMode: 'or',
   };
 }
 
 function populateFilterFormFromText() {
   const search = parsedSearch.value;
+  filterMode.value = hasComplexExpressionSyntax(filterText.value) ? 'expression' : 'builder';
   filterForm.value = {
+    expression: filterText.value,
     text: search.text.join(' ') || '',
+    textNegated: false,
     itemId: search.itemId.join(' ') || '',
+    itemIdNegated: false,
     gameId: search.gameId.join(' ') || '',
+    gameIdNegated: false,
     tags: [...search.tag],
+    tagsNegated: false,
+    tagJoinMode: filterText.value.includes('|') ? 'or' : 'and',
   };
+}
+
+function hasComplexExpressionSyntax(input: string): boolean {
+  return /[()|]|(^|\s)[!-](?=\S)/.test(input);
+}
+
+function wrapExpression(expression: string, negated: boolean): string {
+  const trimmed = expression.trim();
+  if (!trimmed) return '';
+  if (!negated) return trimmed;
+  if (trimmed.startsWith('(') && trimmed.endsWith(')')) return `!${trimmed}`;
+  return `!(${trimmed})`;
+}
+
+function buildFilterExpression(): string {
+  const f = filterForm.value;
+  const parts: string[] = [];
+
+  if (f.text.trim()) parts.push(wrapExpression(f.text.trim(), f.textNegated));
+  if (f.itemId.trim()) parts.push(wrapExpression(`@id:${f.itemId.trim()}`, f.itemIdNegated));
+  if (f.gameId.trim()) {
+    parts.push(wrapExpression(`@game:${f.gameId.trim()}`, f.gameIdNegated));
+  }
+
+  const tagTerms = f.tags
+    .map((tag) => tag.trim())
+    .filter((tag) => tag.length > 0)
+    .map((tag) => `@tag:${tag}`);
+  if (tagTerms.length === 1) {
+    parts.push(wrapExpression(tagTerms[0]!, f.tagsNegated));
+  } else if (tagTerms.length > 1) {
+    const separator = f.tagJoinMode === 'or' ? ' | ' : ' ';
+    parts.push(wrapExpression(`(${tagTerms.join(separator)})`, f.tagsNegated));
+  }
+
+  return parts.join(' ').trim();
+}
+
+function insertExpressionToken(token: string) {
+  if (token === '()') {
+    filterForm.value.expression = `${filterForm.value.expression}()`.trim();
+    return;
+  }
+  filterForm.value.expression = `${filterForm.value.expression}${token}`;
 }
 
 watch(filterDialogOpen, (isOpen) => {
@@ -477,7 +620,11 @@ const filteredTagsOptions = computed(() => {
 });
 
 function parseSearch(input: string): ParsedSearch {
-  const tokens = input.trim().split(/\s+/).filter(Boolean);
+  const normalized = input
+    .replace(/[()]/g, ' ')
+    .replace(/\|/g, ' ')
+    .replace(/(^|\s)[!-](?=\S)/g, '$1');
+  const tokens = normalized.trim().split(/\s+/).filter(Boolean);
   const out: ParsedSearch = { text: [], itemId: [], gameId: [], tag: [] };
 
   for (let i = 0; i < tokens.length; i += 1) {
@@ -524,32 +671,43 @@ function splitDirective(raw: string): [string, string] {
   return [raw.slice(0, idx), raw.slice(idx + 1)];
 }
 
-function matchesSearch(def: ItemDef, search: ParsedSearch, nameKeys?: NameSearchKeys): boolean {
+function matchesSearch(
+  def: ItemDef,
+  searchExpression: ReturnType<typeof parseSearchExpression>,
+  nameKeys?: NameSearchKeys,
+): boolean {
   const name = nameKeys?.nameLower ?? (def.name ?? '').toLowerCase();
   const pinyinFull = nameKeys?.pinyinFull ?? '';
   const pinyinFirst = nameKeys?.pinyinFirst ?? '';
   const id = def.key.id.toLowerCase();
+  const gameId = (id.includes(':') ? id.split(':')[0] : id.split('.')[0]) ?? '';
+  const tags = tagIndex.value.tagIdsByItemId.get(def.key.id);
 
-  for (const t of search.text) {
-    if (name.includes(t)) continue;
-    const q = normalizePinyinQuery(t);
-    if (q && (pinyinFull.includes(q) || pinyinFirst.includes(q))) continue;
-    return false;
-  }
-  for (const t of search.itemId) {
-    if (!id.includes(t)) return false;
-  }
-  for (const t of search.gameId) {
-    const gid = (id.includes(':') ? id.split(':')[0] : id.split('.')[0]) ?? '';
-    if (!gid.includes(t)) return false;
-  }
-  for (const t of search.tag) {
-    const tags = tagIndex.value.tagIdsByItemId.get(def.key.id);
+  const tagMatches = (term: string): boolean => {
     if (!tags) return false;
-    const matchFound = Array.from(tags).some((tagId) => tagId.toLowerCase().includes(t));
-    if (!matchFound) return false;
-  }
-  return true;
+    return Array.from(tags).some((tagId) => tagId.toLowerCase().includes(term));
+  };
+
+  const matchesTerm = (term: SearchTerm): boolean => {
+    switch (term.field) {
+      case 'text': {
+        if (name.includes(term.value)) return true;
+        const q = normalizePinyinQuery(term.value);
+        if (q && (pinyinFull.includes(q) || pinyinFirst.includes(q))) return true;
+        if (id.includes(term.value)) return true;
+        if (tagMatches(term.value)) return true;
+        return false;
+      }
+      case 'itemId':
+        return id.includes(term.value);
+      case 'gameId':
+        return gameId.includes(term.value);
+      case 'tag':
+        return tagMatches(term.value);
+    }
+  };
+
+  return evaluateSearchExpression(searchExpression, matchesTerm);
 }
 
 watch(hasSprite, (val) => {

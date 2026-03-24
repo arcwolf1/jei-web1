@@ -73,6 +73,7 @@ export interface PackSource {
   packId: string;
   label: string;
   mirrors: string[];
+  devMirrors?: string[];
   aggregateDescriptor?: string;
 }
 
@@ -103,6 +104,7 @@ const packRegistry = new Map<string, PackSource>();
 const activePackBaseUrl = new Map<string, string>();
 const packMirrorMode = new Map<string, 'auto' | 'manual'>();
 const packManualMirror = new Map<string, string>();
+let packDevMirrorsEnabled = false;
 const mirrorLatencyCache = new Map<string, { latencyMs: number | null; measuredAt: number }>();
 const mirrorLatencyWarmupTask = new Map<string, Promise<void>>();
 const aggregateDescriptorCache = new Map<string, Promise<AggregatePackDescriptor>>();
@@ -223,6 +225,19 @@ function scheduleMirrorLatencyWarmup(packId: string, baseUrls: string[]): void {
   mirrorLatencyWarmupTask.set(packId, task);
 }
 
+function normalizeSourceMirrorUrls(urls: string[] | undefined): string[] {
+  return Array.from(
+    new Set((urls ?? []).map((m) => m.replace(/\/+$/, '').trim()).filter((m) => m.length > 0)),
+  );
+}
+
+function getSourceMirrorUrls(source: PackSource, includeDevMirrors = packDevMirrorsEnabled): string[] {
+  return normalizeSourceMirrorUrls([
+    ...(source.mirrors ?? []),
+    ...(includeDevMirrors ? (source.devMirrors ?? []) : []),
+  ]);
+}
+
 export function clearPackRuntimeCache(packId?: string) {
   if (packId) {
     manifestCache.delete(packId);
@@ -260,7 +275,11 @@ export function clearPackRuntimeCache(packId?: string) {
 }
 
 export function registerPackSource(source: PackSource) {
-  packRegistry.set(source.packId, source);
+  packRegistry.set(source.packId, {
+    ...source,
+    mirrors: normalizeSourceMirrorUrls(source.mirrors),
+    devMirrors: normalizeSourceMirrorUrls(source.devMirrors),
+  });
 }
 
 export function getPackSource(packId: string): PackSource | undefined {
@@ -286,6 +305,10 @@ export function setPackMirrorPreference(
   }
   activePackBaseUrl.delete(packId);
   manifestCache.delete(packId);
+}
+
+export function setPackDevMirrorsEnabled(enabled: boolean) {
+  packDevMirrorsEnabled = enabled;
 }
 
 function registrableDomain(hostname: string): string {
@@ -326,9 +349,7 @@ function scoreMirrorUrlByHostProximity(url: string, current: URL): number {
 export function getPackBaseUrls(packId: string): string[] {
   const source = packRegistry.get(packId);
   if (source) {
-    const mirrors = Array.from(
-      new Set((source.mirrors ?? []).map((m) => m.replace(/\/+$/, '')).filter((m) => m.length > 0)),
-    );
+    const mirrors = getSourceMirrorUrls(source);
     if (!mirrors.length) {
       if (typeof source.aggregateDescriptor === 'string' && source.aggregateDescriptor.trim().length > 0) {
         return [];
@@ -653,6 +674,7 @@ function transformItemForAggregate(item: ItemDef, runtime: AggregateSourceRuntim
   if (item.rarity) out.rarity = { ...item.rarity };
   if (item.belt) out.belt = { ...item.belt };
   if (item.wiki) out.wiki = { ...item.wiki };
+  if (item.extensions) out.extensions = { ...item.extensions };
   if (item.recipes) {
     out.recipes = item.recipes.map((recipe) => transformInlineRecipeForAggregate(recipe, runtime));
   }
@@ -787,6 +809,16 @@ function mergeWikiForAggregate(
   return out;
 }
 
+function mergeItemExtensionsForAggregate(
+  a: ItemDef['extensions'] | undefined,
+  b: ItemDef['extensions'] | undefined,
+): ItemDef['extensions'] | undefined {
+  return mergeWikiForAggregate(
+    a as Record<string, unknown> | undefined,
+    b as Record<string, unknown> | undefined,
+  ) as ItemDef['extensions'] | undefined;
+}
+
 function mergePackTagsForAggregate(
   base: PackTags | undefined,
   incoming: PackTags | undefined,
@@ -853,6 +885,7 @@ function mergeItemForAggregate(base: ItemDef, incoming: ItemDef): ItemDef {
   if (base.rarity) out.rarity = { ...base.rarity };
   if (base.belt) out.belt = { ...base.belt };
   if (base.wiki) out.wiki = { ...base.wiki };
+  if (base.extensions) out.extensions = { ...base.extensions };
   if (base.recipes) out.recipes = [...base.recipes];
 
   out.name = pickPreferLongerString(base.name, incoming.name) ?? out.name;
@@ -911,6 +944,9 @@ function mergeItemForAggregate(base: ItemDef, incoming: ItemDef): ItemDef {
   const wiki = mergeWikiForAggregate(out.wiki, incoming.wiki);
   if (wiki !== undefined) out.wiki = wiki;
   else delete out.wiki;
+  const extensions = mergeItemExtensionsForAggregate(out.extensions, incoming.extensions);
+  if (extensions !== undefined) out.extensions = extensions;
+  else delete out.extensions;
   const recipes = mergeInlineRecipesForAggregate(out.recipes, incoming.recipes);
   if (recipes) out.recipes = recipes;
 

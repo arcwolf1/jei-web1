@@ -38,10 +38,23 @@ export default {
   middleAreaDesc: 'Right side is item list, left side is favorites; click item to open popup.',
 
   // Bottom Bar
-  filterPlaceholder: "Enter name to filter… (supports {'@'}itemid/{'@'}gameid/{'@'}tag)",
+  filterPlaceholder:
+    "Search: name/pinyin/ID/tag, space=AND, {'|'}=OR, !/-=NOT, ()=group… (also supports {'@'}itemid/{'@'}gameid/{'@'}tag)",
   advancedFilter: 'Advanced Filter',
+  filterHelp:
+    "Normal search matches name, pinyin, item ID, and tags; spaces mean AND, {'|'} means OR, ! or - means NOT, and () groups expressions; {'@'}itemid / {'@'}gameid / {'@'}tag still work, including older forms like {'@'}id foo.",
+  filterModeBuilder: 'Builder',
+  filterModeExpression: 'Expression',
+  filterExpressionLabel: 'Filter Expression',
+  filterExpressionPlaceholder:
+    "Example: material !event ({'@'}tag:elite {'|'} {'@'}tag:upgrade)",
+  filterExpressionHint:
+    'Use expression mode for complex queries; builder mode is faster for simple rules.',
+  filterNegate: 'Exclude',
+  filterTagModeAnd: 'Tags AND',
+  filterTagModeOr: 'Tags OR',
   itemName: 'Item Name',
-  itemNamePlaceholder: 'Enter item name keywords',
+  itemNamePlaceholder: 'Enter item name keywords or pinyin',
   itemId: 'Item ID',
   itemIdPlaceholder: 'Select or enter item ID',
   namespace: 'Namespace',
@@ -52,6 +65,8 @@ export default {
   cancel: 'Cancel',
   apply: 'Apply',
   add: 'Add',
+  filterTagNote: 'Tags are item categories; use them to filter by type',
+  quickTagFilter: 'Filter by Category',
 
   // Settings
   settings: 'Settings',
@@ -78,6 +93,7 @@ export default {
   packImageProxyAnonymousToken: 'Anonymous Token',
   packImageProxyFrameworkToken: 'Framework Token',
   packMirrorRoutingTitle: 'Pack mirror routing',
+  packMirrorUseDev: 'Enable dev mirrors',
   packMirrorMode: 'Mirror selection mode',
   packMirrorModeAuto: 'Auto (smart)',
   packMirrorModeManual: 'Manual',
@@ -86,6 +102,7 @@ export default {
   packMirrorLatencyLabel: 'Latency',
   packMirrorLatencyUnknown: 'Unreachable',
   packMirrorNoMirrors: 'No mirrors configured for current source',
+  packMirrorDevBadge: 'Dev',
   packMirrorCurrentUsed: 'In use',
   refreshPackCache: 'Refresh current pack cache',
   packCacheRefreshed: 'Cleared cache and reloaded current pack',

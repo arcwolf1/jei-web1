@@ -297,7 +297,10 @@
                       ]"
                       :model-value="quantFlowRenderer"
                       @update:model-value="
-                        $emit('update:quant-flow-renderer', ($event as 'nodes' | 'sankey') ?? 'nodes')
+                        $emit(
+                          'update:quant-flow-renderer',
+                          ($event as 'nodes' | 'sankey') ?? 'nodes',
+                        )
                       "
                     />
                     <q-select
@@ -312,7 +315,10 @@
                       ]"
                       :model-value="productionLineRenderer"
                       @update:model-value="
-                        $emit('update:production-line-renderer', ($event as 'vue_flow' | 'g6') ?? 'vue_flow')
+                        $emit(
+                          'update:production-line-renderer',
+                          ($event as 'vue_flow' | 'g6') ?? 'vue_flow',
+                        )
                       "
                     />
                     <q-toggle
@@ -440,6 +446,11 @@
                 <q-card-section>
                   <div class="text-subtitle2 q-mb-sm">{{ t('packMirrorRoutingTitle') }}</div>
                   <div class="q-gutter-y-sm">
+                    <q-toggle
+                      :label="t('packMirrorUseDev')"
+                      :model-value="useDevPackMirrors"
+                      @update:model-value="$emit('update:use-dev-pack-mirrors', !!$event)"
+                    />
                     <q-select
                       dense
                       outlined
@@ -493,8 +504,16 @@
                             {{ t('packMirrorLatencyLabel') }}: {{ formatLatency(mirror.latencyMs) }}
                           </q-item-label>
                         </q-item-section>
-                        <q-item-section side v-if="activePackMirrorUrl && mirror.url === activePackMirrorUrl">
-                          <q-chip dense color="primary" text-color="white">
+                        <q-item-section side>
+                          <q-chip v-if="mirror.isDev" dense outline color="warning">
+                            {{ t('packMirrorDevBadge') }}
+                          </q-chip>
+                          <q-chip
+                            v-if="activePackMirrorUrl && mirror.url === activePackMirrorUrl"
+                            dense
+                            color="primary"
+                            text-color="white"
+                          >
                             {{ t('packMirrorCurrentUsed') }}
                           </q-chip>
                         </q-item-section>
@@ -628,7 +647,7 @@ const sectionDefs: Array<{ key: SectionKey; label: string; keywords: string[] }>
   { key: 'general', label: '基础设置', keywords: ['基础', '显示', '调试', '快捷键', '历史'] },
   { key: 'keybindings', label: '快捷键', keywords: ['快捷键', '键位', 'keybinding', 'hotkey'] },
   { key: 'data', label: '数据源', keywords: ['数据源', 'source', 'pack', '地址'] },
-  { key: 'mirror', label: '镜像路由', keywords: ['镜像', 'mirror', '延迟', '测速'] },
+  { key: 'mirror', label: '镜像路由', keywords: ['镜像', 'mirror', '延迟', '测速', 'dev'] },
   { key: 'proxy', label: '图片代理', keywords: ['代理', 'proxy', 'token', '图片'] },
 ];
 
@@ -686,11 +705,13 @@ const props = defineProps<{
     }>;
   }>;
   customPackSources: Array<{ packId: string; url: string; label?: string }>;
+  useDevPackMirrors: boolean;
   packMirrors: Array<{
     url: string;
     latencyMs: number | null;
     sourcePackId?: string;
     sourceLabel?: string;
+    isDev?: boolean;
   }>;
   activePackMirrorUrl: string;
   packMirrorSelectionMode: 'auto' | 'manual';
@@ -729,6 +750,7 @@ const emit = defineEmits<{
   'add-custom-source': [source: { packId: string; url: string; label?: string }];
   'remove-custom-source': [packId: string];
   'refresh-pack-cache': [];
+  'update:use-dev-pack-mirrors': [value: boolean];
   'update:pack-mirror-selection-mode': [value: 'auto' | 'manual'];
   'update:pack-manual-mirror': [value: string];
   'refresh-mirror-latency': [];

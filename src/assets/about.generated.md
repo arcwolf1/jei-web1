@@ -1,16 +1,31 @@
 # About
 
 ## Build
-- Version: f03863e-dirty
-- Commit: f03863e (f03863e8976e274a7c7b96dd8b622d535ab49b0c)
-- Commit count: 131
-- Subject: feat: 添加FreskyZ-flow-vue子模块，更新关于文档和tsconfig配置
+- Version: 39325f9-dirty
+- Commit: 39325f9 (39325f9837f5afed88477987cd20f8f416d5f25e)
+- Commit count: 133
+- Subject: feat: 添加FreskyZ-flow-vue子模块同步脚本
 - Author: AndreaFrederica
-- Date: 2026-03-17T21:24:35+08:00
-- Generated at: 2026-03-17T16:56:52.660Z
+- Date: 2026-03-18T03:27:45+08:00
+- Generated at: 2026-03-21T22:03:11.664Z
 - Remote: https://github.com/AndreaFrederica/jei-web.git
 
 ## Version History
+
+### r133 (2026-03-18T03:27:45+08:00)
+- 39325f9
+  feat: 添加FreskyZ-flow-vue子模块同步脚本
+
+### r132 (2026-03-18T03:18:42+08:00)
+- a369ddd
+  feat: add sharing functionality to Advanced Planner
+  
+  - Introduced a dropdown button for sharing options in AdvancedPlanner.vue, allowing users to share plans via URL, JSON, or import JSON.
+  - Implemented methods for sharing as URL, copying JSON, and importing JSON.
+  - Enhanced the payload structure for sharing plans, including view state and forced raw item key hashes.
+  - Updated related components (CenterPanel.vue, ItemDialog.vue, RecipeContentView.vue) to emit share events.
+  - Added validation for sharing and importing JSON data.
+  - Created utility functions for handling node positions and validating planner units.
 
 ### r131 (2026-03-17T21:24:35+08:00)
 - f03863e

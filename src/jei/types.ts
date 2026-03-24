@@ -18,6 +18,29 @@ export interface ItemRarity {
   tagId?: string;
 }
 
+export interface JeiWebWikiRendererDef {
+  id?: string;
+  type: string;
+  source?: string;
+  order?: number;
+  enabled?: boolean;
+  title?: string;
+  data?: unknown;
+}
+
+export interface ItemExtensions {
+  jeiweb?: {
+    wiki?: {
+      renderers?: JeiWebWikiRendererDef[];
+      sources?: Record<string, unknown>;
+      meta?: Record<string, unknown>;
+    };
+    i18n?: Record<string, Record<string, unknown>>;
+    meta?: Record<string, unknown>;
+  };
+  [extensionId: string]: unknown;
+}
+
 export interface ItemDef {
   key: ItemKey;
   name: string;
@@ -137,6 +160,7 @@ export interface ItemDef {
   detailLoaded?: boolean;
   recipes?: InlineRecipe[];
   wiki?: Record<string, unknown>;
+  extensions?: ItemExtensions;
 }
 
 export interface TagValueObject {

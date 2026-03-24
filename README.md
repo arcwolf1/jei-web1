@@ -189,11 +189,15 @@ npm run format
   "packs": [
     {
       "packId": "your-pack-id",
-      "label": "Your Pack Name"
+      "label": "Your Pack Name",
+      "mirrors": ["https://your-pack.example.com"],
+      "devMirrors": ["http://127.0.0.1:4179"]
     }
   ]
 }
 ```
+
+其中 `devMirrors` 为可选字段，仅在主程序中启用“Dev 镜像”设置后才会参与镜像选择，适合本地调试或临时测试环境。
 
 ### 虚拟聚合源（多源平级聚合）
 
