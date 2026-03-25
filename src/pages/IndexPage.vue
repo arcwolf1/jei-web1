@@ -201,6 +201,8 @@
       @update:recipe-slot-show-name="settingsStore.setRecipeSlotShowName($event)"
       :favorites-opens-new-stack="settingsStore.favoritesOpensNewStack"
       @update:favorites-open-stack="settingsStore.setFavoritesOpensNewStack($event)"
+      :persist-history-records="settingsStore.persistHistoryRecords"
+      @update:persist-history-records="settingsStore.setPersistHistoryRecords($event)"
       :detect-pc-disable-mobile="settingsStore.detectPcDisableMobile"
       @update:detect-pc-disable-mobile="settingsStore.setDetectPcDisableMobile($event)"
       :pack-proxy-template="packProxyTemplate"
@@ -2261,6 +2263,18 @@ watch(
     applyImageProxyToPack(pack.value);
   },
 );
+watch(
+  () => settingsStore.persistHistoryRecords,
+  (enabled) => {
+    const packId = pack.value?.manifest.packId;
+    if (!packId) return;
+    if (enabled) {
+      saveHistoryKeyHashes(packId, historyKeyHashes.value);
+      return;
+    }
+    removeHistoryKeyHashes(packId);
+  },
+);
 
 async function reloadPack(packId: string) {
   error.value = '';
@@ -2334,6 +2348,9 @@ async function reloadPack(packId: string) {
     favorites.value = await loadFavorites(loaded.pack.manifest.packId);
     savedPlans.value = await loadPlans(loaded.pack.manifest.packId);
     plannerLiveState.value = await loadPlannerLiveState(loaded.pack.manifest.packId);
+    historyKeyHashes.value = settingsStore.persistHistoryRecords
+      ? await loadHistoryKeyHashes(loaded.pack.manifest.packId)
+      : [];
     plannerInitialState.value = null;
     selectedKeyHash.value = filteredItems.value[0]?.keyHash ?? null;
 
@@ -3196,6 +3213,49 @@ function plannerLiveStorageKey(packId: string) {
   return `jei.planner.live.${packId}`;
 }
 
+function historyStorageKey(packId: string) {
+  return `jei.history.${packId}`;
+}
+
+function normalizeHistoryKeyHashes(v: unknown): string[] {
+  if (!Array.isArray(v)) return [];
+  const deduped = new Set<string>();
+  v.forEach((entry) => {
+    if (typeof entry === 'string' && entry) deduped.add(entry);
+  });
+  return Array.from(deduped).slice(0, 100);
+}
+
+async function loadHistoryKeyHashes(packId: string): Promise<string[]> {
+  const key = historyStorageKey(packId);
+  const raw = storage.isUsingJEIStorage() ? await storage.getItem(key) : localStorage.getItem(key);
+  if (!raw) return [];
+  try {
+    return normalizeHistoryKeyHashes(JSON.parse(raw) as unknown);
+  } catch {
+    return [];
+  }
+}
+
+function saveHistoryKeyHashes(packId: string, keys: string[]) {
+  const key = historyStorageKey(packId);
+  const value = JSON.stringify(normalizeHistoryKeyHashes(keys));
+  if (storage.isUsingJEIStorage()) {
+    void storage.setItem(key, value);
+  } else {
+    localStorage.setItem(key, value);
+  }
+}
+
+function removeHistoryKeyHashes(packId: string) {
+  const key = historyStorageKey(packId);
+  if (storage.isUsingJEIStorage()) {
+    void storage.removeItem(key);
+  } else {
+    localStorage.removeItem(key);
+  }
+}
+
 function normalizeStringRecord(v: unknown): Record<string, string> {
   if (!v || typeof v !== 'object') return {};
   const out: Record<string, string> = {};
@@ -3719,9 +3779,11 @@ function toggleFavorite(keyHash: string) {
 }
 
 function pushHistoryKeyHash(keyHash: string) {
-  // 保持历史记录多一点,展示的时候再截断
   const next = [keyHash, ...historyKeyHashes.value.filter((k) => k !== keyHash)].slice(0, 100);
   historyKeyHashes.value = next;
+  const packId = pack.value?.manifest.packId;
+  if (!packId || !settingsStore.persistHistoryRecords) return;
+  saveHistoryKeyHashes(packId, next);
 }
 </script>
 

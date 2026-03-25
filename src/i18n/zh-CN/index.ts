@@ -77,6 +77,7 @@ export default {
   recipeViewPanel: '中间区域',
   recipeSlotShowName: '合成表物品显示名字',
   favoritesOpenStack: '收藏夹点击/快捷键创建导航栈',
+  persistHistoryRecords: '持久化历史记录',
   detectPcDisableMobile: '检测 PC 端时禁用移动端界面',
   packImageProxyTitle: '资源包图片代理',
   packImageProxyUsePackProvided: '使用资源包提供的代理URL',

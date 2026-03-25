@@ -78,6 +78,7 @@ export default {
   recipeViewPanel: 'Center Panel',
   recipeSlotShowName: 'Show Item Names in Recipe Slots',
   favoritesOpenStack: 'Favorites open new navigation stack',
+  persistHistoryRecords: 'Persist history records',
   detectPcDisableMobile: 'Disable mobile UI when PC detected',
   packImageProxyTitle: 'Pack Image Proxy',
   packImageProxyUsePackProvided: 'Use pack-provided proxy URL',

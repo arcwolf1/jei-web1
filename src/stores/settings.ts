@@ -101,6 +101,7 @@ export const useSettingsStore = defineStore('settings', {
       acceptedStartupDialogs: [] as string[],
       completedTutorial: false,
       favoritesOpensNewStack: false,
+      persistHistoryRecords: true,
       // Wiki 渲染器设置
       wikiImageUseProxy: false,
       wikiImageProxyUrl: 'https://r.jina.ai/http://',
@@ -204,6 +205,10 @@ export const useSettingsStore = defineStore('settings', {
           typeof parsed.favoritesOpensNewStack === 'boolean'
             ? parsed.favoritesOpensNewStack
             : defaults.favoritesOpensNewStack,
+        persistHistoryRecords:
+          typeof parsed.persistHistoryRecords === 'boolean'
+            ? parsed.persistHistoryRecords
+            : defaults.persistHistoryRecords,
         wikiImageUseProxy:
           typeof parsed.wikiImageUseProxy === 'boolean'
             ? parsed.wikiImageUseProxy
@@ -421,6 +426,10 @@ export const useSettingsStore = defineStore('settings', {
       this.favoritesOpensNewStack = value;
       void this.save();
     },
+    setPersistHistoryRecords(value: boolean) {
+      this.persistHistoryRecords = value;
+      void this.save();
+    },
     setWikiImageUseProxy(value: boolean) {
       this.wikiImageUseProxy = value;
       void this.save();
@@ -606,6 +615,7 @@ export const useSettingsStore = defineStore('settings', {
         acceptedStartupDialogs: this.acceptedStartupDialogs,
         completedTutorial: this.completedTutorial,
         favoritesOpensNewStack: this.favoritesOpensNewStack,
+        persistHistoryRecords: this.persistHistoryRecords,
         wikiImageUseProxy: this.wikiImageUseProxy,
         wikiImageProxyUrl: this.wikiImageProxyUrl,
         wikiCatalogFileName: this.wikiCatalogFileName,
@@ -670,6 +680,7 @@ export const useSettingsStore = defineStore('settings', {
       if (Array.isArray(parsed.acceptedStartupDialogs)) this.acceptedStartupDialogs = parsed.acceptedStartupDialogs.filter((x): x is string => typeof x === 'string');
       if (typeof parsed.completedTutorial === 'boolean') this.completedTutorial = parsed.completedTutorial;
       if (typeof parsed.favoritesOpensNewStack === 'boolean') this.favoritesOpensNewStack = parsed.favoritesOpensNewStack;
+      if (typeof parsed.persistHistoryRecords === 'boolean') this.persistHistoryRecords = parsed.persistHistoryRecords;
       if (typeof parsed.wikiImageUseProxy === 'boolean') this.wikiImageUseProxy = parsed.wikiImageUseProxy;
       if (typeof parsed.wikiImageProxyUrl === 'string') this.wikiImageProxyUrl = parsed.wikiImageProxyUrl;
       if (typeof parsed.wikiCatalogFileName === 'string') this.wikiCatalogFileName = parsed.wikiCatalogFileName;

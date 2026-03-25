@@ -232,6 +232,11 @@
                       @update:model-value="$emit('update:favorites-open-stack', !!$event)"
                     />
                     <q-toggle
+                      :label="t('persistHistoryRecords')"
+                      :model-value="persistHistoryRecords"
+                      @update:model-value="$emit('update:persist-history-records', !!$event)"
+                    />
+                    <q-toggle
                       :label="t('detectPcDisableMobile')"
                       :model-value="detectPcDisableMobile"
                       @update:model-value="$emit('update:detect-pc-disable-mobile', !!$event)"
@@ -693,6 +698,7 @@ const props = defineProps<{
   recipeViewMode: 'dialog' | 'panel';
   recipeSlotShowName: boolean;
   favoritesOpensNewStack: boolean;
+  persistHistoryRecords: boolean;
   detectPcDisableMobile: boolean;
   packProxyTemplate: string;
   packDevProxyTemplate: string;
@@ -764,6 +770,7 @@ const emit = defineEmits<{
   'update:recipe-view-mode': [value: 'dialog' | 'panel'];
   'update:recipe-slot-show-name': [value: boolean];
   'update:favorites-open-stack': [value: boolean];
+  'update:persist-history-records': [value: boolean];
   'update:detect-pc-disable-mobile': [value: boolean];
   'update:keybinding': [action: KeyAction, binding: KeyBinding];
   'reset:keybindings': [];
