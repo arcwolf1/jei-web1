@@ -120,8 +120,9 @@
                 localNameMap,
                 itemDefsByKeyHash,
                 idToPackItemId,
-              )
-            "
+                )
+              "
+            :item-defs-by-key-hash="itemDefsByKeyHash"
           />
         </div>
       </div>
@@ -144,9 +145,10 @@
                 itemDefsByKeyHash,
                 idToPackItemId,
               )
-            "
-            compact
-          />
+              "
+              compact
+            :item-defs-by-key-hash="itemDefsByKeyHash"
+            />
         </div>
       </div>
     </section>

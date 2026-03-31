@@ -101,7 +101,11 @@
             <div class="ww__material-upgrades">
               <div v-for="material in group.materialRows" :key="material.label" class="ww__material-column">
                 <div class="ww__material-column-title">{{ material.label }}</div>
-                <WItemCostGrid :entries="material.materials" compact />
+                <WItemCostGrid
+                  :entries="material.materials"
+                  :item-defs-by-key-hash="itemDefsByKeyHash"
+                  compact
+                />
               </div>
             </div>
           </q-expansion-item>

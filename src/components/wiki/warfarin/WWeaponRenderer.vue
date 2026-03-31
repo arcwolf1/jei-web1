@@ -94,7 +94,12 @@
             {{ t('warfarin.common.stageShort', { stage: row.stage }) }}
             <span class="ww__panel-sub">· {{ levelLabel(row.requiredLevel) }}</span>
           </div>
-          <WItemCostGrid class="q-mt-md" :entries="row.materials" compact />
+          <WItemCostGrid
+            class="q-mt-md"
+            :entries="row.materials"
+            :item-defs-by-key-hash="itemDefsByKeyHash"
+            compact
+          />
           <div class="ww__table-wrap q-mt-md">
             <table class="ww__table">
               <thead>

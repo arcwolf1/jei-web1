@@ -704,12 +704,52 @@ body.body--dark .ww {
   color: var(--ww-text);
   text-align: left;
 }
+.ww__cost-fallback-card {
+  width: 100%;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  text-align: inherit;
+}
 .ww__cost-grid--compact .ww__cost-card {
   width: 82px;
   flex-basis: 82px;
 }
 .ww__cost-card--clickable {
   cursor: pointer;
+}
+.ww__cost-stack-wrap {
+  position: relative;
+}
+.ww__cost-stack {
+  padding: 0.42rem 0.45rem 0.48rem;
+}
+.ww__cost-grid--compact .ww__cost-stack {
+  padding: 0.32rem 0.4rem 0.42rem;
+}
+.ww__cost-stack :deep(.stack-view) {
+  width: 100%;
+}
+.ww__cost-stack :deep(.stack-view__main) {
+  width: 100%;
+}
+.ww__cost-stack :deep(.stack-view__icon),
+.ww__cost-stack :deep(.stack-view__icon-fallback) {
+  width: 56px;
+  height: 56px;
+}
+.ww__cost-grid--compact .ww__cost-stack :deep(.stack-view__icon),
+.ww__cost-grid--compact .ww__cost-stack :deep(.stack-view__icon-fallback) {
+  width: 50px;
+  height: 50px;
+}
+.ww__cost-stack :deep(.stack-view__name) {
+  max-width: 100%;
+  text-decoration: none !important;
+}
+.ww__cost-stack :deep(.stack-view__subline) {
+  display: none;
 }
 .ww__cost-thumb {
   position: relative;
