@@ -63,7 +63,7 @@
                     map-options
                     popup-content-class="planner__select-menu"
                     style="width: 110px"
-                    :options="rateUnitOptions"
+                    :options="targetUnitOptions"
                     :model-value="target.unit"
                     @update:model-value="(v) => updateTargetUnit(index, v)"
                   />
@@ -330,9 +330,7 @@
                     <q-item-label>{{ getItemName(itemId) }}</q-item-label>
                   </q-item-section>
                   <q-item-section side>
-                    <q-item-label caption
-                      >{{ amount.toFixed(2) }} {{ t('perMinute') }}</q-item-label
-                    >
+                    <q-item-label caption>{{ formatSummaryAmount(amount) }}</q-item-label>
                   </q-item-section>
                 </q-item>
               </q-list>
@@ -354,9 +352,7 @@
                     <q-item-label>{{ fluidId }}</q-item-label>
                   </q-item-section>
                   <q-item-section side>
-                    <q-item-label caption
-                      >{{ amount.toFixed(2) }} {{ t('perMinute') }}</q-item-label
-                    >
+                    <q-item-label caption>{{ formatSummaryAmount(amount) }}</q-item-label>
                   </q-item-section>
                 </q-item>
               </q-list>
@@ -402,7 +398,7 @@
                   <q-item-section>
                     <q-item-label>{{ itemName(seed.itemKey) }}</q-item-label>
                     <q-item-label caption>
-                      {{ t('need') }} {{ formatAmount(seed.amountNeeded) }} {{ t('perMinute') }}
+                      {{ t('need') }} {{ formatSummaryAmount(seed.amountNeeded) }}
                     </q-item-label>
                   </q-item-section>
                   <q-item-section side>
@@ -431,7 +427,7 @@
                 map-options
                 popup-content-class="planner__select-menu"
                 style="min-width: 120px"
-                :options="rateUnitOptions"
+                :options="targetUnitOptions"
                 :model-value="treeDisplayUnit"
                 @update:model-value="(v) => (treeDisplayUnit = v)"
               />
@@ -671,7 +667,7 @@
                 map-options
                 popup-content-class="planner__select-menu"
                 style="min-width: 120px"
-                :options="rateUnitOptions"
+                :options="targetUnitOptions"
                 :model-value="graphDisplayUnit"
                 @update:model-value="(v) => (graphDisplayUnit = v)"
               />
@@ -812,7 +808,7 @@
                 map-options
                 popup-content-class="planner__select-menu"
                 style="min-width: 120px"
-                :options="rateUnitOptions"
+                :options="targetUnitOptions"
                 :model-value="lineDisplayUnit"
                 @update:model-value="(v) => (lineDisplayUnit = v)"
               />
@@ -918,7 +914,7 @@
                 map-options
                 popup-content-class="planner__select-menu"
                 style="min-width: 120px"
-                :options="rateUnitOptions"
+                :options="targetUnitOptions"
                 :model-value="quantDisplayUnit"
                 @update:model-value="(v) => (quantDisplayUnit = v)"
               />
@@ -996,7 +992,7 @@
                 map-options
                 popup-content-class="planner__select-menu"
                 style="min-width: 120px"
-                :options="rateUnitOptions"
+                :options="targetUnitOptions"
                 :model-value="calcDisplayUnit"
                 @update:model-value="(v) => (calcDisplayUnit = v)"
               />
@@ -1350,7 +1346,6 @@ import type {
   AdvancedPlannerViewState,
   PlannerLiveState,
   PlannerNodePosition,
-  PlannerRateDisplayUnit,
   PlannerSavePayload,
   PlannerTargetUnit,
 } from 'src/jei/planner/plannerUi';
@@ -1376,7 +1371,7 @@ interface Target {
   itemKey: ItemKey;
   itemName: string;
   rate: number;
-  unit: 'per_second' | 'per_minute' | 'per_hour';
+  unit: PlannerTargetUnit;
   /** LP 目标类型：产出/投入/最大化/限制 */
   type: ObjectiveType;
 }
@@ -1438,10 +1433,11 @@ const planningStarted = ref(false);
 const mergedTree = ref<EnhancedBuildTreeResult | null>(null);
 const mergedRootItemKey = ref<ItemKey | null>(null);
 
-const rateUnitOptions = computed(() => [
-  { label: t('rateUnitPerSecond'), value: 'per_second' },
-  { label: t('rateUnitPerMinute'), value: 'per_minute' },
-  { label: t('rateUnitPerHour'), value: 'per_hour' },
+const targetUnitOptions = computed(() => [
+  { label: t('itemCount'), value: 'items' },
+  { label: t('itemsPerSecond'), value: 'per_second' },
+  { label: t('itemsPerMinute'), value: 'per_minute' },
+  { label: t('itemsPerHour'), value: 'per_hour' },
 ]);
 
 const objectiveTypeOptions = computed(() => [
@@ -1452,14 +1448,14 @@ const objectiveTypeOptions = computed(() => [
 ]);
 
 const treeDisplayMode = ref<'list' | 'compact'>('list');
-const treeDisplayUnit = ref<'per_second' | 'per_minute' | 'per_hour'>('per_minute');
+const treeDisplayUnit = ref<PlannerTargetUnit>('per_minute');
 const collapsed = ref<Set<string>>(new Set());
-const graphDisplayUnit = ref<'per_second' | 'per_minute' | 'per_hour'>('per_minute');
+const graphDisplayUnit = ref<PlannerTargetUnit>('per_minute');
 const graphShowFluids = ref(true);
 const graphMergeRawMaterials = ref(false);
 const selectedGraphNodeId = ref<string | null>(null);
 const graphNodePositions = ref(new Map<string, { x: number; y: number }>());
-const lineDisplayUnit = ref<'per_second' | 'per_minute' | 'per_hour'>('per_minute');
+const lineDisplayUnit = ref<PlannerTargetUnit>('per_minute');
 const lineCollapseIntermediate = ref(true);
 const lineIncludeCycleSeeds = ref(true);
 const lineWidthByRate = computed({
@@ -1472,14 +1468,14 @@ const lineWidthCurveConfig = computed({
   get: () => settingsStore.lineWidthCurveConfig,
   set: (v: LineWidthCurveConfig) => settingsStore.setLineWidthCurveConfig(v),
 });
-const quantDisplayUnit = ref<'per_second' | 'per_minute' | 'per_hour'>('per_minute');
+const quantDisplayUnit = ref<PlannerTargetUnit>('per_minute');
 const quantShowFluids = ref(true);
 const forcedRawItemKeyHashes = ref<Set<string>>(new Set());
 const useProductRecovery = ref(false);
 const selectedLineNodeId = ref<string | null>(null);
 const lineNodePositions = ref(new Map<string, { x: number; y: number }>());
 const quantNodePositions = ref(new Map<string, { x: number; y: number }>());
-const calcDisplayUnit = ref<'per_second' | 'per_minute' | 'per_hour'>('per_minute');
+const calcDisplayUnit = ref<PlannerTargetUnit>('per_minute');
 
 const graphPageFull = ref(false);
 const linePageFull = ref(false);
@@ -1503,11 +1499,6 @@ const VALID_ADVANCED_PLANNER_TABS = new Set<AdvancedPlannerTab>([
   'calc',
 ]);
 
-const VALID_RATE_DISPLAY_UNITS = new Set<PlannerRateDisplayUnit>([
-  'per_second',
-  'per_minute',
-  'per_hour',
-]);
 const VALID_TARGET_UNITS = new Set<PlannerTargetUnit>([
   'items',
   'per_second',
@@ -1542,10 +1533,6 @@ function recordToNodePositionMap(
     out.set(id, { x, y });
   });
   return out;
-}
-
-function isRateDisplayUnit(value: unknown): value is PlannerRateDisplayUnit {
-  return typeof value === 'string' && VALID_RATE_DISPLAY_UNITS.has(value as PlannerRateDisplayUnit);
 }
 
 function isAdvancedPlannerTab(value: unknown): value is AdvancedPlannerTab {
@@ -1673,7 +1660,7 @@ function applySavedViewState(viewState: AdvancedPlannerViewState | undefined): v
   }
 
   const lineView = viewState?.line;
-  if (isRateDisplayUnit(lineView?.displayUnit)) {
+  if (isPlannerTargetUnit(lineView?.displayUnit)) {
     lineDisplayUnit.value = lineView.displayUnit;
   }
   if (typeof lineView?.collapseIntermediate === 'boolean') {
@@ -1687,7 +1674,7 @@ function applySavedViewState(viewState: AdvancedPlannerViewState | undefined): v
   lineNodePositions.value = recordToNodePositionMap(lineView?.nodePositions);
 
   const quantView = viewState?.quant;
-  if (isRateDisplayUnit(quantView?.displayUnit)) {
+  if (isPlannerTargetUnit(quantView?.displayUnit)) {
     quantDisplayUnit.value = quantView.displayUnit;
   }
   if (typeof quantView?.showFluids === 'boolean') {
@@ -1699,7 +1686,7 @@ function applySavedViewState(viewState: AdvancedPlannerViewState | undefined): v
   quantNodePositions.value = recordToNodePositionMap(quantView?.nodePositions);
 
   const calcView = viewState?.calc;
-  if (isRateDisplayUnit(calcView?.displayUnit)) {
+  if (isPlannerTargetUnit(calcView?.displayUnit)) {
     calcDisplayUnit.value = calcView.displayUnit;
   }
 }
@@ -1821,6 +1808,15 @@ const rawItemEntries = computed(() => {
 const rawFluidEntries = computed(() => {
   return Array.from(rawFluidTotals.value.entries()).sort((a, b) => b[1] - a[1]);
 });
+
+const allTargetsUseItems = computed(
+  () => targets.value.length > 0 && targets.value.every((target) => target.unit === 'items'),
+);
+
+function formatSummaryAmount(amount: number): string {
+  const formatted = formatAmount(amount);
+  return allTargetsUseItems.value ? String(formatted) : `${formatted} ${t('perMinute')}`;
+}
 
 type CycleSeedInfo = {
   nodeId: string;
@@ -2063,7 +2059,13 @@ const addTarget = (itemKey: ItemKey, itemName: string, rate = 1) => {
     existing.rate += rate;
     invalidatePlanningIfNeeded();
   } else {
-    targets.value.push({ itemKey, itemName, rate, unit: 'per_minute', type: ObjectiveType.Output });
+    targets.value.push({
+      itemKey,
+      itemName,
+      rate,
+      unit: 'per_minute',
+      type: ObjectiveType.Output,
+    });
     invalidatePlanningIfNeeded();
   }
 };
@@ -2074,7 +2076,7 @@ const loadSavedPlan = (payload: PlannerSavePayload) => {
     itemKey: t.itemKey,
     itemName: t.itemName ?? itemName(t.itemKey),
     rate: t.value ?? 1,
-    unit: t.unit as 'per_second' | 'per_minute' | 'per_hour',
+    unit: isPlannerTargetUnit(t.unit) ? t.unit : 'per_minute',
     type: t.type ?? ObjectiveType.Output,
   }));
 
@@ -2118,7 +2120,7 @@ const updateTargetRate = (index: number, rate: number) => {
   }
 };
 
-const updateTargetUnit = (index: number, unit: 'per_second' | 'per_minute' | 'per_hour') => {
+const updateTargetUnit = (index: number, unit: PlannerTargetUnit) => {
   if (targets.value[index]) {
     targets.value[index].unit = unit;
     invalidatePlanningIfNeeded();
@@ -2568,6 +2570,7 @@ function recoveryProducedText(nodeId: string): string {
 }
 
 const rateColumnLabel = computed(() => {
+  if (treeDisplayUnit.value === 'items') return t('itemCount');
   if (treeDisplayUnit.value === 'per_second') return t('itemsPerSecond');
   if (treeDisplayUnit.value === 'per_hour') return t('itemsPerHour');
   return t('itemsPerMinute');
@@ -2584,6 +2587,7 @@ function nodeDisplayAmount(node: RequirementNode): number {
 
 function nodeDisplayRate(node: RequirementNode): number {
   const amount = nodeDisplayAmount(node);
+  if (treeDisplayUnit.value === 'items') return amount;
   if (treeDisplayUnit.value === 'per_second') return amount / 60;
   if (treeDisplayUnit.value === 'per_hour') return amount * 60;
   return amount;
@@ -2591,9 +2595,10 @@ function nodeDisplayRate(node: RequirementNode): number {
 
 function nodeDisplayRateByUnit(
   node: RequirementNode,
-  unit: 'per_second' | 'per_minute' | 'per_hour',
+  unit: PlannerTargetUnit,
 ): number {
   const amount = nodeDisplayAmount(node);
+  if (unit === 'items') return amount;
   if (unit === 'per_second') return amount / 60;
   if (unit === 'per_hour') return amount * 60;
   return amount;
@@ -2631,7 +2636,8 @@ function formatAmount(n: number) {
   return rounded;
 }
 
-function unitSuffix(unit: 'per_second' | 'per_minute' | 'per_hour') {
+function unitSuffix(unit: PlannerTargetUnit) {
+  if (unit === 'items') return '';
   if (unit === 'per_second') return '/s';
   if (unit === 'per_hour') return '/h';
   return '/min';
@@ -2639,8 +2645,9 @@ function unitSuffix(unit: 'per_second' | 'per_minute' | 'per_hour') {
 
 function displayRateFromAmount(
   amountPerMinute: number,
-  unit: 'per_second' | 'per_minute' | 'per_hour',
+  unit: PlannerTargetUnit,
 ) {
+  if (unit === 'items') return amountPerMinute;
   if (unit === 'per_second') return amountPerMinute / 60;
   if (unit === 'per_hour') return amountPerMinute * 60;
   return amountPerMinute;
@@ -2648,8 +2655,9 @@ function displayRateFromAmount(
 
 function rateByUnitFromPerSecond(
   perSecond: number,
-  unit: 'per_second' | 'per_minute' | 'per_hour',
+  unit: PlannerTargetUnit,
 ) {
+  if (unit === 'items') return perSecond * 60;
   if (unit === 'per_second') return perSecond;
   if (unit === 'per_hour') return perSecond * 3600;
   return perSecond * 60;
@@ -4138,11 +4146,20 @@ const calcMachineColumns = computed(() => [
   { name: 'count', label: t('itemCount'), field: 'count', align: 'right' as const },
 ]);
 
+function labelWithUnit(label: string, unit: PlannerTargetUnit): string {
+  const suffix = unitSuffix(unit);
+  return suffix ? `${label} (${suffix})` : label;
+}
+
+const calcAmountLabel = computed(() =>
+  calcDisplayUnit.value === 'items' ? t('itemCount') : t('amountPerMin'),
+);
+
 const calcItemColumns = computed(() => [
   { name: 'name', label: t('item'), field: 'name', align: 'left' as const },
   {
     name: 'rate',
-    label: `${t('outputRate')} (${unitSuffix(calcDisplayUnit.value)})`,
+    label: labelWithUnit(t('outputRate'), calcDisplayUnit.value),
     field: 'rate',
     align: 'right' as const,
   },
@@ -4150,10 +4167,10 @@ const calcItemColumns = computed(() => [
 
 const calcIntermediateColumns = computed(() => [
   { name: 'name', label: t('item'), field: 'name', align: 'left' as const },
-  { name: 'amount', label: t('amountPerMin'), field: 'amount', align: 'right' as const },
+  { name: 'amount', label: calcAmountLabel.value, field: 'amount', align: 'right' as const },
   {
     name: 'rate',
-    label: `${t('productionSpeed')} (${unitSuffix(calcDisplayUnit.value)})`,
+    label: labelWithUnit(t('productionSpeed'), calcDisplayUnit.value),
     field: 'rate',
     align: 'right' as const,
   },
@@ -4162,18 +4179,18 @@ const calcIntermediateColumns = computed(() => [
 
 const calcForcedRawColumns = computed(() => [
   { name: 'name', label: t('item'), field: 'name', align: 'left' as const },
-  { name: 'amount', label: t('amountPerMin'), field: 'amount', align: 'right' as const },
+  { name: 'amount', label: calcAmountLabel.value, field: 'amount', align: 'right' as const },
   {
     name: 'rate',
-    label: `${t('productionSpeed')} (${unitSuffix(calcDisplayUnit.value)})`,
+    label: labelWithUnit(t('productionSpeed'), calcDisplayUnit.value),
     field: 'rate',
     align: 'right' as const,
   },
   { name: 'action', label: t('action'), field: 'action', align: 'right' as const },
 ]);
 
-const getRateUnitLabel = (unit: 'per_second' | 'per_minute' | 'per_hour') => {
-  return rateUnitOptions.value.find((o) => o.value === unit)?.label ?? unit;
+const getRateUnitLabel = (unit: PlannerTargetUnit) => {
+  return targetUnitOptions.value.find((o) => o.value === unit)?.label ?? unit;
 };
 
 const getItemName = (itemId: ItemId): string => {

@@ -389,7 +389,6 @@ import type {
   PlannerInitialState,
   PlannerLiveState,
   PlannerNodePosition,
-  PlannerRateDisplayUnit,
   PlannerSavePayload,
   PlannerTargetUnit,
   AdvancedObjectiveEntry,
@@ -3308,8 +3307,10 @@ function normalizeNodePositionRecord(v: unknown): Record<string, PlannerNodePosi
   return Object.keys(out).length ? out : undefined;
 }
 
-function normalizeRateDisplayUnit(v: unknown): PlannerRateDisplayUnit | undefined {
-  return v === 'per_second' || v === 'per_minute' || v === 'per_hour' ? v : undefined;
+function normalizeRateDisplayUnit(v: unknown): PlannerTargetUnit | undefined {
+  return v === 'items' || v === 'per_second' || v === 'per_minute' || v === 'per_hour'
+    ? v
+    : undefined;
 }
 
 function normalizeAdvancedPlannerViewState(v: unknown): AdvancedPlannerViewState | undefined {

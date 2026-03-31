@@ -15,20 +15,20 @@ export type AdvancedPlannerTab = 'summary' | 'tree' | 'graph' | 'line' | 'quant'
 export type AdvancedPlannerViewState = {
   activeTab?: AdvancedPlannerTab;
   line?: {
-    displayUnit?: PlannerRateDisplayUnit;
+    displayUnit?: PlannerTargetUnit;
     collapseIntermediate?: boolean;
     includeCycleSeeds?: boolean;
     selectedNodeId?: string | null;
     nodePositions?: Record<string, PlannerNodePosition>;
   };
   quant?: {
-    displayUnit?: PlannerRateDisplayUnit;
+    displayUnit?: PlannerTargetUnit;
     showFluids?: boolean;
     widthByRate?: boolean;
     nodePositions?: Record<string, PlannerNodePosition>;
   };
   calc?: {
-    displayUnit?: PlannerRateDisplayUnit;
+    displayUnit?: PlannerTargetUnit;
   };
 };
 

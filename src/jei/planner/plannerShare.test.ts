@@ -82,7 +82,7 @@ describe('plannerShare', () => {
         {
           itemKey: { id: 'gear' },
           value: 30,
-          unit: ObjectiveUnit.PerSecond,
+          unit: ObjectiveUnit.Items,
           type: ObjectiveType.Input,
         },
       ],
@@ -92,6 +92,7 @@ describe('plannerShare', () => {
     expect(decoded.plan.kind).toBe('advanced');
     expect(decoded.plan.targets).toHaveLength(2);
     expect(decoded.plan.targets?.[0]?.itemName).toBe('铜板');
+    expect(decoded.plan.targets?.[1]?.unit).toBe(ObjectiveUnit.Items);
     expect(decoded.plan.targets?.[1]?.type).toBe(ObjectiveType.Input);
   });
 
