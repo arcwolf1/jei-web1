@@ -1,4 +1,5 @@
 import type { ItemDef } from 'src/jei/types';
+import { findItemDefByLookupId } from 'src/jei/indexing/itemLookup';
 import { attributeTypeNames } from './genums';
 
 type RecordLike = Record<string, unknown>;
@@ -227,24 +228,14 @@ function findItemDefByRawId(
   rawId: unknown,
   itemDefsByKeyHash?: Record<string, ItemDef>,
 ): ItemDef | undefined {
-  const itemId = typeof rawId === 'string' ? rawId.trim() : '';
-  if (!itemId || !itemDefsByKeyHash) return undefined;
-  return Object.values(itemDefsByKeyHash).find((entry) => {
-    const fullId = typeof entry?.key?.id === 'string' ? entry.key.id : '';
-    return fullId === itemId || fullId.endsWith(itemId);
-  });
+  return findItemDefByLookupId(rawId, itemDefsByKeyHash);
 }
 
 function findItemDefByPackItemId(
   packItemId: string | undefined,
   itemDefsByKeyHash?: Record<string, ItemDef>,
 ): ItemDef | undefined {
-  const itemId = typeof packItemId === 'string' ? packItemId.trim() : '';
-  if (!itemId || !itemDefsByKeyHash) return undefined;
-  return Object.values(itemDefsByKeyHash).find((entry) => {
-    const fullId = typeof entry?.key?.id === 'string' ? entry.key.id : '';
-    return fullId === itemId;
-  });
+  return findItemDefByLookupId(packItemId, itemDefsByKeyHash, { allowSuffixMatch: false });
 }
 
 function resolvePackItemId(
@@ -254,7 +245,10 @@ function resolvePackItemId(
 ): string | undefined {
   if (!rawId) return undefined;
   const mapped = idToPackItemId?.[rawId];
-  if (typeof mapped === 'string' && mapped.trim().length > 0) return mapped.trim();
+  if (typeof mapped === 'string' && mapped.trim().length > 0) {
+    const mappedId = mapped.trim();
+    return findItemDefByPackItemId(mappedId, itemDefsByKeyHash)?.key.id ?? mappedId;
+  }
   if (itemDefsByKeyHash && rawId.startsWith('item_')) {
     const exactJeiwebItemId = `endfield.warfarin.items_${rawId}`;
     const exactDef = findItemDefByPackItemId(exactJeiwebItemId, itemDefsByKeyHash);

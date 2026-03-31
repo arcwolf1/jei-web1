@@ -111,6 +111,7 @@ export const useSettingsStore = defineStore('settings', {
       completedTutorial: false,
       favoritesOpensNewStack: false,
       persistHistoryRecords: true,
+      hoverTooltipAllowMouseEnter: true,
       // Wiki 渲染器设置
       wikiImageUseProxy: false,
       wikiImageProxyUrl: 'https://r.jina.ai/http://',
@@ -151,6 +152,7 @@ export const useSettingsStore = defineStore('settings', {
       machineCountDecimals: 2,
       pluginEnabledById: {} as Record<string, boolean>,
       pluginSettingsById: {} as Record<string, Record<string, string | number | boolean>>,
+      hoverTooltipTemporaryInteractive: false,
     };
     try {
       const raw = getSettingsJSON();
@@ -251,6 +253,10 @@ export const useSettingsStore = defineStore('settings', {
           typeof parsed.persistHistoryRecords === 'boolean'
             ? parsed.persistHistoryRecords
             : defaults.persistHistoryRecords,
+        hoverTooltipAllowMouseEnter:
+          typeof parsed.hoverTooltipAllowMouseEnter === 'boolean'
+            ? parsed.hoverTooltipAllowMouseEnter
+            : defaults.hoverTooltipAllowMouseEnter,
         wikiImageUseProxy:
           typeof parsed.wikiImageUseProxy === 'boolean'
             ? parsed.wikiImageUseProxy
@@ -415,6 +421,7 @@ export const useSettingsStore = defineStore('settings', {
                   ]),
               )
             : defaults.pluginSettingsById,
+        hoverTooltipTemporaryInteractive: defaults.hoverTooltipTemporaryInteractive,
       };
       syncProxyTokensToStorage(restored);
       return restored;
@@ -505,6 +512,13 @@ export const useSettingsStore = defineStore('settings', {
     setPersistHistoryRecords(value: boolean) {
       this.persistHistoryRecords = value;
       void this.save();
+    },
+    setHoverTooltipAllowMouseEnter(value: boolean) {
+      this.hoverTooltipAllowMouseEnter = value;
+      void this.save();
+    },
+    setHoverTooltipTemporaryInteractive(value: boolean) {
+      this.hoverTooltipTemporaryInteractive = value;
     },
     setWikiImageUseProxy(value: boolean) {
       this.wikiImageUseProxy = value;
@@ -702,6 +716,7 @@ export const useSettingsStore = defineStore('settings', {
         completedTutorial: this.completedTutorial,
         favoritesOpensNewStack: this.favoritesOpensNewStack,
         persistHistoryRecords: this.persistHistoryRecords,
+        hoverTooltipAllowMouseEnter: this.hoverTooltipAllowMouseEnter,
         wikiImageUseProxy: this.wikiImageUseProxy,
         wikiImageProxyUrl: this.wikiImageProxyUrl,
         wikiCatalogFileName: this.wikiCatalogFileName,
@@ -803,6 +818,8 @@ export const useSettingsStore = defineStore('settings', {
         this.favoritesOpensNewStack = parsed.favoritesOpensNewStack;
       if (typeof parsed.persistHistoryRecords === 'boolean')
         this.persistHistoryRecords = parsed.persistHistoryRecords;
+      if (typeof parsed.hoverTooltipAllowMouseEnter === 'boolean')
+        this.hoverTooltipAllowMouseEnter = parsed.hoverTooltipAllowMouseEnter;
       if (typeof parsed.wikiImageUseProxy === 'boolean')
         this.wikiImageUseProxy = parsed.wikiImageUseProxy;
       if (typeof parsed.wikiImageProxyUrl === 'string')

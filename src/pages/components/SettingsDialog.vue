@@ -266,6 +266,18 @@
                       @update:model-value="$emit('update:persist-history-records', !!$event)"
                     />
                     <q-toggle
+                      :label="t('hoverTooltipAllowMouseEnter')"
+                      :model-value="hoverTooltipAllowMouseEnter"
+                      @update:model-value="$emit('update:hover-tooltip-allow-mouse-enter', !!$event)"
+                    />
+                    <div class="text-caption text-grey-7 q-mt-xs q-ml-sm">
+                      {{
+                        t('hoverTooltipTemporaryShortcutHint', {
+                          key: hoverTooltipInteractBindingText,
+                        })
+                      }}
+                    </div>
+                    <q-toggle
                       :label="t('detectPcDisableMobile')"
                       :model-value="detectPcDisableMobile"
                       @update:model-value="$emit('update:detect-pc-disable-mobile', !!$event)"
@@ -806,6 +818,7 @@ const props = defineProps<{
   recipeSlotShowName: boolean;
   favoritesOpensNewStack: boolean;
   persistHistoryRecords: boolean;
+  hoverTooltipAllowMouseEnter: boolean;
   detectPcDisableMobile: boolean;
   packProxyTemplate: string;
   packDevProxyTemplate: string;
@@ -884,6 +897,7 @@ const emit = defineEmits<{
   'update:recipe-slot-show-name': [value: boolean];
   'update:favorites-open-stack': [value: boolean];
   'update:persist-history-records': [value: boolean];
+  'update:hover-tooltip-allow-mouse-enter': [value: boolean];
   'update:detect-pc-disable-mobile': [value: boolean];
   'update:keybinding': [action: KeyAction, binding: KeyBinding];
   'reset:keybindings': [];
@@ -919,6 +933,13 @@ const allPluginsEnabled = computed(
   () => props.pluginEntries.length > 0 && pluginEnabledCount.value === props.pluginEntries.length,
 );
 const allPluginsDisabled = computed(() => pluginEnabledCount.value === 0);
+const hoverTooltipInteractBindingText = computed(() => {
+  for (const group of props.keybindingGroups) {
+    const action = group.actions.find((entry) => entry.id === 'hoverTooltipInteract');
+    if (action) return keyBindingText(action.binding);
+  }
+  return '-';
+});
 
 const visibleSections = computed(() => {
   const query = settingSearch.value.trim().toLowerCase();

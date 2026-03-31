@@ -1,4 +1,5 @@
 import type { ItemDef } from 'src/jei/types';
+import { findItemDefByLookupId } from 'src/jei/indexing/itemLookup';
 import { attributeTypeNames, resolveEnumName } from './genums';
 import { getWarfarinAttributeLabel } from './attributeLabels';
 
@@ -169,12 +170,7 @@ export function findItemDefByRawId(
   rawId: unknown,
   itemDefsByKeyHash?: Record<string, ItemDef>,
 ): ItemDef | undefined {
-  const itemId = typeof rawId === 'string' ? rawId.trim() : '';
-  if (!itemId || !itemDefsByKeyHash) return undefined;
-  return Object.values(itemDefsByKeyHash).find((entry) => {
-    const fullId = typeof entry?.key?.id === 'string' ? entry.key.id : '';
-    return fullId === itemId || fullId.endsWith(itemId);
-  });
+  return findItemDefByLookupId(rawId, itemDefsByKeyHash);
 }
 
 export function resolvePackItemId(
@@ -185,7 +181,10 @@ export function resolvePackItemId(
   const itemId = typeof rawId === 'string' ? rawId.trim() : '';
   if (!itemId) return undefined;
   const mapped = idToPackItemId?.[itemId];
-  if (typeof mapped === 'string' && mapped.trim().length > 0) return mapped.trim();
+  if (typeof mapped === 'string' && mapped.trim().length > 0) {
+    const mappedId = mapped.trim();
+    return findItemDefByPackItemId(mappedId, itemDefsByKeyHash)?.key.id ?? mappedId;
+  }
   if (itemDefsByKeyHash && itemId.startsWith('item_')) {
     const exactJeiwebItemId = `endfield.warfarin.items_${itemId}`;
     const exactDef = findItemDefByPackItemId(exactJeiwebItemId, itemDefsByKeyHash);
@@ -227,12 +226,7 @@ function findItemDefByPackItemId(
   packItemId: string | undefined,
   itemDefsByKeyHash?: Record<string, ItemDef>,
 ): ItemDef | undefined {
-  const itemId = typeof packItemId === 'string' ? packItemId.trim() : '';
-  if (!itemId || !itemDefsByKeyHash) return undefined;
-  return Object.values(itemDefsByKeyHash).find((entry) => {
-    const fullId = typeof entry?.key?.id === 'string' ? entry.key.id : '';
-    return fullId === itemId;
-  });
+  return findItemDefByLookupId(packItemId, itemDefsByKeyHash, { allowSuffixMatch: false });
 }
 
 export function normalizeItemGroups(source: unknown): RecordLike[][] {

@@ -1,6 +1,7 @@
 import type { ItemDef, ItemId, ItemKey, PackData, Recipe, RecipeTypeDef, SlotDef, SlotContent, Stack, StackItem } from 'src/jei/types';
 import { isExactItemKey, itemKeyHash, stackItemToItemKey } from './key';
 import { buildTagIndex } from 'src/jei/tags/resolve';
+import { getItemLookupIds } from './itemLookup';
 
 export interface JeiIndex {
   itemsByKeyHash: Map<string, ItemDef>;
@@ -84,9 +85,11 @@ export function buildJeiIndex(pack: PackData): JeiIndex {
   pack.items.forEach((it) => {
     const h = itemKeyHash(it.key);
     itemsByKeyHash.set(h, it);
-    const list = itemKeyHashesByItemId.get(it.key.id) ?? [];
-    list.push(h);
-    itemKeyHashesByItemId.set(it.key.id, list);
+    getItemLookupIds(it).forEach((lookupId) => {
+      const list = itemKeyHashesByItemId.get(lookupId) ?? [];
+      if (!list.includes(h)) list.push(h);
+      itemKeyHashesByItemId.set(lookupId, list);
+    });
   });
 
   const recipeTypesByKey = new Map<string, RecipeTypeDef>();

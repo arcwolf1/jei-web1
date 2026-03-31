@@ -218,6 +218,10 @@
       @update:favorites-open-stack="settingsStore.setFavoritesOpensNewStack($event)"
       :persist-history-records="settingsStore.persistHistoryRecords"
       @update:persist-history-records="settingsStore.setPersistHistoryRecords($event)"
+      :hover-tooltip-allow-mouse-enter="settingsStore.hoverTooltipAllowMouseEnter"
+      @update:hover-tooltip-allow-mouse-enter="
+        settingsStore.setHoverTooltipAllowMouseEnter($event)
+      "
       :detect-pc-disable-mobile="settingsStore.detectPcDisableMobile"
       @update:detect-pc-disable-mobile="settingsStore.setDetectPcDisableMobile($event)"
       :pack-proxy-template="packProxyTemplate"
@@ -373,6 +377,7 @@ import {
   recipesProducingItem,
   type JeiIndex,
 } from 'src/jei/indexing/buildIndex';
+import { getItemLookupIds } from 'src/jei/indexing/itemLookup';
 import FavoritesPanel from './components/FavoritesPanel.vue';
 import ItemListPanel from './components/ItemListPanel.vue';
 import CenterPanel from './components/CenterPanel.vue';
@@ -419,6 +424,7 @@ import { useSettingsStore, type Language } from 'src/stores/settings';
 import {
   useKeyBindingsStore,
   eventMatchesBinding,
+  eventReleasesBinding,
   type KeyBinding,
   type KeyAction,
 } from 'src/stores/keybindings';
@@ -986,6 +992,12 @@ const keybindingSettingGroups = computed<
         description: '',
         binding: keyBindingsStore.getBinding('addToAdvanced'),
       },
+      {
+        id: 'hoverTooltipInteract',
+        label: t('keybindingHoverTooltipInteract'),
+        description: '',
+        binding: keyBindingsStore.getBinding('hoverTooltipInteract'),
+      },
     ],
   },
   {
@@ -1300,8 +1312,8 @@ type NameSearchKeys = {
 
 type SearchableItemEntry = {
   keyHash: string;
-  idLower: string;
-  gameIdLower: string;
+  idTermsLower: string[];
+  gameIdTermsLower: string[];
   namesLower: string[];
   pinyinFulls: string[];
   pinyinFirsts: string[];
@@ -1394,11 +1406,7 @@ const getTagDisplayName = (tagId: string): string => {
 
 // 所有可用的物品 ID（去重）
 const availableItemIds = computed(() => {
-  const ids = new Set<string>();
-  for (const def of index.value?.itemsByKeyHash.values() ?? []) {
-    ids.add(def.key.id);
-  }
-  return Array.from(ids).sort();
+  return Array.from(index.value?.itemKeyHashesByItemId.keys() ?? []).sort();
 });
 
 // 所有可用的命名空间
@@ -1421,9 +1429,18 @@ const searchableItemsForFilter = computed<SearchableItemEntry[]>(() => {
   const keysByKeyHash = nameSearchKeysByKeyHash.value;
   const out: SearchableItemEntry[] = [];
   for (const [keyHash, def] of sortedEntries) {
-    const idLower = def.key.id.toLowerCase();
-    const gameIdLower =
-      (idLower.includes(':') ? idLower.split(':')[0] : idLower.split('.')[0]) ?? '';
+    const idTermsLower = Array.from(
+      new Set(getItemLookupIds(def).map((id) => id.toLowerCase()).filter(Boolean)),
+    );
+    const gameIdTermsLower = Array.from(
+      new Set(
+        idTermsLower
+          .map((idLower) =>
+            (idLower.includes(':') ? idLower.split(':')[0] : idLower.split('.')[0]) ?? '',
+          )
+          .filter(Boolean),
+      ),
+    );
     const nameKeys = keysByKeyHash.get(keyHash);
     const namesLower = nameKeys?.namesLower ?? [(def.name ?? '').toLowerCase()];
     const pinyinFulls = nameKeys?.pinyinFulls ?? [];
@@ -1439,8 +1456,8 @@ const searchableItemsForFilter = computed<SearchableItemEntry[]>(() => {
     }
     out.push({
       keyHash,
-      idLower,
-      gameIdLower,
+      idTermsLower,
+      gameIdTermsLower,
       namesLower,
       pinyinFulls,
       pinyinFirsts,
@@ -1470,14 +1487,14 @@ function matchesSearchableItem(
           return true;
         if (query && entry.pinyinFirsts.some((pinyinValue) => pinyinValue.includes(query)))
           return true;
-        if (entry.idLower.includes(term.value)) return true;
+        if (entry.idTermsLower.some((id) => id.includes(term.value))) return true;
         if (entry.tagsLower.some((tag) => tag.includes(term.value))) return true;
         return false;
       }
       case 'itemId':
-        return entry.idLower.includes(term.value);
+        return entry.idTermsLower.some((id) => id.includes(term.value));
       case 'gameId':
-        return entry.gameIdLower.includes(term.value);
+        return entry.gameIdTermsLower.some((id) => id.includes(term.value));
       case 'tag':
         return entry.tagsLower.some((tag) => tag.includes(term.value));
     }
@@ -2137,6 +2154,8 @@ onMounted(async () => {
 
   window.addEventListener('jei:import-shared-plan', handleImportSharedPlanRequest);
   window.addEventListener('keydown', onKeyDown, true);
+  window.addEventListener('keyup', onKeyUp, true);
+  window.addEventListener('blur', onWindowBlur);
   window.addEventListener('resize', onWindowResize);
 });
 
@@ -2187,6 +2206,8 @@ watch(
 onUnmounted(() => {
   window.removeEventListener('jei:import-shared-plan', handleImportSharedPlanRequest);
   window.removeEventListener('keydown', onKeyDown, true);
+  window.removeEventListener('keyup', onKeyUp, true);
+  window.removeEventListener('blur', onWindowBlur);
   window.removeEventListener('resize', onWindowResize);
   resizeObserver.value?.disconnect();
   clearSearchFilterDebounceTimer();
@@ -3048,14 +3069,16 @@ function closeDialog() {
 }
 
 function onKeyDown(e: KeyboardEvent) {
+  const bindings = keyBindingsStore.bindings;
+  if (eventMatchesBinding(e, bindings.hoverTooltipInteract)) {
+    settingsStore.setHoverTooltipTemporaryInteractive(true);
+  }
+
   const target = e.target as HTMLElement | null;
   const tag = target?.tagName?.toLowerCase() ?? '';
   const isTyping =
     tag === 'input' || tag === 'textarea' || target?.getAttribute('contenteditable') === 'true';
   if (isTyping) return;
-
-  // 获取快捷键绑定
-  const bindings = keyBindingsStore.bindings;
 
   // 导航快捷键（在面板模式和对话框模式下都工作）
   if (navStack.value.length > 0) {
@@ -3227,6 +3250,16 @@ function onKeyDown(e: KeyboardEvent) {
       centerPanelRef.value.addToAdvancedPlanner(itemDef.key, itemDef.name);
     }
   }
+}
+
+function onKeyUp(e: KeyboardEvent) {
+  if (eventReleasesBinding(e, keyBindingsStore.bindings.hoverTooltipInteract)) {
+    settingsStore.setHoverTooltipTemporaryInteractive(false);
+  }
+}
+
+function onWindowBlur() {
+  settingsStore.setHoverTooltipTemporaryInteractive(false);
 }
 
 function favoritesStorageKey(packId: string) {

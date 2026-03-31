@@ -1,16 +1,48 @@
 # About
 
 ## Build
-- Version: 4948f4b-dirty
-- Commit: 4948f4b (4948f4bd15d4a630a690fffe6365787dbef6ab22)
-- Commit count: 142
-- Subject: feat: 添加外观设置，支持主题模式和图标显示模式的选择
+- Version: 17561c5-dirty
+- Commit: 17561c5 (17561c504e3bb14abd92793381efbf767483a2bf)
+- Commit count: 146
+- Subject: feat: 更新单位处理逻辑，统一使用 PlannerTargetUnit 类型
 - Author: AndreaFrederica
-- Date: 2026-03-30T21:38:51+08:00
-- Generated at: 2026-03-30T16:27:48.378Z
+- Date: 2026-03-31T22:48:36+08:00
+- Generated at: 2026-03-31T19:18:42.952Z
 - Remote: https://github.com/AndreaFrederica/jei-web.git
 
 ## Version History
+
+### r146 (2026-03-31T22:48:36+08:00)
+- 17561c5
+  feat: 更新单位处理逻辑，统一使用 PlannerTargetUnit 类型
+
+### r145 (2026-03-31T22:17:28+08:00)
+- f092228
+  feat: 添加获取 Warfarin 分发和获取方式标签的功能
+
+### r144 (2026-03-31T22:01:21+08:00)
+- d1d5ad7
+  feat: localize mission and operator voices components
+  
+  - Updated WMissionRenderer.vue to use localization for mission titles, descriptions, quests, dialogs, and radio messages.
+  - Enhanced WOperatorVoices.vue to utilize localized labels for unlock types.
+  - Introduced displayLabels.ts for centralized localization functions and mappings.
+  - Improved text rendering in WarfarinEndpointRenderer.vue to support localization.
+  - Added support for basic HTML tag preservation in text rendering.
+  - Enhanced utility functions for localized scalar formatting.
+  - Updated i18n files for English, Japanese, and Chinese to include new localization keys.
+  - Modified RecipeContentView.vue to display localized legacy descriptions and wiki debug information.
+
+### r143 (2026-03-31T20:14:00+08:00)
+- 9548bea
+  feat: enhance warfarin utilities and localization
+  
+  - Added new MaterialCostEntry interface and functions for resolving item definitions and pack item IDs in warfarin utilities.
+  - Refactored existing functions for better clarity and performance.
+  - Introduced new methods for normalizing material costs and bundles.
+  - Updated localization files for English, Japanese, and Chinese to include new warfarin-related terms and phrases.
+  - Enhanced tutorial manager with additional interaction types and validation options.
+  - Improved RecipeContentView component to support new renderer features and source pack IDs.
 
 ### r142 (2026-03-30T21:38:51+08:00)
 - 4948f4b

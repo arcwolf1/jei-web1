@@ -501,7 +501,7 @@ import type {
   JeiWebWikiRendererDef,
 } from 'src/jei/types';
 import type { JeiIndex } from 'src/jei/indexing/buildIndex';
-import { itemKeyHash } from 'src/jei/indexing/key';
+import { findItemDefByLookupId } from 'src/jei/indexing/itemLookup';
 import {
   getTagDisplayName as getTagDisplayNameFromDef,
   resolveTagDef,
@@ -1320,7 +1320,9 @@ function handleWikiEntryNavigate(itemId: string) {
   const id = String(itemId || '').trim();
   if (!id) return;
 
-  const directDef = props.itemDefsByKeyHash[itemKeyHash({ id })];
+  const directDef = findItemDefByLookupId(id, props.itemDefsByKeyHash, {
+    allowSuffixMatch: false,
+  });
   if (directDef) {
     emit('wiki-item-click', directDef.key);
     return;
@@ -1335,10 +1337,7 @@ function handleWikiEntryNavigate(itemId: string) {
     }
   }
 
-  const suffixDef = Object.values(props.itemDefsByKeyHash).find((entry) => {
-    const fullId = typeof entry?.key?.id === 'string' ? entry.key.id : '';
-    return fullId === id || fullId.endsWith(id);
-  });
+  const suffixDef = findItemDefByLookupId(id, props.itemDefsByKeyHash);
   if (suffixDef) {
     emit('wiki-item-click', suffixDef.key);
   }

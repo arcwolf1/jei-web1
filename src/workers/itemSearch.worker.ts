@@ -6,8 +6,8 @@ import {
 
 type SearchableItemEntry = {
   keyHash: string;
-  idLower: string;
-  gameIdLower: string;
+  idTermsLower: string[];
+  gameIdTermsLower: string[];
   namesLower: string[];
   pinyinFulls: string[];
   pinyinFirsts: string[];
@@ -48,14 +48,14 @@ function matchesSearchableItem(
         const query = normalizePinyinQuery(term.value);
         if (query && item.pinyinFulls.some((pinyin) => pinyin.includes(query))) return true;
         if (query && item.pinyinFirsts.some((pinyin) => pinyin.includes(query))) return true;
-        if (item.idLower.includes(term.value)) return true;
+        if (item.idTermsLower.some((id) => id.includes(term.value))) return true;
         if (item.tagsLower.some((tag) => tag.includes(term.value))) return true;
         return false;
       }
       case 'itemId':
-        return item.idLower.includes(term.value);
+        return item.idTermsLower.some((id) => id.includes(term.value));
       case 'gameId':
-        return item.gameIdLower.includes(term.value);
+        return item.gameIdTermsLower.some((id) => id.includes(term.value));
       case 'tag':
         return item.tagsLower.some((tag) => tag.includes(term.value));
     }
@@ -82,4 +82,3 @@ self.onmessage = (event: MessageEvent<WorkerInputMessage>) => {
   };
   self.postMessage(out);
 };
-
