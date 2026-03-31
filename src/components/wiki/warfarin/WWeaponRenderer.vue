@@ -167,12 +167,13 @@ import {
   toArray,
   formatScalar,
   buildInfoEntries,
-  resolveEnumName,
   normalizeMaterialCosts,
   toText,
 } from './utils';
-import { itemTypeNames, weaponTypeNames } from './genums';
+import { itemTypeNames } from './genums';
 import { buildWarfarinBlackboardMap, pickWarfarinText } from './text';
+import { getWarfarinEnumLabel } from './displayLabels';
+import { getWarfarinWeaponTypeLabel } from './operatorLabels';
 
 const props = defineProps<{
   detail: RecordLike;
@@ -183,7 +184,7 @@ const props = defineProps<{
   itemDefsByKeyHash?: Record<string, ItemDef> | undefined;
 }>();
 
-const { t } = useI18n();
+const { t, locale } = useI18n();
 
 const weaponBasic = computed<RecordLike>(() =>
   isRecordLike(props.detail.weaponBasicTable) ? props.detail.weaponBasicTable : {},
@@ -208,7 +209,7 @@ const basicEntries = computed(() =>
     {
       key: 'weaponType',
       label: t('warfarin.common.weaponType'),
-      format: (v: unknown) => resolveEnumName(weaponTypeNames, v),
+      format: (v: unknown) => getWarfarinWeaponTypeLabel(v, locale.value),
     },
     { key: 'rarity', label: t('warfarin.common.rarity') },
     { key: 'maxLv', label: t('warfarin.common.maxLevel') },
@@ -223,7 +224,7 @@ const itemEntries = computed(() =>
     {
       key: 'type',
       label: t('warfarin.common.type'),
-      format: (v: unknown) => resolveEnumName(itemTypeNames, v),
+      format: (v: unknown) => getWarfarinEnumLabel(itemTypeNames, v, locale.value),
     },
   ]),
 );

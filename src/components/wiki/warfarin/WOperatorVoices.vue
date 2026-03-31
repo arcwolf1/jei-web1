@@ -10,7 +10,7 @@
         >
           <div class="ww__panel-title">{{ record.recordTitle || t('warfarin.common.record') }}</div>
           <div v-if="record.unlockType || record.unlockValue" class="ww__panel-sub">
-            {{ resolveEnumName(charDocUnlockTypeNames, record.unlockType ?? 0) }}
+            {{ getWarfarinEnumLabel(charDocUnlockTypeNames, record.unlockType ?? 0, locale) }}
             · {{ formatScalar(record.unlockValue ?? 0) }}
           </div>
           <WTextRenderer
@@ -67,10 +67,10 @@ import {
   isRecordLike,
   toArray,
   formatScalar,
-  resolveEnumName,
   toText,
 } from './utils';
 import { charDocUnlockTypeNames } from './genums';
+import { getWarfarinEnumLabel } from './displayLabels';
 
 const props = defineProps<{
   detail: RecordLike;
@@ -80,7 +80,7 @@ const props = defineProps<{
   itemDefsByKeyHash?: Record<string, ItemDef> | undefined;
 }>();
 
-const { t } = useI18n();
+const { t, locale } = useI18n();
 
 const characterTable = computed<RecordLike | null>(() =>
   isRecordLike(props.detail.characterTable) ? props.detail.characterTable : null,

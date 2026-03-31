@@ -1,13 +1,13 @@
 <template>
   <div class="ww">
-    <div v-if="!payload" class="ww__empty">No raw data available.</div>
+    <div v-if="!payload" class="ww__empty">{{ l('No Raw Data Available') }}</div>
 
     <template v-else>
       <!-- Operator: full page + raw -->
       <template v-if="endpoint === 'operators'">
         <q-tabs v-model="activeTab" dense align="left" class="text-primary">
           <q-tab name="overview" :label="t('warfarin.common.wikiPage')" />
-          <q-tab name="raw" label="Raw" />
+          <q-tab name="raw" :label="l('Raw')" />
         </q-tabs>
         <q-separator />
         <q-tab-panels v-model="activeTab" animated>
@@ -90,8 +90,8 @@
       <!-- All other endpoints: overview + raw tabs -->
       <template v-else>
         <q-tabs v-model="activeTab" dense align="left" class="text-primary">
-          <q-tab name="overview" label="Overview" />
-          <q-tab name="raw" label="Raw" />
+          <q-tab name="overview" :label="l('Overview')" />
+          <q-tab name="raw" :label="l('Raw')" />
         </q-tabs>
         <q-separator />
         <q-tab-panels v-model="activeTab" animated>
@@ -136,6 +136,7 @@ import WTutorialRenderer from './WTutorialRenderer.vue';
 import WDocumentRenderer from './WDocumentRenderer.vue';
 import WGenericRenderer from './WGenericRenderer.vue';
 import { type RecordLike, type WarfarinEndpointType, isRecordLike, normalizePayload } from './utils';
+import { localizeWarfarinIdentifier } from './displayLabels';
 
 const props = defineProps<{
   source: unknown;
@@ -144,7 +145,8 @@ const props = defineProps<{
   itemDefsByKeyHash?: Record<string, ItemDef> | undefined;
 }>();
 
-const { t } = useI18n();
+const { t, locale } = useI18n();
+const l = (value: string) => localizeWarfarinIdentifier(value, locale.value);
 const activeTab = ref('overview');
 const tocMenuOpen = ref(false);
 const hydratedSource = ref<unknown>(props.source);

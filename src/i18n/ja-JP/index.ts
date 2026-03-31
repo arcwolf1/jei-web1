@@ -227,6 +227,8 @@ export default {
   // Recipe Content
   noTags: 'タグなし',
   description: '説明',
+  legacyDescription: '旧版説明',
+  wikiDebug: 'Wiki デバッグ',
   noIconFound: 'このアイテムには表示可能なアイコンがありません。',
   iconSourceIcon: 'ソース: icon',
   iconSourceSprite: 'ソース: iconSprite',

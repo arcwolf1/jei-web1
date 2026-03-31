@@ -139,6 +139,23 @@ function escapeHtml(value: string): string {
     .replace(/'/g, '&#39;');
 }
 
+function normalizeAllowedHtmlTag(tag: string): string {
+  const trimmed = tag.trim();
+  const closing = /^<\//.test(trimmed);
+  const match = trimmed.match(/^<\/?\s*([a-z0-9]+)/i);
+  const name = match?.[1]?.toLowerCase();
+  if (!name) return '';
+  if (name === 'br') return '<br>';
+  return closing ? `</${name}>` : `<${name}>`;
+}
+
+function preserveBasicHtmlTags(input: string, store: (html: string) => string): string {
+  return input.replace(
+    /<\/?\s*(?:b|strong|i|em|u|br|p|ul|ol|li|code|pre)\s*\/?>/gi,
+    (match) => store(normalizeAllowedHtmlTag(match)),
+  );
+}
+
 function escapeHtmlAttr(value: string): string {
   return escapeHtml(value).replace(/`/g, '&#96;');
 }
@@ -528,7 +545,7 @@ export function renderWarfarinTextHtml(
       : JSON.stringify(value);
 
   const renderInlineFragment = (fragment: string): string =>
-    escapeHtml(fragment)
+    escapeHtml(preserveBasicHtmlTags(fragment, store))
       .replace(/\{([^{}]+)\}/g, (_match, expr: string) =>
         store(renderPlaceholderHtml(expr, value, context)),
       )
@@ -583,7 +600,7 @@ export function renderWarfarinTextHtml(
     },
   );
 
-  working = escapeHtml(working)
+  working = escapeHtml(preserveBasicHtmlTags(working, store))
     .replace(/\{([^{}]+)\}/g, (_match, expr: string) =>
       store(renderPlaceholderHtml(expr, value, context)),
     )

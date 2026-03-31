@@ -1,39 +1,39 @@
 <template>
   <div>
     <section class="ww__section">
-      <h3 class="ww__title">Item Info</h3>
+      <h3 class="ww__title">{{ l('Item Info') }}</h3>
       <WInfoGrid :entries="itemEntries" />
     </section>
 
     <section v-if="displayName" class="ww__section">
-      <h3 class="ww__title">Display Name</h3>
+      <h3 class="ww__title">{{ l('Display Name') }}</h3>
       <div class="ww__prose ww__prose--box">{{ displayName }}</div>
     </section>
 
     <section v-if="itemDesc || itemDecoDesc" class="ww__section">
-      <h3 class="ww__title">Description</h3>
+      <h3 class="ww__title">{{ l('Description') }}</h3>
       <div v-if="itemDesc" class="ww__prose ww__prose--box" v-html="formatWikiHtml(itemDesc)"></div>
       <div v-if="itemDecoDesc" class="ww__muted" v-html="formatWikiHtml(itemDecoDesc)"></div>
     </section>
 
     <section v-if="obtainWayIds.length" class="ww__section">
-      <h3 class="ww__title">Obtain Ways</h3>
+      <h3 class="ww__title">{{ l('Obtain Ways') }}</h3>
       <div class="ww__badges">
         <span v-for="id in obtainWayIds" :key="id" class="ww__badge">{{ id }}</span>
       </div>
     </section>
 
     <section v-if="outcomeItemIds.length" class="ww__section">
-      <h3 class="ww__title">Outcome Items</h3>
+      <h3 class="ww__title">{{ l('Outcome Items') }}</h3>
       <div class="ww__badges">
         <span v-for="id in outcomeItemIds" :key="id" class="ww__badge">{{
-          resolveEntityName(id, localNameMap)
+          resolveLocalizedEntityName(id, undefined, localNameMap, itemDefsByKeyHash)
         }}</span>
       </div>
     </section>
 
     <section v-if="hasData(useItemTable)" class="ww__section">
-      <h3 class="ww__title">Use Item Table</h3>
+      <h3 class="ww__title">{{ l('Use Item Table') }}</h3>
       <div class="ww__stack">
         <div v-if="useItemEntries.length" class="ww__panel">
           <WInfoGrid :entries="useItemEntries" />
@@ -67,7 +67,7 @@
     </section>
 
     <section v-if="hasData(equipItemTable)" class="ww__section">
-      <h3 class="ww__title">Equip Item Table</h3>
+      <h3 class="ww__title">{{ l('Equip Item Table') }}</h3>
       <div class="ww__stack">
         <div v-if="equipItemEntries.length" class="ww__panel">
           <WInfoGrid :entries="equipItemEntries" />
@@ -87,25 +87,33 @@
 
     <!-- Recipe Tables -->
     <section v-for="recipe in recipeSections" :key="recipe.title" class="ww__section">
-      <h3 class="ww__title">{{ recipe.title }}</h3>
+      <h3 class="ww__title">{{ l(recipe.title) }}</h3>
       <div class="ww__stack">
         <div v-for="(formula, fi) in recipe.formulas" :key="fi" class="ww__panel">
-          <div class="ww__panel-title">{{ formula.name || formula.id || `Formula ${fi + 1}` }}</div>
+          <div class="ww__panel-title">{{ formula.name || formula.id || `${l('Formula')} ${fi + 1}` }}</div>
           <div v-if="formula.meta.length" class="ww__recipe-meta">
             <span v-for="m in formula.meta" :key="m.label">{{ m.label }}: {{ m.value }} · </span>
           </div>
           <div v-if="formula.ingredients.length" class="ww__recipe-items">
-            <strong>Ingredients: </strong>
+            <strong>{{ l('Ingredients') }}: </strong>
             <span v-for="(group, gi) in formula.ingredients" :key="gi">
-              <template v-if="gi > 0"> | Option {{ gi + 1 }}: </template>
-              {{ group.map((item) => formatCraftItem(item, localNameMap, liquidMap)).join(', ') }}
+              <template v-if="gi > 0"> | {{ l('Option') }} {{ gi + 1 }}: </template>
+              {{
+                group
+                  .map((item) => formatCraftItem(item, localNameMap, liquidMap, itemDefsByKeyHash))
+                  .join(', ')
+              }}
             </span>
           </div>
           <div v-if="formula.outcomes.length" class="ww__recipe-items">
-            <strong>Outcomes: </strong>
+            <strong>{{ l('Outcomes') }}: </strong>
             <span v-for="(group, gi) in formula.outcomes" :key="gi">
-              <template v-if="gi > 0"> | Option {{ gi + 1 }}: </template>
-              {{ group.map((item) => formatCraftItem(item, localNameMap, liquidMap)).join(', ') }}
+              <template v-if="gi > 0"> | {{ l('Option') }} {{ gi + 1 }}: </template>
+              {{
+                group
+                  .map((item) => formatCraftItem(item, localNameMap, liquidMap, itemDefsByKeyHash))
+                  .join(', ')
+              }}
             </span>
           </div>
         </div>
@@ -116,6 +124,8 @@
 
 <script setup lang="ts">
 import { computed } from 'vue';
+import { useI18n } from 'vue-i18n';
+import type { ItemDef } from 'src/jei/types';
 import WInfoGrid from './shared/WInfoGrid.vue';
 import WDataTable from './shared/WDataTable.vue';
 import {
@@ -125,20 +135,25 @@ import {
   hasData,
   formatWikiHtml,
   formatScalar,
+  formatLocalizedScalar,
   formatCraftItem,
   normalizeItemGroups,
-  resolveEntityName,
+  resolveLocalizedEntityName,
   buildInfoEntries,
-  resolveEnumName,
   toText,
 } from './utils';
 import { itemTypeNames, itemShowingTypeNames } from './genums';
+import { getWarfarinEnumLabel, localizeWarfarinIdentifier } from './displayLabels';
 
 const props = defineProps<{
   detail: RecordLike;
   list: RecordLike;
   localNameMap: RecordLike;
+  itemDefsByKeyHash?: Record<string, ItemDef> | undefined;
 }>();
+
+const { locale } = useI18n();
+const l = (value: string) => localizeWarfarinIdentifier(value, locale.value);
 
 const itemTableData = computed<RecordLike>(() =>
   isRecordLike(props.detail.itemTable) ? props.detail.itemTable : {},
@@ -147,32 +162,40 @@ const itemTableData = computed<RecordLike>(() =>
 const useItemTable = computed(() => props.detail.useItemTable);
 const equipItemTable = computed(() => props.detail.equipItemTable);
 
-const blackboardColumns = [
-  { key: 'source', label: 'Source' },
-  { key: 'key', label: 'Key' },
-  { key: 'value', label: 'Value' },
-  { key: 'valueStr', label: 'Value Str' },
-];
+const blackboardColumns = computed(() => [
+  { key: 'source', label: l('Source') },
+  { key: 'key', label: l('Key') },
+  { key: 'value', label: l('Value') },
+  { key: 'valueStr', label: l('Value Str') },
+]);
 
 const itemEntries = computed(() =>
   buildInfoEntries(itemTableData.value, [
-    { key: 'name', label: 'Name' },
-    { key: 'id', label: 'ID', mono: true },
-    { key: 'iconId', label: 'Icon ID', mono: true },
-    { key: 'iconCompositeId', label: 'Icon Composite ID', mono: true },
-    { key: 'type', label: 'Type', format: (v: unknown) => resolveEnumName(itemTypeNames, v) },
-    { key: 'rarity', label: 'Rarity' },
+    { key: 'name', label: l('Name') },
+    { key: 'id', label: l('ID'), mono: true },
+    { key: 'iconId', label: l('Icon ID'), mono: true },
+    { key: 'iconCompositeId', label: l('Icon Composite ID'), mono: true },
+    {
+      key: 'type',
+      label: l('Type'),
+      format: (v: unknown) => getWarfarinEnumLabel(itemTypeNames, v, locale.value),
+    },
+    { key: 'rarity', label: l('Rarity') },
     {
       key: 'showingType',
-      label: 'Showing Type',
-      format: (v: unknown) => resolveEnumName(itemShowingTypeNames, v),
+      label: l('Showing Type'),
+      format: (v: unknown) => getWarfarinEnumLabel(itemShowingTypeNames, v, locale.value),
     },
-    { key: 'maxStackCount', label: 'Max Stack' },
-    { key: 'maxBackpackStackCount', label: 'Max Backpack Stack' },
-    { key: 'backpackCanDiscard', label: 'Can Discard' },
-    { key: 'valuableTabType', label: 'Tab Type' },
-    { key: 'sortId1', label: 'Sort ID 1' },
-    { key: 'sortId2', label: 'Sort ID 2' },
+    { key: 'maxStackCount', label: l('Max Stack') },
+    { key: 'maxBackpackStackCount', label: l('Max Backpack Stack') },
+    {
+      key: 'backpackCanDiscard',
+      label: l('Can Discard'),
+      format: (v: unknown) => formatLocalizedScalar(v, locale.value),
+    },
+    { key: 'valuableTabType', label: l('Tab Type') },
+    { key: 'sortId1', label: l('Sort ID 1') },
+    { key: 'sortId2', label: l('Sort ID 2') },
   ]),
 );
 
@@ -209,7 +232,12 @@ const liquidMap = computed(() => {
           if (!isRecordLike(item)) continue;
           const itemId = typeof item.id === 'string' ? item.id : '';
           if (itemId.startsWith('item_fbottle_')) {
-            const name = resolveEntityName(itemId, props.localNameMap);
+            const name = resolveLocalizedEntityName(
+              itemId,
+              undefined,
+              props.localNameMap,
+              props.itemDefsByKeyHash,
+            );
             if (name !== itemId) map.set(itemId, name);
           }
         }
@@ -222,7 +250,12 @@ const liquidMap = computed(() => {
 const displayName = computed(() => {
   const id = typeof itemTableData.value.id === 'string' ? itemTableData.value.id : '';
   if (!id.startsWith('item_fbottle_') || !liquidMap.value.size) return '';
-  const baseName = resolveEntityName(id, props.localNameMap);
+  const baseName = resolveLocalizedEntityName(
+    id,
+    undefined,
+    props.localNameMap,
+    props.itemDefsByKeyHash,
+  );
   const liquidName = liquidMap.value.get(id);
   return liquidName ? `${baseName} (${liquidName})` : '';
 });
@@ -292,14 +325,22 @@ function collectActionTokens(action: RecordLike): Record<string, unknown> {
 const useItemEntries = computed(() =>
   isRecordLike(useItemTable.value)
     ? buildInfoEntries(useItemTable.value, [
-        { key: 'itemId', label: 'Item ID', mono: true },
-        { key: 'effectType', label: 'Effect Type' },
-        { key: 'uiType', label: 'UI Type' },
-        { key: 'targetNumType', label: 'Target Num Type' },
-        { key: 'duration', label: 'Duration' },
-        { key: 'stackingKey', label: 'Stacking Key', mono: true },
-        { key: 'isPersistentBuff', label: 'Persistent Buff' },
-        { key: 'isValuableDepot', label: 'Valuable Depot' },
+        { key: 'itemId', label: l('Item ID'), mono: true },
+        { key: 'effectType', label: l('Effect Type') },
+        { key: 'uiType', label: l('UI Type') },
+        { key: 'targetNumType', label: l('Target Num Type') },
+        { key: 'duration', label: l('Duration') },
+        { key: 'stackingKey', label: l('Stacking Key'), mono: true },
+        {
+          key: 'isPersistentBuff',
+          label: l('Persistent Buff'),
+          format: (v: unknown) => formatLocalizedScalar(v, locale.value),
+        },
+        {
+          key: 'isValuableDepot',
+          label: l('Valuable Depot'),
+          format: (v: unknown) => formatLocalizedScalar(v, locale.value),
+        },
       ])
     : [],
 );
@@ -311,7 +352,7 @@ const useActionBundles = computed(() => {
     const skill = isRecordLike(action.skillBBData) ? action.skillBBData : {};
     const useType = action.useType === undefined ? '-' : formatScalar(action.useType);
     return {
-      title: `Use Action ${index + 1} · Type ${useType}`,
+      title: `${l('Use Action')} ${index + 1} · ${l('Type')} ${useType}`,
       entries: buildInfoEntries(
         {
           useType: action.useType,
@@ -320,10 +361,10 @@ const useActionBundles = computed(() => {
           skillPath: skill.skillPath,
         },
         [
-          { key: 'useType', label: 'Use Type' },
-          { key: 'buffId', label: 'Buff ID', mono: true },
-          { key: 'skillId', label: 'Skill ID', mono: true },
-          { key: 'skillPath', label: 'Skill Path', mono: true },
+          { key: 'useType', label: l('Use Type') },
+          { key: 'buffId', label: l('Buff ID'), mono: true },
+          { key: 'skillId', label: l('Skill ID'), mono: true },
+          { key: 'skillPath', label: l('Skill Path'), mono: true },
         ],
       ),
       blackboardRows: extractBlackboardRows(action),
@@ -345,22 +386,26 @@ const equipItemEntries = computed(() => {
   if (!isRecordLike(equipItemTable.value)) return [];
   const condParams = toArray(equipItemTable.value.condParams).map(String).filter(Boolean);
   const baseEntries = buildInfoEntries(equipItemTable.value, [
-    { key: 'itemId', label: 'Item ID', mono: true },
-    { key: 'castTime', label: 'Cast Time' },
-    { key: 'cooldown', label: 'Cooldown' },
-    { key: 'chargeCount', label: 'Charge Count' },
-    { key: 'levelUpChargeCount', label: 'Level Up Charge Count' },
-    { key: 'recoverTime', label: 'Recover Time' },
-    { key: 'recoverUpperCount', label: 'Recover Upper Count' },
-    { key: 'levelUpRecoverUpperCount', label: 'Level Up Recover Upper Count' },
-    { key: 'checkTarget', label: 'Check Target' },
-    { key: 'condType', label: 'Condition Type' },
-    { key: 'useTarget', label: 'Use Target' },
-    { key: 'autoCheckNotInFight', label: 'Auto Check Not In Fight' },
-    { key: 'toMainCharCount', label: 'To Main Character Count' },
+    { key: 'itemId', label: l('Item ID'), mono: true },
+    { key: 'castTime', label: l('Cast Time') },
+    { key: 'cooldown', label: l('Cooldown') },
+    { key: 'chargeCount', label: l('Charge Count') },
+    { key: 'levelUpChargeCount', label: l('Level Up Charge Count') },
+    { key: 'recoverTime', label: l('Recover Time') },
+    { key: 'recoverUpperCount', label: l('Recover Upper Count') },
+    { key: 'levelUpRecoverUpperCount', label: l('Level Up Recover Upper Count') },
+    { key: 'checkTarget', label: l('Check Target'), format: (v: unknown) => formatLocalizedScalar(v, locale.value) },
+    { key: 'condType', label: l('Condition Type') },
+    { key: 'useTarget', label: l('Use Target') },
+    {
+      key: 'autoCheckNotInFight',
+      label: l('Auto Check Not In Fight'),
+      format: (v: unknown) => formatLocalizedScalar(v, locale.value),
+    },
+    { key: 'toMainCharCount', label: l('To Main Character Count') },
   ]);
   if (condParams.length) {
-    baseEntries.push({ label: 'Condition Params', value: condParams.join(', '), mono: false });
+    baseEntries.push({ label: l('Condition Params'), value: condParams.join(', '), mono: false });
   }
   return baseEntries;
 });
@@ -423,10 +468,10 @@ function parseMachineCraftTable(table: unknown, title: string): RecipeSection | 
       name: typeof f.formulaDesc === 'string' ? f.formulaDesc : '',
       id: typeof f.id === 'string' ? f.id : '',
       meta: [
-        ...(f.machineId ? [{ label: 'Machine', value: formatScalar(f.machineId) }] : []),
-        ...(f.formulaGroupId ? [{ label: 'Group', value: formatScalar(f.formulaGroupId) }] : []),
-        ...(f.progressRound ? [{ label: 'Rounds', value: formatScalar(f.progressRound) }] : []),
-        ...(f.totalProgress ? [{ label: 'Progress', value: formatScalar(f.totalProgress) }] : []),
+        ...(f.machineId ? [{ label: l('Machine'), value: formatScalar(f.machineId) }] : []),
+        ...(f.formulaGroupId ? [{ label: l('Group'), value: formatScalar(f.formulaGroupId) }] : []),
+        ...(f.progressRound ? [{ label: l('Rounds'), value: formatScalar(f.progressRound) }] : []),
+        ...(f.totalProgress ? [{ label: l('Progress'), value: formatScalar(f.totalProgress) }] : []),
       ],
       ingredients: normalizeItemGroups(f.ingredients),
       outcomes: normalizeItemGroups(f.outcomes),
@@ -447,9 +492,9 @@ function parseManualCraftTable(table: unknown, title: string): RecipeSection | n
         name: typeof entry.name === 'string' ? entry.name : key,
         id: typeof entry.id === 'string' ? entry.id : key,
         meta: [
-          ...(entry.domainId ? [{ label: 'Domain', value: formatScalar(entry.domainId) }] : []),
+          ...(entry.domainId ? [{ label: l('Domain'), value: formatScalar(entry.domainId) }] : []),
           ...(entry.rarity !== undefined
-            ? [{ label: 'Rarity', value: formatScalar(entry.rarity) }]
+            ? [{ label: l('Rarity'), value: formatScalar(entry.rarity) }]
             : []),
         ],
         ingredients: normalizeItemGroups(entry.ingredients),
@@ -483,11 +528,11 @@ function parseEquipFormulaTable(table: unknown, title: string): RecipeSection | 
         name: typeof entry.formulaId === 'string' ? entry.formulaId : '',
         id: typeof entry.formulaId === 'string' ? entry.formulaId : '',
         meta: [
-          ...(entry.packId ? [{ label: 'Pack', value: formatScalar(entry.packId) }] : []),
+          ...(entry.packId ? [{ label: l('Pack'), value: formatScalar(entry.packId) }] : []),
           ...(entry.unlockType !== undefined
             ? [
                 {
-                  label: 'Unlock',
+                  label: l('Unlock'),
                   value: `${toText(entry.unlockType, '-')} : ${toText(entry.unlockKey)} = ${toText(entry.unlockValue)}`,
                 },
               ]
@@ -514,10 +559,10 @@ function parseFactoryHubCraftTable(table: unknown, title: string): RecipeSection
         id: typeof entry.id === 'string' ? entry.id : key,
         meta: [
           ...(entry.usableLevel !== undefined
-            ? [{ label: 'Level', value: formatScalar(entry.usableLevel) }]
+            ? [{ label: l('Level'), value: formatScalar(entry.usableLevel) }]
             : []),
           ...(entry.rarity !== undefined
-            ? [{ label: 'Rarity', value: formatScalar(entry.rarity) }]
+            ? [{ label: l('Rarity'), value: formatScalar(entry.rarity) }]
             : []),
         ],
         ingredients: normalizeItemGroups(entry.ingredients),

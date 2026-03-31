@@ -226,6 +226,8 @@ export default {
   // Recipe Content
   noTags: '无标签',
   description: '描述',
+  legacyDescription: '旧版描述',
+  wikiDebug: '维基调试',
   noIconFound: '当前物品没有可用图标。',
   iconSourceIcon: '来源: icon',
   iconSourceSprite: '来源: iconSprite',

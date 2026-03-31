@@ -202,9 +202,9 @@
         <template v-else>
           <div v-if="currentItemDef.description">
             <div class="wiki-renderer-header q-mb-sm">
-              <div class="wiki-renderer-header__title">Legacy Description</div>
+              <div class="wiki-renderer-header__title">{{ t('legacyDescription') }}</div>
               <div class="wiki-renderer-header__meta">
-                {{ legacyWikiSourceTitle }} · {{ legacyDescriptionSourceLabel }} · description
+                {{ legacyWikiSourceTitle }} · {{ legacyDescriptionSourceLabel }} · {{ t('description') }}
               </div>
             </div>
             <div class="text-subtitle2 q-mb-sm">{{ t('description') }}</div>
@@ -227,7 +227,7 @@
           <div v-else class="text-caption text-grey-7">{{ t('noTags') }}</div>
         </div>
 
-        <q-expansion-item dense dense-toggle icon="bug_report" label="Wiki Debug">
+        <q-expansion-item dense dense-toggle icon="bug_report" :label="t('wikiDebug')">
           <q-card flat bordered>
             <q-card-section class="q-pa-sm">
               <pre class="wiki-debug-pre">{{ wikiDebugText }}</pre>

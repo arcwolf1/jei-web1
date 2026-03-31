@@ -42,6 +42,15 @@ export function formatScalar(value: unknown): string {
   return String(value as string | number | boolean);
 }
 
+export function formatLocalizedScalar(value: unknown, locale = 'en-US'): string {
+  if (typeof value === 'boolean') {
+    if (locale.startsWith('zh')) return value ? '是' : '否';
+    if (locale.startsWith('ja')) return value ? 'はい' : 'いいえ';
+    return value ? 'Yes' : 'No';
+  }
+  return formatScalar(value);
+}
+
 export function toText(value: unknown, fallback = ''): string {
   if (typeof value === 'string') return value;
   if (typeof value === 'number' || typeof value === 'boolean' || typeof value === 'bigint') {
@@ -205,12 +214,12 @@ export function resolveLocalizedEntityName(
   if (!strId) return '-';
   const refName = resolveReferenceName(strId, refs);
   if (refName) return refName;
+  const itemName = resolveItemNameFromDefs(strId, itemDefsByKeyHash);
+  if (itemName !== strId) return itemName;
   if (localNameMap) {
     const localName = resolveEntityName(strId, localNameMap);
     if (localName !== strId) return localName;
   }
-  const itemName = resolveItemNameFromDefs(strId, itemDefsByKeyHash);
-  if (itemName !== strId) return itemName;
   return strId;
 }
 
@@ -318,11 +327,12 @@ export function formatCraftItem(
   value: unknown,
   localNameMap: RecordLike,
   liquidMap?: Map<string, string>,
+  itemDefsByKeyHash?: Record<string, ItemDef>,
 ): string {
   if (!isRecordLike(value)) return formatScalar(value);
   const rawId = typeof value.id === 'string' ? value.id : '';
   const baseName =
-    (rawId ? resolveEntityName(rawId, localNameMap) : '') ||
+    resolveLocalizedEntityName(rawId, undefined, localNameMap, itemDefsByKeyHash) ||
     (typeof value.name === 'string' ? value.name : '') ||
     '-';
   const liquidName = rawId && liquidMap?.has(rawId) ? liquidMap.get(rawId) : '';

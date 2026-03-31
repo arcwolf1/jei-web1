@@ -1,55 +1,56 @@
 <template>
   <div>
     <section v-if="itemEntries.length" class="ww__section">
-      <h3 class="ww__title">Gear Item Info</h3>
+      <h3 class="ww__title">{{ l('Gear Item Info') }}</h3>
       <WInfoGrid :entries="itemEntries" />
     </section>
 
     <section v-if="equipEntries.length" class="ww__section">
-      <h3 class="ww__title">Equip Info</h3>
+      <h3 class="ww__title">{{ l('Equip Info') }}</h3>
       <WInfoGrid :entries="equipEntries" />
     </section>
 
     <section v-if="itemDesc || itemDecoDesc" class="ww__section">
-      <h3 class="ww__title">Description</h3>
+      <h3 class="ww__title">{{ l('Description') }}</h3>
       <div v-if="itemDesc" class="ww__prose ww__prose--box" v-html="formatWikiHtml(itemDesc)"></div>
       <div v-if="itemDecoDesc" class="ww__muted" v-html="formatWikiHtml(itemDecoDesc)"></div>
     </section>
 
     <section v-if="baseAttrModifiers.length" class="ww__section">
-      <h3 class="ww__title">Base Attribute Modifier</h3>
+      <h3 class="ww__title">{{ l('Base Attribute Modifier') }}</h3>
       <WDataTable :columns="attrModColumns" :rows="baseAttrModifiers" />
     </section>
 
     <section v-if="displayAttrModifiers.length" class="ww__section">
-      <h3 class="ww__title">Display Attribute Modifiers</h3>
+      <h3 class="ww__title">{{ l('Display Attribute Modifiers') }}</h3>
       <WDataTable :columns="indexedAttrModColumns" :rows="displayAttrModifiers" />
     </section>
 
     <section v-if="equipAttrModifiers.length" class="ww__section">
-      <h3 class="ww__title">Equip Attribute Modifiers</h3>
+      <h3 class="ww__title">{{ l('Equip Attribute Modifiers') }}</h3>
       <div class="ww__stack">
         <div v-for="(mod, i) in equipAttrModifiers" :key="i" class="ww__panel">
           <div class="ww__panel-title">
             {{ attrLabel(String(mod.attrType)) }} (#{{ mod.attrType }})
           </div>
           <div class="ww__panel-sub">
-            Modifier Type: {{ mod.modifierType }} · Index: {{ mod.attrIndex }}
+            {{ l('Modifier Type') }}: {{ modifierTypeLabel(mod.modifierType) }} ·
+            {{ l('Index') }}: {{ mod.attrIndex }}
           </div>
           <div class="ww__muted">
-            Values: {{ toArray(mod.attrValues).map(formatScalar).join(', ') }}
+            {{ l('Values') }}: {{ toArray(mod.attrValues).map(formatScalar).join(', ') }}
           </div>
         </div>
       </div>
     </section>
 
     <section v-if="hasData(equipSuitTable)" class="ww__section">
-      <h3 class="ww__title">Equip Suit Table</h3>
+      <h3 class="ww__title">{{ l('Equip Suit Table') }}</h3>
       <div class="ww__stack">
         <div class="ww__panel">
           <WInfoGrid :entries="equipSuitEntries" />
           <div v-if="equipSuitLogoUrl" class="ww__stack q-mt-md">
-            <div class="ww__label">Suit Logo</div>
+            <div class="ww__label">{{ l('Suit Logo') }}</div>
             <img
               :src="equipSuitLogoUrl"
               :alt="String(equipSuitTable.suitName || equipSuitTable.suitID || 'Suit Logo')"
@@ -61,7 +62,7 @@
     </section>
 
     <section v-if="skillPatchBundles.length" class="ww__section">
-      <h3 class="ww__title">Skill Patch Table</h3>
+      <h3 class="ww__title">{{ l('Skill Patch Table') }}</h3>
       <q-expansion-item
         v-for="bundle in skillPatchBundles"
         :key="bundle.skillId"
@@ -77,11 +78,12 @@
             :key="`${bundle.skillId}-${patch.level}`"
             class="ww__panel"
           >
-            <div class="ww__panel-title">Lv {{ patch.level }} · {{ patch.skillName }}</div>
+            <div class="ww__panel-title">{{ l('Level') }} {{ patch.level }} · {{ patch.skillName }}</div>
             <div class="ww__panel-sub ww__value--mono">
               {{ bundle.skillId }}
               <span v-if="patch.costValue || patch.coolDown">
-                · Cost {{ formatScalar(patch.costValue) }} · CD {{ formatScalar(patch.coolDown) }}
+                · {{ l('Cost') }} {{ formatScalar(patch.costValue) }} ·
+                {{ l('Cooldown') }} {{ formatScalar(patch.coolDown) }}
               </span>
             </div>
             <div
@@ -100,7 +102,7 @@
     </section>
 
     <section v-else-if="hasData(skillPatchTableData)" class="ww__section">
-      <h3 class="ww__title">Skill Patch Table</h3>
+      <h3 class="ww__title">{{ l('Skill Patch Table') }}</h3>
       <WJsonViewer :value="skillPatchTableData" />
     </section>
   </div>
@@ -121,10 +123,10 @@ import {
   formatScalar,
   getAttrName,
   buildInfoEntries,
-  resolveEnumName,
   toCdnAssetUrl,
 } from './utils';
 import { itemTypeNames, partTypeNames, modifierTypeNames } from './genums';
+import { getWarfarinEnumLabel, localizeWarfarinIdentifier } from './displayLabels';
 
 const props = defineProps<{
   detail: RecordLike;
@@ -133,6 +135,9 @@ const props = defineProps<{
 
 const { locale } = useI18n();
 const attrLabel = (attrType: string | number) => getAttrName(attrType, locale.value);
+const l = (value: string) => localizeWarfarinIdentifier(value, locale.value);
+const modifierTypeLabel = (value: unknown) =>
+  getWarfarinEnumLabel(modifierTypeNames, value, locale.value);
 
 const itemTableData = computed<RecordLike>(() =>
   isRecordLike(props.detail.itemTable) ? props.detail.itemTable : {},
@@ -150,12 +155,12 @@ const skillPatchTableData = computed<RecordLike>(() =>
 const equipSuitEntries = computed(() => {
   const suit = isRecordLike(equipSuitTable.value) ? equipSuitTable.value : {};
   return buildInfoEntries(suit, [
-    { key: 'suitName', label: 'Suit Name' },
-    { key: 'suitID', label: 'Suit ID', mono: true },
-    { key: 'equipCnt', label: 'Equip Count' },
-    { key: 'skillID', label: 'Skill ID', mono: true },
-    { key: 'skillLv', label: 'Skill Level' },
-    { key: 'suitLogoName', label: 'Suit Logo ID', mono: true },
+    { key: 'suitName', label: l('Suit Name') },
+    { key: 'suitID', label: l('Suit ID'), mono: true },
+    { key: 'equipCnt', label: l('Equip Count') },
+    { key: 'skillID', label: l('Skill ID'), mono: true },
+    { key: 'skillLv', label: l('Skill Level') },
+    { key: 'suitLogoName', label: l('Suit Logo ID'), mono: true },
   ]);
 });
 
@@ -166,41 +171,48 @@ const equipSuitLogoUrl = computed(() => {
 
 const itemEntries = computed(() =>
   buildInfoEntries(itemTableData.value, [
-    { key: 'name', label: 'Name' },
-    { key: 'id', label: 'ID', mono: true },
-    { key: 'iconId', label: 'Icon ID', mono: true },
-    { key: 'type', label: 'Type', format: (v: unknown) => resolveEnumName(itemTypeNames, v) },
-    { key: 'rarity', label: 'Rarity' },
-    { key: 'maxStackCount', label: 'Max Stack' },
-    { key: 'backpackCanDiscard', label: 'Can Discard' },
+    { key: 'name', label: l('Name') },
+    { key: 'id', label: l('ID'), mono: true },
+    { key: 'iconId', label: l('Icon ID'), mono: true },
+    {
+      key: 'type',
+      label: l('Type'),
+      format: (v: unknown) => getWarfarinEnumLabel(itemTypeNames, v, locale.value),
+    },
+    { key: 'rarity', label: l('Rarity') },
+    { key: 'maxStackCount', label: l('Max Stack') },
+    { key: 'backpackCanDiscard', label: l('Can Discard') },
   ]),
 );
 
 const equipEntries = computed(() =>
   buildInfoEntries(equipTable.value, [
-    { key: 'itemId', label: 'Item ID', mono: true },
-    { key: 'domainId', label: 'Domain ID', mono: true },
-    { key: 'minWearLv', label: 'Min Wear Level' },
+    { key: 'itemId', label: l('Item ID'), mono: true },
+    { key: 'domainId', label: l('Domain ID'), mono: true },
+    { key: 'minWearLv', label: l('Min Wear Level') },
     {
       key: 'partType',
-      label: 'Part Type',
-      format: (v: unknown) => resolveEnumName(partTypeNames, v),
+      label: l('Part Type'),
+      format: (v: unknown) => getWarfarinEnumLabel(partTypeNames, v, locale.value),
     },
-    { key: 'suitID', label: 'Suit ID', mono: true },
+    { key: 'suitID', label: l('Suit ID'), mono: true },
   ]),
 );
 
 const itemDesc = computed(() => itemTableData.value.desc);
 const itemDecoDesc = computed(() => itemTableData.value.decoDesc);
 
-const attrModColumns = [
-  { key: 'attrType', label: 'Attr Type' },
-  { key: 'attrName', label: 'Attr Name' },
-  { key: 'attrValue', label: 'Value' },
-  { key: 'modifierType', label: 'Modifier Type' },
-];
+const attrModColumns = computed(() => [
+  { key: 'attrType', label: l('Attr Type') },
+  { key: 'attrName', label: l('Attr Name') },
+  { key: 'attrValue', label: l('Value') },
+  { key: 'modifierType', label: l('Modifier Type') },
+]);
 
-const indexedAttrModColumns = [{ key: 'attrIndex', label: 'Index' }, ...attrModColumns];
+const indexedAttrModColumns = computed(() => [
+  { key: 'attrIndex', label: l('Index') },
+  ...attrModColumns.value,
+]);
 
 const baseAttrModifiers = computed(() => {
   const mod = equipTable.value.displayBaseAttrModifier;
@@ -210,7 +222,7 @@ const baseAttrModifiers = computed(() => {
       attrType: formatScalar(mod.attrType),
       attrName: attrLabel(String(mod.attrType)),
       attrValue: formatScalar(mod.attrValue),
-      modifierType: resolveEnumName(modifierTypeNames, mod.modifierType),
+      modifierType: modifierTypeLabel(mod.modifierType),
     },
   ];
 });
@@ -221,17 +233,17 @@ const displayAttrModifiers = computed(() =>
     attrType: formatScalar(mod.attrType),
     attrName: attrLabel(String(mod.attrType)),
     attrValue: formatScalar(mod.attrValue),
-    modifierType: resolveEnumName(modifierTypeNames, mod.modifierType),
+    modifierType: modifierTypeLabel(mod.modifierType),
   })),
 );
 
 const equipAttrModifiers = computed(() => toArray<RecordLike>(equipTable.value.equipAttrModifiers));
 
-const blackboardColumns = [
-  { key: 'key', label: 'Key' },
-  { key: 'value', label: 'Value' },
-  { key: 'valueStr', label: 'Value Str' },
-];
+const blackboardColumns = computed(() => [
+  { key: 'key', label: l('Key') },
+  { key: 'value', label: l('Value') },
+  { key: 'valueStr', label: l('Value Str') },
+]);
 
 function formatBlackboardTokenValue(value: unknown, format: string | undefined): string {
   const num = typeof value === 'number' ? value : Number(value);

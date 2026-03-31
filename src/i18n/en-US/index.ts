@@ -227,6 +227,8 @@ export default {
   // Recipe Content
   noTags: 'No tags',
   description: 'Description',
+  legacyDescription: 'Legacy Description',
+  wikiDebug: 'Wiki Debug',
   noIconFound: 'No icon is available for this item.',
   iconSourceIcon: 'Source: icon',
   iconSourceSprite: 'Source: iconSprite',
