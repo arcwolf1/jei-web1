@@ -279,7 +279,8 @@
                     />
                     <div class="q-gutter-y-sm q-pt-xs">
                       <div class="text-caption text-grey-7">
-                        导出当前聚合包里已合并和未合并候选的同名物品 lite 元数据，便于编写/校对聚合规则。
+                        导出当前聚合包里已合并和未合并候选的同名物品 lite
+                        元数据，便于编写/校对聚合规则。
                       </div>
                       <q-btn
                         outline
@@ -409,7 +410,9 @@
                     <q-toggle
                       :label="t('hoverTooltipAllowMouseEnter')"
                       :model-value="hoverTooltipAllowMouseEnter"
-                      @update:model-value="$emit('update:hover-tooltip-allow-mouse-enter', !!$event)"
+                      @update:model-value="
+                        $emit('update:hover-tooltip-allow-mouse-enter', !!$event)
+                      "
                     />
                   </div>
                   <div class="text-caption text-grey-7 q-mb-xs">
@@ -495,9 +498,7 @@
                     <q-toggle
                       :label="t('hoverTooltipShowDescription')"
                       :model-value="hoverTooltipDisplay.description"
-                      @update:model-value="
-                        emitHoverTooltipDisplaySetting('description', !!$event)
-                      "
+                      @update:model-value="emitHoverTooltipDisplaySetting('description', !!$event)"
                     />
                     <q-toggle
                       :label="t('hoverTooltipShowNamespace')"
@@ -1132,9 +1133,7 @@ const hoverTooltipInteractBindingText = computed(() => {
   }
   return '-';
 });
-const previewStandardTitle = computed(() =>
-  props.hoverTooltipDisplay.title ? 'D32 钢' : '',
-);
+const previewStandardTitle = computed(() => (props.hoverTooltipDisplay.title ? 'D32 钢' : ''));
 const previewStandardIdLine = computed(() =>
   props.hoverTooltipDisplay.idLine ? 'ID: aef:d32_steel' : '',
 );
