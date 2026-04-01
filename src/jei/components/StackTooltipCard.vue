@@ -4,11 +4,11 @@
     :class="{ 'stack-tooltip--dark': isDark }"
     :style="tooltipStyle"
   >
-    <div class="stack-tooltip__title">{{ title }}</div>
-    <div v-if="idLine && !detailGroups.length" class="stack-tooltip__line">{{ idLine }}</div>
+    <div v-if="title" class="stack-tooltip__title">{{ title }}</div>
+    <div v-if="idLine && !hasDetailMode" class="stack-tooltip__line">{{ idLine }}</div>
     <div v-if="metaLine" class="stack-tooltip__line">{{ metaLine }}</div>
     <div v-if="nbtLine" class="stack-tooltip__line">{{ nbtLine }}</div>
-    <div v-if="rarityEntries.length" class="stack-tooltip__divider"></div>
+    <div v-if="rarityEntries.length && showRarityDivider" class="stack-tooltip__divider"></div>
     <div v-if="rarityEntries.length" class="stack-tooltip__source-block">
       <div class="stack-tooltip__source-title">Rarity</div>
       <div
@@ -27,24 +27,22 @@
       </div>
     </div>
 
-    <template v-if="detailGroups.length">
-      <div class="stack-tooltip__divider"></div>
-      <div
-        v-for="group in detailGroups"
-        :key="group.key"
-        class="stack-tooltip__source-block"
-      >
-        <div class="stack-tooltip__source-title">{{ group.title }}</div>
-        <div
-          v-for="line in group.lines"
-          :key="`${group.key}:${line}`"
-          class="stack-tooltip__meta"
-        >
-          {{ line }}
+    <template v-if="hasDetailMode">
+      <div v-if="showDetailTopDivider" class="stack-tooltip__divider"></div>
+      <template v-for="group in detailGroups" :key="group.key">
+        <div class="stack-tooltip__source-block">
+          <div class="stack-tooltip__source-title">{{ group.title }}</div>
+          <div
+            v-for="line in group.lines"
+            :key="`${group.key}:${line}`"
+            class="stack-tooltip__meta"
+          >
+            {{ line }}
+          </div>
         </div>
-      </div>
+      </template>
 
-      <div v-if="detailDescriptions.length" class="stack-tooltip__divider"></div>
+      <div v-if="detailDescriptions.length && detailGroups.length" class="stack-tooltip__divider"></div>
       <div
         v-for="entry in detailDescriptions"
         :key="entry.key"
@@ -54,7 +52,10 @@
         <div class="stack-tooltip__desc">{{ entry.description }}</div>
       </div>
 
-      <div v-if="namespaceLines.length" class="stack-tooltip__divider"></div>
+      <div
+        v-if="namespaceLines.length && (detailGroups.length || detailDescriptions.length)"
+        class="stack-tooltip__divider"
+      ></div>
       <div v-if="namespaceLines.length" class="stack-tooltip__source-block">
         <div class="stack-tooltip__source-title">Namespaces</div>
         <div
@@ -98,6 +99,20 @@ const props = defineProps<{
 
 const $q = useQuasar();
 const isDark = computed(() => $q.dark.isActive);
+const hasDetailMode = computed(
+  () =>
+    props.detailGroups.length > 0 ||
+    props.detailDescriptions.length > 0 ||
+    props.namespaceLines.length > 0,
+);
+const showRarityDivider = computed(
+  () => !!(props.title || props.metaLine || props.nbtLine || (props.idLine && !hasDetailMode.value)),
+);
+const showDetailTopDivider = computed(
+  () =>
+    hasDetailMode.value &&
+    !!(props.title || props.metaLine || props.nbtLine || props.rarityEntries.length),
+);
 const tooltipStyle = computed(() => ({
   maxHeight: `${Math.max(280, props.maxHeightPx || 0)}px`,
 }));

@@ -21,6 +21,24 @@ import {
 export type DarkMode = 'auto' | 'light' | 'dark';
 export type Language = 'zh-CN' | 'en-US' | 'ja-JP';
 export type ItemIconDisplayMode = 'modern' | 'jei_classic';
+export type HoverTooltipDisplayKey =
+  | 'title'
+  | 'idLine'
+  | 'metaLine'
+  | 'nbtLine'
+  | 'rarity'
+  | 'detailIds'
+  | 'detailTags'
+  | 'detailSources'
+  | 'detailInfo'
+  | 'detailWiki'
+  | 'detailDescriptions'
+  | 'namespaceLines'
+  | 'tagsLine'
+  | 'sourceLine'
+  | 'description'
+  | 'namespace';
+export type HoverTooltipDisplaySettings = Record<HoverTooltipDisplayKey, boolean>;
 
 type CircuitEditorPiecePanelState = {
   x: number;
@@ -29,6 +47,25 @@ type CircuitEditorPiecePanelState = {
   height: number;
   minimized: boolean;
   docked: boolean;
+};
+
+const DEFAULT_HOVER_TOOLTIP_DISPLAY_SETTINGS: HoverTooltipDisplaySettings = {
+  title: true,
+  idLine: true,
+  metaLine: true,
+  nbtLine: true,
+  rarity: true,
+  detailIds: true,
+  detailTags: true,
+  detailSources: true,
+  detailInfo: true,
+  detailWiki: true,
+  detailDescriptions: true,
+  namespaceLines: true,
+  tagsLine: true,
+  sourceLine: true,
+  description: true,
+  namespace: true,
 };
 
 function darkModeToQuasar(mode: DarkMode): boolean | 'auto' {
@@ -91,6 +128,74 @@ function normalizeCustomPackSource(
   };
 }
 
+function normalizeHoverTooltipDisplaySettings(value: unknown): HoverTooltipDisplaySettings {
+  if (!value || typeof value !== 'object') {
+    return { ...DEFAULT_HOVER_TOOLTIP_DISPLAY_SETTINGS };
+  }
+
+  const raw = value as Partial<Record<HoverTooltipDisplayKey, unknown>>;
+  return {
+    title:
+      typeof raw.title === 'boolean' ? raw.title : DEFAULT_HOVER_TOOLTIP_DISPLAY_SETTINGS.title,
+    idLine:
+      typeof raw.idLine === 'boolean' ? raw.idLine : DEFAULT_HOVER_TOOLTIP_DISPLAY_SETTINGS.idLine,
+    metaLine:
+      typeof raw.metaLine === 'boolean'
+        ? raw.metaLine
+        : DEFAULT_HOVER_TOOLTIP_DISPLAY_SETTINGS.metaLine,
+    nbtLine:
+      typeof raw.nbtLine === 'boolean'
+        ? raw.nbtLine
+        : DEFAULT_HOVER_TOOLTIP_DISPLAY_SETTINGS.nbtLine,
+    rarity:
+      typeof raw.rarity === 'boolean' ? raw.rarity : DEFAULT_HOVER_TOOLTIP_DISPLAY_SETTINGS.rarity,
+    detailIds:
+      typeof raw.detailIds === 'boolean'
+        ? raw.detailIds
+        : DEFAULT_HOVER_TOOLTIP_DISPLAY_SETTINGS.detailIds,
+    detailTags:
+      typeof raw.detailTags === 'boolean'
+        ? raw.detailTags
+        : DEFAULT_HOVER_TOOLTIP_DISPLAY_SETTINGS.detailTags,
+    detailSources:
+      typeof raw.detailSources === 'boolean'
+        ? raw.detailSources
+        : DEFAULT_HOVER_TOOLTIP_DISPLAY_SETTINGS.detailSources,
+    detailInfo:
+      typeof raw.detailInfo === 'boolean'
+        ? raw.detailInfo
+        : DEFAULT_HOVER_TOOLTIP_DISPLAY_SETTINGS.detailInfo,
+    detailWiki:
+      typeof raw.detailWiki === 'boolean'
+        ? raw.detailWiki
+        : DEFAULT_HOVER_TOOLTIP_DISPLAY_SETTINGS.detailWiki,
+    detailDescriptions:
+      typeof raw.detailDescriptions === 'boolean'
+        ? raw.detailDescriptions
+        : DEFAULT_HOVER_TOOLTIP_DISPLAY_SETTINGS.detailDescriptions,
+    namespaceLines:
+      typeof raw.namespaceLines === 'boolean'
+        ? raw.namespaceLines
+        : DEFAULT_HOVER_TOOLTIP_DISPLAY_SETTINGS.namespaceLines,
+    tagsLine:
+      typeof raw.tagsLine === 'boolean'
+        ? raw.tagsLine
+        : DEFAULT_HOVER_TOOLTIP_DISPLAY_SETTINGS.tagsLine,
+    sourceLine:
+      typeof raw.sourceLine === 'boolean'
+        ? raw.sourceLine
+        : DEFAULT_HOVER_TOOLTIP_DISPLAY_SETTINGS.sourceLine,
+    description:
+      typeof raw.description === 'boolean'
+        ? raw.description
+        : DEFAULT_HOVER_TOOLTIP_DISPLAY_SETTINGS.description,
+    namespace:
+      typeof raw.namespace === 'boolean'
+        ? raw.namespace
+        : DEFAULT_HOVER_TOOLTIP_DISPLAY_SETTINGS.namespace,
+  };
+}
+
 export const useSettingsStore = defineStore('settings', {
   state: () => {
     const defaults = {
@@ -112,6 +217,7 @@ export const useSettingsStore = defineStore('settings', {
       favoritesOpensNewStack: false,
       persistHistoryRecords: true,
       hoverTooltipAllowMouseEnter: true,
+      hoverTooltipDisplay: { ...DEFAULT_HOVER_TOOLTIP_DISPLAY_SETTINGS },
       // Wiki 渲染器设置
       wikiImageUseProxy: false,
       wikiImageProxyUrl: 'https://r.jina.ai/http://',
@@ -257,6 +363,7 @@ export const useSettingsStore = defineStore('settings', {
           typeof parsed.hoverTooltipAllowMouseEnter === 'boolean'
             ? parsed.hoverTooltipAllowMouseEnter
             : defaults.hoverTooltipAllowMouseEnter,
+        hoverTooltipDisplay: normalizeHoverTooltipDisplaySettings(parsed.hoverTooltipDisplay),
         wikiImageUseProxy:
           typeof parsed.wikiImageUseProxy === 'boolean'
             ? parsed.wikiImageUseProxy
@@ -517,6 +624,13 @@ export const useSettingsStore = defineStore('settings', {
       this.hoverTooltipAllowMouseEnter = value;
       void this.save();
     },
+    setHoverTooltipDisplaySetting(key: HoverTooltipDisplayKey, value: boolean) {
+      this.hoverTooltipDisplay = {
+        ...this.hoverTooltipDisplay,
+        [key]: value,
+      };
+      void this.save();
+    },
     setHoverTooltipTemporaryInteractive(value: boolean) {
       this.hoverTooltipTemporaryInteractive = value;
     },
@@ -717,6 +831,7 @@ export const useSettingsStore = defineStore('settings', {
         favoritesOpensNewStack: this.favoritesOpensNewStack,
         persistHistoryRecords: this.persistHistoryRecords,
         hoverTooltipAllowMouseEnter: this.hoverTooltipAllowMouseEnter,
+        hoverTooltipDisplay: this.hoverTooltipDisplay,
         wikiImageUseProxy: this.wikiImageUseProxy,
         wikiImageProxyUrl: this.wikiImageProxyUrl,
         wikiCatalogFileName: this.wikiCatalogFileName,
@@ -820,6 +935,7 @@ export const useSettingsStore = defineStore('settings', {
         this.persistHistoryRecords = parsed.persistHistoryRecords;
       if (typeof parsed.hoverTooltipAllowMouseEnter === 'boolean')
         this.hoverTooltipAllowMouseEnter = parsed.hoverTooltipAllowMouseEnter;
+      this.hoverTooltipDisplay = normalizeHoverTooltipDisplaySettings(parsed.hoverTooltipDisplay);
       if (typeof parsed.wikiImageUseProxy === 'boolean')
         this.wikiImageUseProxy = parsed.wikiImageUseProxy;
       if (typeof parsed.wikiImageProxyUrl === 'string')

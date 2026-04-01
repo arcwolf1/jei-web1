@@ -223,9 +223,11 @@
       :persist-history-records="settingsStore.persistHistoryRecords"
       @update:persist-history-records="settingsStore.setPersistHistoryRecords($event)"
       :hover-tooltip-allow-mouse-enter="settingsStore.hoverTooltipAllowMouseEnter"
+      :hover-tooltip-display="settingsStore.hoverTooltipDisplay"
       @update:hover-tooltip-allow-mouse-enter="
         settingsStore.setHoverTooltipAllowMouseEnter($event)
       "
+      @update:hover-tooltip-display-setting="onUpdateHoverTooltipDisplaySetting"
       :detect-pc-disable-mobile="settingsStore.detectPcDisableMobile"
       @update:detect-pc-disable-mobile="settingsStore.setDetectPcDisableMobile($event)"
       :pack-proxy-template="packProxyTemplate"
@@ -426,7 +428,7 @@ import type {
   PluginSettingValue,
   PluginTabRuntime,
 } from 'src/jei/plugins/types';
-import { useSettingsStore, type Language } from 'src/stores/settings';
+import { useSettingsStore, type HoverTooltipDisplayKey, type Language } from 'src/stores/settings';
 import {
   useKeyBindingsStore,
   eventMatchesBinding,
@@ -1079,6 +1081,10 @@ function onResetKeybindings() {
 function onLanguageChange(lang: Language) {
   settingsStore.setLanguage(lang);
   locale.value = lang;
+}
+
+function onUpdateHoverTooltipDisplaySetting(key: HoverTooltipDisplayKey, value: boolean) {
+  settingsStore.setHoverTooltipDisplaySetting(key, value);
 }
 
 // 更新网页标题

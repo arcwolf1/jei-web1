@@ -266,18 +266,6 @@
                       @update:model-value="$emit('update:persist-history-records', !!$event)"
                     />
                     <q-toggle
-                      :label="t('hoverTooltipAllowMouseEnter')"
-                      :model-value="hoverTooltipAllowMouseEnter"
-                      @update:model-value="$emit('update:hover-tooltip-allow-mouse-enter', !!$event)"
-                    />
-                    <div class="text-caption text-grey-7 q-mt-xs q-ml-sm">
-                      {{
-                        t('hoverTooltipTemporaryShortcutHint', {
-                          key: hoverTooltipInteractBindingText,
-                        })
-                      }}
-                    </div>
-                    <q-toggle
                       :label="t('detectPcDisableMobile')"
                       :model-value="detectPcDisableMobile"
                       @update:model-value="$emit('update:detect-pc-disable-mobile', !!$event)"
@@ -400,6 +388,163 @@
                       :model-value="lineIntermediateColoring"
                       @update:model-value="$emit('update:line-intermediate-coloring', !!$event)"
                     />
+                  </div>
+                </q-card-section>
+              </q-card>
+
+              <q-card v-if="showSection('hover')" flat bordered>
+                <q-card-section>
+                  <div class="text-subtitle2 q-mb-sm">{{ t('sectionHover') }}</div>
+                  <div class="text-caption text-grey-7 q-mb-md">
+                    {{
+                      t('hoverTooltipTemporaryShortcutHint', {
+                        key: hoverTooltipInteractBindingText,
+                      })
+                    }}
+                  </div>
+                  <div class="text-caption text-grey-7 q-mb-xs">
+                    {{ t('hoverTooltipInteractionGroup') }}
+                  </div>
+                  <div class="q-gutter-y-sm q-mb-md">
+                    <q-toggle
+                      :label="t('hoverTooltipAllowMouseEnter')"
+                      :model-value="hoverTooltipAllowMouseEnter"
+                      @update:model-value="$emit('update:hover-tooltip-allow-mouse-enter', !!$event)"
+                    />
+                  </div>
+                  <div class="text-caption text-grey-7 q-mb-xs">
+                    {{ t('hoverTooltipContentGroup') }}
+                  </div>
+                  <div class="q-gutter-y-sm">
+                    <q-toggle
+                      :label="t('hoverTooltipShowTitle')"
+                      :model-value="hoverTooltipDisplay.title"
+                      @update:model-value="emitHoverTooltipDisplaySetting('title', !!$event)"
+                    />
+                    <q-toggle
+                      :label="t('hoverTooltipShowIdLine')"
+                      :model-value="hoverTooltipDisplay.idLine"
+                      @update:model-value="emitHoverTooltipDisplaySetting('idLine', !!$event)"
+                    />
+                    <q-toggle
+                      :label="t('hoverTooltipShowMetaLine')"
+                      :model-value="hoverTooltipDisplay.metaLine"
+                      @update:model-value="emitHoverTooltipDisplaySetting('metaLine', !!$event)"
+                    />
+                    <q-toggle
+                      :label="t('hoverTooltipShowNbtLine')"
+                      :model-value="hoverTooltipDisplay.nbtLine"
+                      @update:model-value="emitHoverTooltipDisplaySetting('nbtLine', !!$event)"
+                    />
+                    <q-toggle
+                      :label="t('hoverTooltipShowRarity')"
+                      :model-value="hoverTooltipDisplay.rarity"
+                      @update:model-value="emitHoverTooltipDisplaySetting('rarity', !!$event)"
+                    />
+                    <q-toggle
+                      :label="t('hoverTooltipShowDetailIds')"
+                      :model-value="hoverTooltipDisplay.detailIds"
+                      @update:model-value="emitHoverTooltipDisplaySetting('detailIds', !!$event)"
+                    />
+                    <q-toggle
+                      :label="t('hoverTooltipShowDetailTags')"
+                      :model-value="hoverTooltipDisplay.detailTags"
+                      @update:model-value="emitHoverTooltipDisplaySetting('detailTags', !!$event)"
+                    />
+                    <q-toggle
+                      :label="t('hoverTooltipShowDetailSources')"
+                      :model-value="hoverTooltipDisplay.detailSources"
+                      @update:model-value="
+                        emitHoverTooltipDisplaySetting('detailSources', !!$event)
+                      "
+                    />
+                    <q-toggle
+                      :label="t('hoverTooltipShowDetailInfo')"
+                      :model-value="hoverTooltipDisplay.detailInfo"
+                      @update:model-value="emitHoverTooltipDisplaySetting('detailInfo', !!$event)"
+                    />
+                    <q-toggle
+                      :label="t('hoverTooltipShowDetailWiki')"
+                      :model-value="hoverTooltipDisplay.detailWiki"
+                      @update:model-value="emitHoverTooltipDisplaySetting('detailWiki', !!$event)"
+                    />
+                    <q-toggle
+                      :label="t('hoverTooltipShowDetailDescriptions')"
+                      :model-value="hoverTooltipDisplay.detailDescriptions"
+                      @update:model-value="
+                        emitHoverTooltipDisplaySetting('detailDescriptions', !!$event)
+                      "
+                    />
+                    <q-toggle
+                      :label="t('hoverTooltipShowNamespaceLines')"
+                      :model-value="hoverTooltipDisplay.namespaceLines"
+                      @update:model-value="
+                        emitHoverTooltipDisplaySetting('namespaceLines', !!$event)
+                      "
+                    />
+                    <q-toggle
+                      :label="t('hoverTooltipShowTagsLine')"
+                      :model-value="hoverTooltipDisplay.tagsLine"
+                      @update:model-value="emitHoverTooltipDisplaySetting('tagsLine', !!$event)"
+                    />
+                    <q-toggle
+                      :label="t('hoverTooltipShowSourceLine')"
+                      :model-value="hoverTooltipDisplay.sourceLine"
+                      @update:model-value="emitHoverTooltipDisplaySetting('sourceLine', !!$event)"
+                    />
+                    <q-toggle
+                      :label="t('hoverTooltipShowDescription')"
+                      :model-value="hoverTooltipDisplay.description"
+                      @update:model-value="
+                        emitHoverTooltipDisplaySetting('description', !!$event)
+                      "
+                    />
+                    <q-toggle
+                      :label="t('hoverTooltipShowNamespace')"
+                      :model-value="hoverTooltipDisplay.namespace"
+                      @update:model-value="emitHoverTooltipDisplaySetting('namespace', !!$event)"
+                    />
+                  </div>
+                  <div class="text-caption text-grey-7 q-mt-lg q-mb-xs">
+                    {{ t('hoverTooltipPreviewGroup') }}
+                  </div>
+                  <div class="hover-preview-grid">
+                    <div class="hover-preview-panel">
+                      <div class="hover-preview-label">{{ t('hoverTooltipPreviewStandard') }}</div>
+                      <stack-tooltip-card
+                        :title="previewStandardTitle"
+                        :id-line="previewStandardIdLine"
+                        :meta-line="previewStandardMetaLine"
+                        :nbt-line="previewStandardNbtLine"
+                        :max-height-px="360"
+                        :detail-groups="[]"
+                        :detail-descriptions="[]"
+                        :rarity-entries="previewStandardRarityEntries"
+                        :namespace-lines="[]"
+                        :tags-line="previewStandardTagsLine"
+                        :source-line="previewStandardSourceLine"
+                        :description="previewStandardDescription"
+                        :namespace="previewStandardNamespace"
+                      />
+                    </div>
+                    <div class="hover-preview-panel">
+                      <div class="hover-preview-label">{{ t('hoverTooltipPreviewAggregate') }}</div>
+                      <stack-tooltip-card
+                        :title="previewAggregateTitle"
+                        :id-line="previewAggregateIdLine"
+                        :meta-line="previewAggregateMetaLine"
+                        :nbt-line="previewAggregateNbtLine"
+                        :max-height-px="360"
+                        :detail-groups="previewAggregateDetailGroups"
+                        :detail-descriptions="previewAggregateDetailDescriptions"
+                        :rarity-entries="previewAggregateRarityEntries"
+                        :namespace-lines="previewAggregateNamespaceLines"
+                        :tags-line="''"
+                        :source-line="''"
+                        :description="''"
+                        :namespace="''"
+                      />
+                    </div>
                   </div>
                 </q-card-section>
               </q-card>
@@ -783,14 +928,22 @@ import { computed, onUnmounted, ref, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
 import type { KeyAction, KeyBinding } from 'src/stores/keybindings';
 import type { ItemDef } from 'src/jei/types';
-import type { DarkMode, ItemIconDisplayMode, Language } from 'src/stores/settings';
+import type {
+  DarkMode,
+  HoverTooltipDisplayKey,
+  HoverTooltipDisplaySettings,
+  ItemIconDisplayMode,
+  Language,
+} from 'src/stores/settings';
 import I18nSettingsPanel from './I18nSettingsPanel.vue';
+import StackTooltipCard from 'src/jei/components/StackTooltipCard.vue';
 
 const { t } = useI18n();
 
 type SectionKey =
   | 'plugins'
   | 'general'
+  | 'hover'
   | 'appearance'
   | 'keybindings'
   | 'data'
@@ -803,7 +956,12 @@ const sectionDefs: Array<{ key: SectionKey; label: string; keywords: string[] }>
   {
     key: 'general',
     label: t('sectionGeneral'),
-    keywords: ['基础', '显示', '调试', '快捷键', '历史'],
+    keywords: ['基础', '显示', '调试', '历史', 'general'],
+  },
+  {
+    key: 'hover',
+    label: t('sectionHover'),
+    keywords: ['hover', 'tooltip', '悬浮', '提示', '鼠标'],
   },
   {
     key: 'appearance',
@@ -849,6 +1007,7 @@ const props = defineProps<{
   favoritesOpensNewStack: boolean;
   persistHistoryRecords: boolean;
   hoverTooltipAllowMouseEnter: boolean;
+  hoverTooltipDisplay: HoverTooltipDisplaySettings;
   detectPcDisableMobile: boolean;
   packProxyTemplate: string;
   packDevProxyTemplate: string;
@@ -930,6 +1089,7 @@ const emit = defineEmits<{
   'update:favorites-open-stack': [value: boolean];
   'update:persist-history-records': [value: boolean];
   'update:hover-tooltip-allow-mouse-enter': [value: boolean];
+  'update:hover-tooltip-display-setting': [key: HoverTooltipDisplayKey, value: boolean];
   'update:detect-pc-disable-mobile': [value: boolean];
   'update:keybinding': [action: KeyAction, binding: KeyBinding];
   'reset:keybindings': [];
@@ -972,6 +1132,105 @@ const hoverTooltipInteractBindingText = computed(() => {
   }
   return '-';
 });
+const previewStandardTitle = computed(() =>
+  props.hoverTooltipDisplay.title ? 'D32 钢' : '',
+);
+const previewStandardIdLine = computed(() =>
+  props.hoverTooltipDisplay.idLine ? 'ID: aef:d32_steel' : '',
+);
+const previewStandardMetaLine = computed(() =>
+  props.hoverTooltipDisplay.metaLine ? 'Meta: 0' : '',
+);
+const previewStandardNbtLine = computed(() =>
+  props.hoverTooltipDisplay.nbtLine ? 'NBT: {"quality":"high"}' : '',
+);
+const previewStandardRarityEntries = computed(() =>
+  props.hoverTooltipDisplay.rarity
+    ? [{ key: 'rarity', label: '6★', starsText: '★★★★★★', color: '#f4c978' }]
+    : [],
+);
+const previewStandardTagsLine = computed(() =>
+  props.hoverTooltipDisplay.tagsLine ? 'Tags: 精英材料, 高级材料' : '',
+);
+const previewStandardSourceLine = computed(() =>
+  props.hoverTooltipDisplay.sourceLine ? 'Source: aef-aggregated-full' : '',
+);
+const previewStandardDescription = computed(() =>
+  props.hoverTooltipDisplay.description ? '用于高级合成与角色养成的示例描述。' : '',
+);
+const previewStandardNamespace = computed(() =>
+  props.hoverTooltipDisplay.namespace ? 'namespace: aef' : '',
+);
+const previewAggregateTitle = computed(() =>
+  props.hoverTooltipDisplay.title ? '聚合物品预览' : '',
+);
+const previewAggregateIdLine = computed(() =>
+  props.hoverTooltipDisplay.idLine ? 'ID: aef-aggregated.item_42' : '',
+);
+const previewAggregateMetaLine = computed(() =>
+  props.hoverTooltipDisplay.metaLine ? 'Meta: merged' : '',
+);
+const previewAggregateNbtLine = computed(() =>
+  props.hoverTooltipDisplay.nbtLine ? 'NBT: none' : '',
+);
+const previewAggregateRarityEntries = computed(() =>
+  props.hoverTooltipDisplay.rarity
+    ? [{ key: 'rarity', label: 'Mixed', starsText: '4★ - 6★', color: '#7dd3fc' }]
+    : [],
+);
+const previewAggregateDetailGroups = computed(() => {
+  const groups: Array<{ key: string; title: string; lines: string[] }> = [];
+  if (props.hoverTooltipDisplay.detailIds) {
+    groups.push({
+      key: 'ids',
+      title: 'IDs',
+      lines: ['aef:d32_steel', 'warfarin:d32_steel'],
+    });
+  }
+  if (props.hoverTooltipDisplay.detailTags) {
+    groups.push({
+      key: 'tags',
+      title: 'Tags',
+      lines: ['精英材料', '养成', 'Tier 4'],
+    });
+  }
+  if (props.hoverTooltipDisplay.detailSources) {
+    groups.push({
+      key: 'paths',
+      title: 'Paths',
+      lines: ['packs/aef/items/materials/d32_steel.json'],
+    });
+  }
+  if (props.hoverTooltipDisplay.detailInfo) {
+    groups.push({
+      key: 'info',
+      title: 'Info',
+      lines: ['Pack: aef-skland', 'Matched by aggregate rules'],
+    });
+  }
+  if (props.hoverTooltipDisplay.detailWiki) {
+    groups.push({
+      key: 'wiki',
+      title: 'Wiki',
+      lines: ['Legacy Structured Wiki', 'Warfarin Wiki'],
+    });
+  }
+  return groups;
+});
+const previewAggregateDetailDescriptions = computed(() =>
+  props.hoverTooltipDisplay.detailDescriptions
+    ? [
+        {
+          key: 'desc',
+          title: 'Descriptions',
+          description: '这里预览聚合来源描述、多来源备注以及补充说明的显示效果。',
+        },
+      ]
+    : [],
+);
+const previewAggregateNamespaceLines = computed(() =>
+  props.hoverTooltipDisplay.namespaceLines ? ['aef', 'warfarin', 'official'] : [],
+);
 
 const visibleSections = computed(() => {
   const query = settingSearch.value.trim().toLowerCase();
@@ -1019,6 +1278,10 @@ function setAllPluginsEnabled(enabled: boolean) {
 
 function emitPluginSetting(pluginId: string, key: string, value: string | number | boolean) {
   emit('update:plugin-setting', pluginId, key, value);
+}
+
+function emitHoverTooltipDisplaySetting(key: HoverTooltipDisplayKey, value: boolean) {
+  emit('update:hover-tooltip-display-setting', key, value);
 }
 
 function keyBindingText(binding: KeyBinding) {
@@ -1094,5 +1357,26 @@ function formatLatency(latencyMs: number | null): string {
 
 .settings-scroll {
   height: 60vh;
+}
+
+.hover-preview-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 12px;
+  margin-top: 8px;
+}
+
+.hover-preview-panel {
+  padding: 12px;
+  border: 1px solid rgba(127, 127, 127, 0.18);
+  border-radius: 10px;
+  background: rgba(127, 127, 127, 0.04);
+}
+
+.hover-preview-label {
+  margin-bottom: 8px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--q-primary);
 }
 </style>

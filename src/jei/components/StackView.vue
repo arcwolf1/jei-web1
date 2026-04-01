@@ -73,19 +73,19 @@
         @wheel="onTooltipWheel"
       >
         <stack-tooltip-card
-          :title="tooltipTitle"
-          :id-line="tooltipIdLine"
-          :meta-line="tooltipMetaLine"
-          :nbt-line="tooltipNbtLine"
+          :title="visibleTooltipTitle"
+          :id-line="visibleTooltipIdLine"
+          :meta-line="visibleTooltipMetaLine"
+          :nbt-line="visibleTooltipNbtLine"
           :max-height-px="tooltipCardMaxHeight"
-          :detail-groups="tooltipDetailGroups"
-          :detail-descriptions="tooltipDetailDescriptions"
-          :rarity-entries="tooltipRarityEntries"
-          :namespace-lines="tooltipNamespaceLines"
-          :tags-line="tooltipTagsLine"
-          :source-line="tooltipSourceLine"
-          :description="tooltipDescription"
-          :namespace="tooltipNamespace"
+          :detail-groups="visibleTooltipDetailGroups"
+          :detail-descriptions="visibleTooltipDetailDescriptions"
+          :rarity-entries="visibleTooltipRarityEntries"
+          :namespace-lines="visibleTooltipNamespaceLines"
+          :tags-line="visibleTooltipTagsLine"
+          :source-line="visibleTooltipSourceLine"
+          :description="visibleTooltipDescription"
+          :namespace="visibleTooltipNamespace"
         />
       </div>
     </q-tooltip>
@@ -353,7 +353,6 @@ const fallbackIcon = computed(() => {
   return 'inventory_2';
 });
 
-const tooltipEnabled = computed(() => !!stack.value);
 const tooltipMouseInteractive = computed(
   () =>
     settingsStore.hoverTooltipAllowMouseEnter || settingsStore.hoverTooltipTemporaryInteractive,
@@ -681,21 +680,32 @@ const tooltipDetailGroups = computed<TooltipAggregateGroup[]>(() => {
 
 const tooltipRarityEntries = computed(() => {
   const entries = tooltipDetailEntries.value;
-  const seen = new Set<string>();
-  return entries.flatMap((entry) => {
+  const byStars = new Map<
+    number,
+    { key: string; label: string; starsText: string; color?: string }
+  >();
+  entries.forEach((entry) => {
     if (!entry.rarity?.stars) return [];
-    const key = `${entry.title}:${entry.rarity.stars}:${entry.rarity.color ?? ''}`;
-    if (seen.has(key)) return [];
-    seen.add(key);
-    return [
-      {
-        key,
-        label: entries.length > 1 ? entry.title : 'Stars',
-        starsText: `${entry.rarity.stars}★`,
-        ...(entry.rarity.color ? { color: entry.rarity.color } : {}),
-      },
-    ];
+    const stars = entry.rarity.stars;
+    const nextEntry = {
+      key: `${entry.title}:${stars}:${entry.rarity.color ?? ''}`,
+      label: entries.length > 1 ? entry.title : 'Stars',
+      starsText: `${stars}★`,
+      ...(entry.rarity.color ? { color: entry.rarity.color } : {}),
+    };
+    const existing = byStars.get(stars);
+    if (!existing) {
+      byStars.set(stars, nextEntry);
+      return;
+    }
+    const existingHasColor = typeof existing.color === 'string' && existing.color.length > 0;
+    const nextHasColor =
+      typeof nextEntry.color === 'string' && nextEntry.color.length > 0;
+    if (!existingHasColor && nextHasColor) {
+      byStars.set(stars, nextEntry);
+    }
   });
+  return Array.from(byStars.values());
 });
 
 function normalizeTooltipDescription(value: string): string {
@@ -767,6 +777,68 @@ const tooltipNamespace = computed(() => {
   const id = s.id;
   const ns = namespaceOf(id);
   return ns ? `namespace: ${ns}` : 'namespace: (none)';
+});
+
+const visibleTooltipTitle = computed(() =>
+  settingsStore.hoverTooltipDisplay.title ? tooltipTitle.value : '',
+);
+const visibleTooltipIdLine = computed(() =>
+  settingsStore.hoverTooltipDisplay.idLine ? tooltipIdLine.value : '',
+);
+const visibleTooltipMetaLine = computed(() =>
+  settingsStore.hoverTooltipDisplay.metaLine ? tooltipMetaLine.value : '',
+);
+const visibleTooltipNbtLine = computed(() =>
+  settingsStore.hoverTooltipDisplay.nbtLine ? tooltipNbtLine.value : '',
+);
+const visibleTooltipRarityEntries = computed(() =>
+  settingsStore.hoverTooltipDisplay.rarity ? tooltipRarityEntries.value : [],
+);
+const visibleTooltipDetailGroups = computed(() => {
+  const visibilityByGroupKey: Record<string, boolean> = {
+    ids: settingsStore.hoverTooltipDisplay.detailIds,
+    tags: settingsStore.hoverTooltipDisplay.detailTags,
+    paths: settingsStore.hoverTooltipDisplay.detailSources,
+    info: settingsStore.hoverTooltipDisplay.detailInfo,
+    wiki: settingsStore.hoverTooltipDisplay.detailWiki,
+  };
+  return tooltipDetailGroups.value.filter((group) => visibilityByGroupKey[group.key] ?? true);
+});
+const visibleTooltipDetailDescriptions = computed(() =>
+  settingsStore.hoverTooltipDisplay.detailDescriptions ? tooltipDetailDescriptions.value : [],
+);
+const visibleTooltipNamespaceLines = computed(() =>
+  settingsStore.hoverTooltipDisplay.namespaceLines ? tooltipNamespaceLines.value : [],
+);
+const visibleTooltipTagsLine = computed(() =>
+  settingsStore.hoverTooltipDisplay.tagsLine ? tooltipTagsLine.value : '',
+);
+const visibleTooltipSourceLine = computed(() =>
+  settingsStore.hoverTooltipDisplay.sourceLine ? tooltipSourceLine.value : '',
+);
+const visibleTooltipDescription = computed(() =>
+  settingsStore.hoverTooltipDisplay.description ? tooltipDescription.value : '',
+);
+const visibleTooltipNamespace = computed(() =>
+  settingsStore.hoverTooltipDisplay.namespace ? tooltipNamespace.value : '',
+);
+
+const tooltipEnabled = computed(() => {
+  if (!stack.value) return false;
+  return Boolean(
+    visibleTooltipTitle.value ||
+      visibleTooltipIdLine.value ||
+      visibleTooltipMetaLine.value ||
+      visibleTooltipNbtLine.value ||
+      visibleTooltipRarityEntries.value.length ||
+      visibleTooltipDetailGroups.value.length ||
+      visibleTooltipDetailDescriptions.value.length ||
+      visibleTooltipNamespaceLines.value.length ||
+      visibleTooltipTagsLine.value ||
+      visibleTooltipSourceLine.value ||
+      visibleTooltipDescription.value ||
+      visibleTooltipNamespace.value,
+  );
 });
 
 function stackItemKeyHash(s: { id: string; meta?: number | string; nbt?: unknown }): string {
