@@ -2550,11 +2550,19 @@ const favoriteItems = computed(() => {
   return entries;
 });
 
+// JEI Classic 模式下每行能显示更多物品，历史记录数量按比例放大
+const effectiveHistoryLimit = computed(() => {
+  const base = settingsStore.historyLimit;
+  if (settingsStore.itemListIconDisplayMode === 'jei_classic') {
+    return base * 4;
+  }
+  return base;
+});
+
 const historyItems = computed(() => {
   const map = index.value?.itemsByKeyHash;
   if (!map) return [];
-  // 按照 settings.historyLimit 截取
-  const limit = settingsStore.historyLimit;
+  const limit = effectiveHistoryLimit.value;
   const sliced = historyKeyHashes.value.slice(0, limit);
 
   return sliced
@@ -2566,9 +2574,9 @@ const historyItems = computed(() => {
     .filter((v): v is { keyHash: string; def: ItemDef } => v !== null);
 });
 
-// 生成带占位的历史记录列表，长度固定为 historyLimit
+// 生成带占位的历史记录列表，长度固定为 effectiveHistoryLimit
 const paddedHistoryItems = computed(() => {
-  const limit = settingsStore.historyLimit;
+  const limit = effectiveHistoryLimit.value;
   const real = historyItems.value;
   const list: ({ keyHash: string; def: ItemDef } | null)[] = [...real];
   // 补齐 null
