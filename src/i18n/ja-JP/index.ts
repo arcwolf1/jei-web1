@@ -83,6 +83,7 @@ export default {
   recipeSlotShowName: 'レシピスロットにアイテム名を表示',
   favoritesOpenStack: 'お気に入りでナビ履歴を作成',
   persistHistoryRecords: '履歴を永続化する',
+  mobileItemClickOpensDetail: 'モバイルでアイテムをタップしたら詳細タブへ自動移動',
   hoverTooltipAllowMouseEnter: 'アイテムホバーにマウスを移動できるようにする',
   hoverTooltipTemporaryShortcutHint: '無効時は {key} を押している間だけホバーへマウス移動できます',
   hoverTooltipInteractionGroup: '操作',

@@ -462,7 +462,6 @@ defineExpose({
 .jei-panel__tabs {
   display: flex;
   align-items: center;
-  gap: 8px;
   padding-bottom: 8px;
 }
 

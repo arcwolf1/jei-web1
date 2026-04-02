@@ -82,6 +82,7 @@ export default {
   recipeSlotShowName: 'Show Item Names in Recipe Slots',
   favoritesOpenStack: 'Favorites open new navigation stack',
   persistHistoryRecords: 'Persist history records',
+  mobileItemClickOpensDetail: 'Auto switch to detail tab after tapping item on mobile',
   hoverTooltipAllowMouseEnter: 'Allow moving mouse into item hover tooltip',
   hoverTooltipTemporaryShortcutHint:
     'When disabled, hold {key} to temporarily make the hover interactive',

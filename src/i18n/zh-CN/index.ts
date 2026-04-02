@@ -81,6 +81,7 @@ export default {
   recipeSlotShowName: '合成表物品显示名字',
   favoritesOpenStack: '收藏夹点击/快捷键创建导航栈',
   persistHistoryRecords: '持久化历史记录',
+  mobileItemClickOpensDetail: '移动端点击物品后自动切到详情页',
   hoverTooltipAllowMouseEnter: '允许鼠标移入物品悬浮提示',
   hoverTooltipTemporaryShortcutHint: '关闭后，可按住 {key} 临时允许鼠标移入悬浮提示',
   hoverTooltipInteractionGroup: '交互',

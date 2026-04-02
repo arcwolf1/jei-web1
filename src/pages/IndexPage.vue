@@ -161,6 +161,7 @@
 
     <!-- 底部栏 -->
     <bottom-bar
+      :is-mobile="isMobile"
       :active-pack-id="activePackId"
       @update:active-pack-id="activePackId = $event"
       :pack-options="packOptions"
@@ -226,6 +227,8 @@
       @update:favorites-open-stack="settingsStore.setFavoritesOpensNewStack($event)"
       :persist-history-records="settingsStore.persistHistoryRecords"
       @update:persist-history-records="settingsStore.setPersistHistoryRecords($event)"
+      :mobile-item-click-opens-detail="settingsStore.mobileItemClickOpensDetail"
+      @update:mobile-item-click-opens-detail="settingsStore.setMobileItemClickOpensDetail($event)"
       :hover-tooltip-allow-mouse-enter="settingsStore.hoverTooltipAllowMouseEnter"
       :hover-tooltip-display="settingsStore.hoverTooltipDisplay"
       @update:hover-tooltip-allow-mouse-enter="settingsStore.setHoverTooltipAllowMouseEnter($event)"
@@ -768,7 +771,12 @@ const navStack = ref<ItemKey[]>([]);
 watch(
   () => navStack.value.length,
   (len) => {
-    if (isMobile.value && len > 0 && settingsStore.recipeViewMode === 'panel') {
+    if (
+      isMobile.value &&
+      len > 0 &&
+      settingsStore.recipeViewMode === 'panel' &&
+      settingsStore.mobileItemClickOpensDetail
+    ) {
       mobileTab.value = 'panel';
     }
   },
@@ -3353,6 +3361,16 @@ function ensurePlannerAutoForCurrentItem() {
   plannerInitialState.value = buildAutoPlannerInitialState(key);
 }
 
+function focusDetailPanelOnMobileItemOpen(): void {
+  if (
+    isMobile.value &&
+    settingsStore.recipeViewMode === 'panel' &&
+    settingsStore.mobileItemClickOpensDetail
+  ) {
+    mobileTab.value = 'panel';
+  }
+}
+
 function openDialogByKeyHash(
   keyHash: string,
   tab?: 'recipes' | 'uses' | 'wiki' | 'icon' | 'planner',
@@ -3373,6 +3391,7 @@ function openDialogByKeyHash(
     actualTab === 'planner' ? buildAutoPlannerInitialState(def.key) : null;
   if (actualTab !== 'planner') plannerTab.value = 'tree';
   dialogOpen.value = settingsStore.recipeViewMode === 'dialog';
+  focusDetailPanelOnMobileItemOpen();
   pushHistoryKeyHash(keyHash);
   void syncUrl('push');
 }
@@ -3391,6 +3410,7 @@ function openDialogByItemKey(key: ItemKey, tab?: 'recipes' | 'uses' | 'wiki' | '
     if (actualTab === 'planner' && !plannerInitialState.value) {
       plannerInitialState.value = buildAutoPlannerInitialState(key);
     }
+    focusDetailPanelOnMobileItemOpen();
     return;
   }
 
@@ -3398,6 +3418,7 @@ function openDialogByItemKey(key: ItemKey, tab?: 'recipes' | 'uses' | 'wiki' | '
   activeTab.value = actualTab;
   plannerInitialState.value = actualTab === 'planner' ? buildAutoPlannerInitialState(key) : null;
   if (actualTab !== 'planner') plannerTab.value = 'tree';
+  focusDetailPanelOnMobileItemOpen();
   pushHistoryKeyHash(itemKeyHash(key));
   void syncUrl('push');
 }

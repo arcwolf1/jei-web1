@@ -1,53 +1,72 @@
 <template>
-  <div class="jei-bottombar">
-    <div class="row items-center q-gutter-sm">
-      <q-select
-        :model-value="activePackId"
-        @update:model-value="$emit('update:active-pack-id', $event)"
-        :options="packOptions"
-        dense
-        outlined
-        emit-value
-        map-options
-        :disable="loading"
-        style="min-width: 220px"
-      />
-      <q-input
-        :model-value="filterText"
-        @update:model-value="$emit('update:filter-text', String($event ?? ''))"
-        dense
-        outlined
-        clearable
-        :disable="filterDisabled"
-        :placeholder="t('filterPlaceholder')"
-        class="col"
-      >
-        <template #append>
-          <q-btn flat round dense icon="sell" color="grey-7" @click="quickTagDialogOpen = true" />
-          <q-icon
-            v-if="filterText"
-            name="filter_list"
-            class="cursor-pointer"
-            color="primary"
-            @click="filterDialogOpen = true"
-          />
-          <q-btn
-            v-else
-            flat
-            round
-            dense
-            icon="tune"
-            color="grey-7"
-            @click="filterDialogOpen = true"
-          />
-        </template>
-      </q-input>
-      <q-btn flat round icon="settings" @click="$emit('open-settings')" />
+  <div class="jei-bottombar" :class="{ 'jei-bottombar--mobile': isMobile }">
+    <div class="jei-bottombar__controls">
+      <div class="jei-bottombar__pack-row">
+        <q-select
+          :model-value="activePackId"
+          @update:model-value="$emit('update:active-pack-id', $event)"
+          :options="packOptions"
+          dense
+          outlined
+          emit-value
+          map-options
+          :disable="loading"
+          class="jei-bottombar__pack"
+        />
+        <q-btn
+          v-if="isMobile"
+          flat
+          round
+          icon="settings"
+          class="jei-bottombar__settings"
+          @click="$emit('open-settings')"
+        />
+      </div>
+      <div class="jei-bottombar__filter-row">
+        <q-input
+          :model-value="filterText"
+          @update:model-value="$emit('update:filter-text', String($event ?? ''))"
+          dense
+          outlined
+          clearable
+          :disable="filterDisabled"
+          :placeholder="t('filterPlaceholder')"
+          class="jei-bottombar__filter"
+        >
+          <template #append>
+            <q-btn flat round dense icon="sell" color="grey-7" @click="quickTagDialogOpen = true" />
+            <q-icon
+              v-if="filterText"
+              name="filter_list"
+              class="cursor-pointer"
+              color="primary"
+              @click="filterDialogOpen = true"
+            />
+            <q-btn
+              v-else
+              flat
+              round
+              dense
+              icon="tune"
+              color="grey-7"
+              @click="filterDialogOpen = true"
+            />
+          </template>
+        </q-input>
+        <q-btn
+          v-if="!isMobile"
+          flat
+          round
+          icon="settings"
+          class="jei-bottombar__settings"
+          @click="$emit('open-settings')"
+        />
+      </div>
     </div>
 
     <!-- 过滤器对话框 -->
     <q-dialog v-model="filterDialogOpen" @show="populateFilterFormFromText">
-      <q-card style="min-width: 400px; max-width: 500px">
+      <q-card class="jei-bottombar__dialog-card">
         <q-card-section>
           <div class="text-h6">{{ t('advancedFilter') }}</div>
           <div class="text-caption text-grey-7 q-mt-xs">{{ t('filterHelp') }}</div>
@@ -229,7 +248,7 @@
 
     <!-- 快速标签对话框 -->
     <q-dialog v-model="quickTagDialogOpen">
-      <q-card style="min-width: 400px; max-width: 500px">
+      <q-card class="jei-bottombar__dialog-card">
         <q-card-section>
           <div class="text-h6">{{ t('quickTagFilter') }}</div>
         </q-card-section>
@@ -276,6 +295,7 @@ type ParsedSearch = {
 type TagOption = { label: string; value: string };
 
 const props = defineProps<{
+  isMobile: boolean;
   activePackId: string;
   packOptions: PackOption[];
   filterText: string;
@@ -542,14 +562,83 @@ function clearQuickTag() {
   border-top: 1px solid rgba(0, 0, 0, 0.08);
 }
 
-@media (max-width: 599px) {
-  .jei-bottombar .row {
-    flex-wrap: wrap;
-  }
-  .jei-bottombar .q-select {
-    width: 100%;
-    min-width: 0 !important;
-    margin-bottom: 8px;
-  }
+.jei-bottombar__controls {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.jei-bottombar__pack-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: 0 0 auto;
+}
+
+.jei-bottombar__pack {
+  flex: 0 0 220px;
+  min-width: 220px;
+}
+
+.jei-bottombar__filter-row {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.jei-bottombar__filter {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.jei-bottombar__settings {
+  flex: 0 0 auto;
+}
+
+.jei-bottombar__dialog-card {
+  width: min(500px, calc(100vw - 24px));
+  min-width: min(400px, calc(100vw - 24px));
+  max-width: calc(100vw - 24px);
+}
+
+.jei-bottombar--mobile {
+  padding: 12px;
+  padding-bottom: calc(84px + env(safe-area-inset-bottom));
+}
+
+.jei-bottombar--mobile .jei-bottombar__controls {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 10px;
+}
+
+.jei-bottombar--mobile .jei-bottombar__pack {
+  min-width: 0;
+  width: auto;
+  flex: 0 1 auto;
+}
+
+.jei-bottombar--mobile .jei-bottombar__pack-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  width: 100%;
+}
+
+.jei-bottombar--mobile .jei-bottombar__settings {
+  justify-self: end;
+}
+
+.jei-bottombar--mobile .jei-bottombar__filter-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  align-items: stretch;
+}
+
+.jei-bottombar--mobile .jei-bottombar__settings {
+  min-height: 40px;
+  justify-self: end;
 }
 </style>

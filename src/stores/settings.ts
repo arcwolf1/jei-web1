@@ -252,6 +252,7 @@ export const useSettingsStore = defineStore('settings', {
       } as CircuitEditorPiecePanelState,
       circuitEditorPiecePanelSplitRatio: 0.5,
       detectPcDisableMobile: true,
+      mobileItemClickOpensDetail: true,
       customPackSources: [] as Array<{ packId: string; label: string; mirrors: string[] }>,
       useDevPackMirrors: false,
       packMirrorSelectionModeByPack: {} as Record<string, 'auto' | 'manual'>,
@@ -435,6 +436,10 @@ export const useSettingsStore = defineStore('settings', {
           typeof parsed.detectPcDisableMobile === 'boolean'
             ? parsed.detectPcDisableMobile
             : defaults.detectPcDisableMobile,
+        mobileItemClickOpensDetail:
+          typeof parsed.mobileItemClickOpensDetail === 'boolean'
+            ? parsed.mobileItemClickOpensDetail
+            : defaults.mobileItemClickOpensDetail,
         customPackSources: Array.isArray(parsed.customPackSources)
           ? parsed.customPackSources
               .map((x) => normalizeCustomPackSource(x))
@@ -727,6 +732,10 @@ export const useSettingsStore = defineStore('settings', {
       this.detectPcDisableMobile = value;
       void this.save();
     },
+    setMobileItemClickOpensDetail(value: boolean) {
+      this.mobileItemClickOpensDetail = value;
+      void this.save();
+    },
     addCustomPackSource(source: { packId: string; label: string; mirrors: string[] }) {
       const safeId = normalizeCustomPackId(source.packId);
       if (!safeId) return;
@@ -874,6 +883,7 @@ export const useSettingsStore = defineStore('settings', {
         circuitEditorPiecePanel: this.circuitEditorPiecePanel,
         circuitEditorPiecePanelSplitRatio: this.circuitEditorPiecePanelSplitRatio,
         detectPcDisableMobile: this.detectPcDisableMobile,
+        mobileItemClickOpensDetail: this.mobileItemClickOpensDetail,
         customPackSources: this.customPackSources,
         useDevPackMirrors: this.useDevPackMirrors,
         packMirrorSelectionModeByPack: this.packMirrorSelectionModeByPack,
@@ -1053,6 +1063,8 @@ export const useSettingsStore = defineStore('settings', {
         this.circuitEditorPiecePanelSplitRatio = parsed.circuitEditorPiecePanelSplitRatio;
       if (typeof parsed.detectPcDisableMobile === 'boolean')
         this.detectPcDisableMobile = parsed.detectPcDisableMobile;
+      if (typeof parsed.mobileItemClickOpensDetail === 'boolean')
+        this.mobileItemClickOpensDetail = parsed.mobileItemClickOpensDetail;
       if (Array.isArray(parsed.customPackSources)) {
         this.customPackSources = parsed.customPackSources
           .map((x) => normalizeCustomPackSource(x))

@@ -287,6 +287,11 @@
                       @update:model-value="$emit('update:persist-history-records', !!$event)"
                     />
                     <q-toggle
+                      :label="t('mobileItemClickOpensDetail')"
+                      :model-value="mobileItemClickOpensDetail"
+                      @update:model-value="$emit('update:mobile-item-click-opens-detail', !!$event)"
+                    />
+                    <q-toggle
                       :label="t('detectPcDisableMobile')"
                       :model-value="detectPcDisableMobile"
                       @update:model-value="$emit('update:detect-pc-disable-mobile', !!$event)"
@@ -1036,6 +1041,7 @@ const props = defineProps<{
   recipeSlotShowName: boolean;
   favoritesOpensNewStack: boolean;
   persistHistoryRecords: boolean;
+  mobileItemClickOpensDetail: boolean;
   hoverTooltipAllowMouseEnter: boolean;
   hoverTooltipDisplay: HoverTooltipDisplaySettings;
   detectPcDisableMobile: boolean;
@@ -1120,6 +1126,7 @@ const emit = defineEmits<{
   'update:recipe-slot-show-name': [value: boolean];
   'update:favorites-open-stack': [value: boolean];
   'update:persist-history-records': [value: boolean];
+  'update:mobile-item-click-opens-detail': [value: boolean];
   'update:hover-tooltip-allow-mouse-enter': [value: boolean];
   'update:hover-tooltip-display-setting': [key: HoverTooltipDisplayKey, value: boolean];
   'update:detect-pc-disable-mobile': [value: boolean];
