@@ -16,13 +16,19 @@
     </div>
 
     <div ref="listScrollEl" class="jei-list__scroll col" @wheel="$emit('wheel', $event)">
-      <div ref="listGridEl" class="jei-grid">
+      <div
+        ref="listGridEl"
+        :class="['jei-grid', { 'jei-grid--classic': iconDisplayMode === 'jei_classic' }]"
+      >
         <div v-if="firstPagedItem" ref="sampleCellEl">
           <q-card
             :key="firstPagedItem.keyHash"
             flat
-            bordered
-            class="jei-grid__cell cursor-pointer"
+            :bordered="iconDisplayMode !== 'jei_classic'"
+            :class="[
+              'jei-grid__cell cursor-pointer',
+              { 'jei-grid__cell--classic': iconDisplayMode === 'jei_classic' },
+            ]"
             v-touch-hold:600="
               (evt: unknown) => $emit('touch-hold', evt, firstPagedItem?.keyHash ?? '')
             "
@@ -44,13 +50,19 @@
               :size="isMobile ? 'md' : 'sm'"
               :icon="isFavorite(firstPagedItem.keyHash) ? 'star' : 'star_outline'"
               :color="isFavorite(firstPagedItem.keyHash) ? 'amber' : 'grey-6'"
-              class="jei-grid__fav"
+              :class="[
+                'jei-grid__fav',
+                { 'jei-grid__fav--classic': iconDisplayMode === 'jei_classic' },
+              ]"
               @click.stop="$emit('toggle-favorite', firstPagedItem.keyHash)"
               @mousedown.stop
               @touchstart.stop
               style="z-index: 1"
             />
-            <div class="jei-grid__cell-body">
+            <div
+              class="jei-grid__cell-body"
+              :class="{ 'jei-grid__cell-body--classic': iconDisplayMode === 'jei_classic' }"
+            >
               <stack-view
                 :content="{
                   kind: 'item',
@@ -64,6 +76,7 @@
                     : {}),
                 }"
                 :item-defs-by-key-hash="itemDefsByKeyHash"
+                :icon-display-mode="iconDisplayMode"
                 :show-amount="false"
                 :lazy-visual="true"
               />
@@ -75,8 +88,11 @@
           v-for="it in restPagedItems"
           :key="it.keyHash"
           flat
-          bordered
-          class="jei-grid__cell cursor-pointer"
+          :bordered="iconDisplayMode !== 'jei_classic'"
+          :class="[
+            'jei-grid__cell cursor-pointer',
+            { 'jei-grid__cell--classic': iconDisplayMode === 'jei_classic' },
+          ]"
           v-touch-hold:600="(evt: unknown) => $emit('touch-hold', evt, it.keyHash)"
           @contextmenu.prevent="$emit('context-menu', $event, it.keyHash)"
           @mouseenter="
@@ -96,13 +112,19 @@
             :size="isMobile ? 'md' : 'sm'"
             :icon="isFavorite(it.keyHash) ? 'star' : 'star_outline'"
             :color="isFavorite(it.keyHash) ? 'amber' : 'grey-6'"
-            class="jei-grid__fav"
+            :class="[
+              'jei-grid__fav',
+              { 'jei-grid__fav--classic': iconDisplayMode === 'jei_classic' },
+            ]"
             @click.stop="$emit('toggle-favorite', it.keyHash)"
             @mousedown.stop
             @touchstart.stop
             style="z-index: 1"
           />
-          <div class="jei-grid__cell-body">
+          <div
+            class="jei-grid__cell-body"
+            :class="{ 'jei-grid__cell-body--classic': iconDisplayMode === 'jei_classic' }"
+          >
             <stack-view
               :content="{
                 kind: 'item',
@@ -112,6 +134,7 @@
                 ...(it.def.key.nbt !== undefined ? { nbt: it.def.key.nbt } : {}),
               }"
               :item-defs-by-key-hash="itemDefsByKeyHash"
+              :icon-display-mode="iconDisplayMode"
               :show-amount="false"
               :lazy-visual="true"
             />
@@ -136,7 +159,7 @@
 
     <div ref="historyEl" class="jei-list__history col-auto">
       <div class="jei-list__history-title">{{ t('history') }}</div>
-      <div class="jei-grid">
+      <div :class="['jei-grid', { 'jei-grid--classic': iconDisplayMode === 'jei_classic' }]">
         <template
           v-for="(it, idx) in paddedHistoryItems"
           :key="it ? it.keyHash : `placeholder-${idx}`"
@@ -144,26 +167,35 @@
           <q-card
             v-if="it"
             flat
-            bordered
-            class="jei-grid__cell cursor-pointer"
+            :bordered="iconDisplayMode !== 'jei_classic'"
+            :class="[
+              'jei-grid__cell cursor-pointer',
+              { 'jei-grid__cell--classic': iconDisplayMode === 'jei_classic' },
+            ]"
             v-touch-hold:600="(evt: unknown) => $emit('touch-hold', evt, it.keyHash)"
             @contextmenu.prevent="$emit('context-menu', $event, it.keyHash)"
             @mouseenter="$emit('update:hovered-key-hash', it.keyHash)"
             @mouseleave="$emit('update:hovered-key-hash', null)"
             @click="$emit('item-click', it.keyHash)"
           >
-            <stack-view
-              :content="{
-                kind: 'item',
-                id: it.def.key.id,
-                amount: 1,
-                ...(it.def.key.meta !== undefined ? { meta: it.def.key.meta } : {}),
-                ...(it.def.key.nbt !== undefined ? { nbt: it.def.key.nbt } : {}),
-              }"
-              :item-defs-by-key-hash="itemDefsByKeyHash"
-              :show-amount="false"
-              :lazy-visual="true"
-            />
+            <div
+              class="jei-grid__cell-body"
+              :class="{ 'jei-grid__cell-body--classic': iconDisplayMode === 'jei_classic' }"
+            >
+              <stack-view
+                :content="{
+                  kind: 'item',
+                  id: it.def.key.id,
+                  amount: 1,
+                  ...(it.def.key.meta !== undefined ? { meta: it.def.key.meta } : {}),
+                  ...(it.def.key.nbt !== undefined ? { nbt: it.def.key.nbt } : {}),
+                }"
+                :item-defs-by-key-hash="itemDefsByKeyHash"
+                :icon-display-mode="iconDisplayMode"
+                :show-amount="false"
+                :lazy-visual="true"
+              />
+            </div>
           </q-card>
           <div
             v-else
@@ -181,6 +213,7 @@ import { ref } from 'vue';
 import { useI18n } from 'vue-i18n';
 import type { ItemDef } from 'src/jei/types';
 import StackView from 'src/jei/components/StackView.vue';
+import type { ItemIconDisplayMode } from 'src/stores/settings';
 
 const { t } = useI18n();
 
@@ -198,6 +231,7 @@ const props = defineProps<{
   measuredCellHeight: number;
   itemDefsByKeyHash: Record<string, ItemDef>;
   favorites: Set<string>;
+  iconDisplayMode: ItemIconDisplayMode;
 }>();
 
 defineEmits<{
@@ -365,10 +399,22 @@ defineExpose({
   gap: 8px;
 }
 
+.jei-grid--classic {
+  grid-template-columns: repeat(auto-fill, minmax(52px, 1fr));
+  gap: 6px;
+}
+
 .jei-grid__cell {
   box-sizing: border-box;
   padding: 8px;
   position: relative;
+}
+
+.jei-grid__cell--classic {
+  padding: 6px 4px 4px;
+  min-height: 46px;
+  background: transparent;
+  box-shadow: none;
 }
 
 .jei-grid__fav {
@@ -377,12 +423,31 @@ defineExpose({
   right: 4px;
 }
 
+.jei-grid__fav--classic {
+  top: 0;
+  right: 0;
+  transform: scale(0.72);
+  transform-origin: top right;
+}
+
 .jei-grid__cell-body {
   min-width: 0;
+}
+
+.jei-grid__cell-body--classic {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 36px;
 }
 
 .jei-grid__cell.placeholder {
   border: 1px dashed rgba(0, 0, 0, 0.1);
   background: rgba(0, 0, 0, 0.02);
+}
+
+.jei-grid--classic .jei-grid__cell.placeholder {
+  border: none;
+  background: transparent;
 }
 </style>

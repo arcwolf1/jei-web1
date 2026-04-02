@@ -111,6 +111,7 @@ const bindingGroups = computed<BindingGroup[]>(() => [
     actions: [
       { id: 'toggleFavorite', label: t('keybindingToggleFavorite'), description: '' },
       { id: 'addToAdvanced', label: t('keybindingAddToAdvanced'), description: '' },
+      { id: 'hoverTooltipInteract', label: t('keybindingHoverTooltipInteract'), description: '' },
     ],
   },
   {

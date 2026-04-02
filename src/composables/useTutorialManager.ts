@@ -1,5 +1,17 @@
 import { ref, computed } from 'vue';
-import type { TourStep } from 'components/InteractiveTour.vue';
+
+type TourStepPosition = 'top' | 'bottom' | 'left' | 'right' | 'center';
+type TourStepInteractionType = 'click' | 'keypress' | 'custom';
+
+interface TourStep {
+  target: string;
+  content: string;
+  position?: TourStepPosition;
+  waitForInteraction?: boolean;
+  interactionType?: TourStepInteractionType;
+  interactionHint?: string;
+  validateInteraction?: () => boolean;
+}
 
 export type TutorialStage = 'welcome' | 'sidebar' | 'itemList' | 'recipeViewer' | 'planner' | 'advancedPlanner' | 'complete';
 

@@ -1,7 +1,7 @@
 <template>
   <div :class="['level-editor', isDark ? 'level-editor--dark' : 'level-editor--light']">
     <section class="editor-card">
-      <h3>图形关卡编辑器</h3>
+      <h3>{{ t('puzzleLevelEditor') }}</h3>
       <div class="editor-grid">
         <label class="editor-field"
           ><span>id</span><input v-model.trim="levelId" type="text"
@@ -18,14 +18,14 @@
       </div>
 
       <div class="tool-row">
-        <span class="tool-label">工具</span>
+        <span class="tool-label">{{ t('tool') }}</span>
         <button
           type="button"
           class="editor-btn"
           :class="{ 'editor-btn--active': boardTool === 'place' }"
           @click="boardTool = 'place'"
         >
-          摆放
+          {{ t('place') }}
         </button>
         <button
           type="button"
@@ -33,7 +33,7 @@
           :class="{ 'editor-btn--active': boardTool === 'fixed' }"
           @click="boardTool = 'fixed'"
         >
-          固定块
+          {{ t('fixedBlock') }}
         </button>
         <button
           type="button"
@@ -41,7 +41,7 @@
           :class="{ 'editor-btn--active': boardTool === 'blocked' }"
           @click="boardTool = 'blocked'"
         >
-          禁用
+          {{ t('disable') }}
         </button>
         <button
           type="button"
@@ -49,7 +49,7 @@
           :class="{ 'editor-btn--active': boardTool === 'hint' }"
           @click="boardTool = 'hint'"
         >
-          提示
+          {{ t('hint') }}
         </button>
         <button
           type="button"
@@ -57,7 +57,7 @@
           :class="{ 'editor-btn--active': boardTool === 'paint' }"
           @click="boardTool = 'paint'"
         >
-          涂色
+          {{ t('paint') }}
         </button>
         <button
           type="button"
@@ -65,7 +65,7 @@
           :class="{ 'editor-btn--active': boardTool === 'erase' }"
           @click="boardTool = 'erase'"
         >
-          擦除
+          {{ t('erase') }}
         </button>
         <button
           type="button"
@@ -73,13 +73,15 @@
           :disabled="!selectedPieceUid"
           @click="rotateSelectedPlacePiece"
         >
-          旋转(R)
+          {{ t('rotate') }}(R)
         </button>
         <button type="button" class="editor-btn" @click="generateHintsFromPlacements">
-          从摆放生成提示
+          {{ t('generateHintFromPlacement') }}
         </button>
-        <button type="button" class="editor-btn" @click="clearHints">清空提示</button>
-        <button type="button" class="editor-btn" @click="clearPlacements">清空摆放</button>
+        <button type="button" class="editor-btn" @click="clearHints">{{ t('clearHints') }}</button>
+        <button type="button" class="editor-btn" @click="clearPlacements">
+          {{ t('clearPlacements') }}
+        </button>
       </div>
 
       <div class="palette-panel">
@@ -101,7 +103,9 @@
             class="palette-input"
             placeholder="#9ddb22"
           />
-          <button type="button" class="editor-btn" @click="applyPaletteInput">应用色号</button>
+          <button type="button" class="editor-btn" @click="applyPaletteInput">
+            {{ t('applyColor') }}
+          </button>
           <span class="palette-preview" :style="{ backgroundColor: selectedPaintColor }" />
         </div>
         <div v-if="paletteError" class="palette-error">{{ paletteError }}</div>
@@ -139,26 +143,28 @@
       />
 
       <div class="summary-row">
-        <span>提示格数: {{ finalHintKeys.length }}</span>
-        <span>禁用格数: {{ blockedKeys.length }}</span>
-        <span>固定块格数: {{ fixedOccupiedKeys.length }}</span>
-        <span>目标总分: {{ formatScore(totalTargetScore) }}</span>
+        <span>{{ t('hintCellCount') }}: {{ finalHintKeys.length }}</span>
+        <span>{{ t('disabledCellCount') }}: {{ blockedKeys.length }}</span>
+        <span>{{ t('fixedBlockCellCount') }}: {{ fixedOccupiedKeys.length }}</span>
+        <span>{{ t('targetTotalScore') }}: {{ formatScore(totalTargetScore) }}</span>
         <label class="toggle-field"
-          ><input v-model="keepUnusedPieces" type="checkbox" /><span>导出保留未用方块</span></label
+          ><input v-model="keepUnusedPieces" type="checkbox" /><span>{{
+            t('exportKeepUnusedPieces')
+          }}</span></label
         >
       </div>
     </section>
 
     <section class="editor-card">
-      <h3>方块形状画布</h3>
+      <h3>{{ t('pieceShapeCanvas') }}</h3>
       <div class="shape-json-layout">
         <div class="shape-pane">
           <div v-if="activeShapePiece" class="shape-title">
-            当前编辑: {{ activeShapePiece.name }} ({{ activeShapePiece.id }})
+            {{ t('currentEditing') }}: {{ activeShapePiece.name }} ({{ activeShapePiece.id }})
           </div>
-          <div v-else class="shape-title">未选择方块</div>
+          <div v-else class="shape-title">{{ t('noPieceSelected') }}</div>
           <p class="shape-tip">
-            简化画布（{{ pieceCanvasSize }}x{{ pieceCanvasSize }}），点击格子切换方块单元。
+            {{ t('canvasSimplified', { size: pieceCanvasSize }) }}
           </p>
 
           <CircuitPuzzleShapeCanvas
@@ -307,6 +313,7 @@
 import { useQuasar } from 'quasar';
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
+import { useI18n } from 'vue-i18n';
 import CircuitPuzzleBoard from './CircuitPuzzleBoard.vue';
 import CircuitPuzzlePiecePanel from './CircuitPuzzlePiecePanel.vue';
 import CircuitPuzzleShapeCanvas from './CircuitPuzzleShapeCanvas.vue';
@@ -315,6 +322,8 @@ import { useKeyBindingsStore, eventMatchesBinding } from 'src/stores/keybindings
 import { storage } from 'src/utils/storage';
 import { solveLevel, verifySolution } from './auto-solver';
 import { cloneLevel } from './defaultLevel';
+
+const { t } = useI18n();
 
 const keyBindingsStore = useKeyBindingsStore();
 import {

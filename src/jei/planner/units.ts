@@ -16,8 +16,10 @@ export function convertToPerSecond(
 ): Rational {
   switch (unit) {
     case ObjectiveUnit.Items:
+      // Keep legacy planner semantics: a plain item count is treated like a per-minute amount.
+      return value.div(rational(60));
     case ObjectiveUnit.Machines:
-      return value;  // Count is count, no time conversion
+      return value;
     case ObjectiveUnit.PerSecond:
       return value;
     case ObjectiveUnit.PerMinute:
@@ -38,8 +40,9 @@ export function convertFromPerSecond(
 ): Rational {
   switch (unit) {
     case ObjectiveUnit.Items:
+      return perSecond.mul(rational(60));
     case ObjectiveUnit.Machines:
-      return perSecond;  // Return as-is for counts
+      return perSecond;
     case ObjectiveUnit.PerSecond:
       return perSecond;
     case ObjectiveUnit.PerMinute:

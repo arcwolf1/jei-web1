@@ -8,9 +8,12 @@ import { Dark } from 'quasar';
 import { Graph } from '@antv/g6';
 import type { EdgeData, GraphData, NodeData } from '@antv/g6';
 import type { Edge, Node } from '@vue-flow/core';
+import { useI18n } from 'vue-i18n';
 import type { ItemDef, ItemKey } from 'src/jei/types';
 import { itemKeyHash } from 'src/jei/indexing/key';
 import { isProxyImageUrl } from 'src/jei/pack/runtimeImage';
+
+const { t } = useI18n();
 
 type NodeDataRecord = {
   title?: string;
@@ -276,8 +279,8 @@ function machineOutputName(detail: MachineOutputDetailRecord): string {
 function machineOutputLine(detail: MachineOutputDetailRecord): string {
   const produced = detail.producedText ?? detail.demandedText ?? '-';
   const used = detail.usedText ?? detail.demandedText ?? '-';
-  const surplus = detail.surplusText ? ` 余${detail.surplusText}` : '';
-  return `${machineOutputName(detail)} 总${produced} 用${used}${surplus}`;
+  const surplus = detail.surplusText ? ` ${t('surplus')}${detail.surplusText}` : '';
+  return `${machineOutputName(detail)} ${t('total')}${produced} ${t('used')}${used}${surplus}`;
 }
 
 function machineOutputLines(data: NodeDataRecord): string[] {
@@ -479,7 +482,7 @@ function toGraphData(): GraphData {
     };
     if (kind === 'fluid') {
       nodeStyle.icon = true;
-      nodeStyle.iconText = '液';
+      nodeStyle.iconText = t('liquid');
       nodeStyle.iconFontSize = 30;
       nodeStyle.iconFill = isDark ? '#d1f5ff' : '#0c4a6e';
     } else if (icon) nodeStyle.iconSrc = icon;

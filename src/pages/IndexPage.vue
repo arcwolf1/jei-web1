@@ -43,7 +43,10 @@
         :collapsed="settingsStore.favoritesCollapsed"
         :saved-plans="savedPlans"
         :favorite-items="favoriteItems"
+        :favorite-page-size-min="settingsStore.favoritePageSizeMin"
+        :favorite-page-size-max="settingsStore.favoritePageSizeMax"
         :item-defs-by-key-hash="itemDefsByKeyHash"
+        :icon-display-mode="settingsStore.favoritesIconDisplayMode"
         @update:collapsed="settingsStore.setFavoritesCollapsed($event)"
         @update:hovered-key-hash="hoveredKeyHash = $event"
         @update:hovered-source="hoveredSource = $event"
@@ -127,6 +130,7 @@
         :measured-cell-height="measuredCellHeight"
         :item-defs-by-key-hash="itemDefsByKeyHash"
         :favorites="favorites"
+        :icon-display-mode="settingsStore.itemListIconDisplayMode"
         @update:hovered-key-hash="hoveredKeyHash = $event"
         @update:hovered-source="hoveredSource = $event"
         @item-click="openDialogByKeyHash"
@@ -167,6 +171,7 @@
       :available-item-ids="availableItemIds"
       :available-game-ids="availableGameIds"
       :available-tags="availableTags"
+      :get-tag-display-name="getTagDisplayName"
       @open-settings="settingsOpen = true"
     />
 
@@ -176,10 +181,21 @@
       @update:open="settingsOpen = $event"
       :history-limit="settingsStore.historyLimit"
       @update:history-limit="settingsStore.setHistoryLimit($event)"
+      :favorite-page-size-min="settingsStore.favoritePageSizeMin"
+      @update:favorites-page-size-min="settingsStore.setFavoritePageSizeMin($event)"
+      :favorite-page-size-max="settingsStore.favoritePageSizeMax"
+      @update:favorites-page-size-max="settingsStore.setFavoritePageSizeMax($event)"
+      @reset:favorites-page-size-bounds="settingsStore.resetFavoritePageSizeBounds()"
+      :dark-mode="settingsStore.darkMode"
+      @update:dark-mode="settingsStore.setDarkMode($event)"
       :debug-layout="settingsStore.debugLayout"
       @update:debug-layout="settingsStore.setDebugLayout($event)"
       :debug-nav-panel="settingsStore.debugNavPanel"
       @update:debug-nav-panel="settingsStore.setDebugNavPanel($event)"
+      :aggregate-export-available="aggregateMergeReportAvailable"
+      :aggregate-export-loading="aggregateMergeReportLoading"
+      @copy:aggregate-merge-report="onCopyAggregateMergeReport"
+      @download:aggregate-merge-report="onDownloadAggregateMergeReport"
       :show-loading-overlay="settingsStore.showLoadingOverlay"
       @update:show-loading-overlay="settingsStore.setShowLoadingOverlay($event)"
       :quant-line-width-scale="settingsStore.quantLineWidthScale"
@@ -194,12 +210,26 @@
       @update:production-line-renderer="settingsStore.setProductionLineRenderer($event)"
       :quant-flow-renderer="settingsStore.quantFlowRenderer"
       @update:quant-flow-renderer="settingsStore.setQuantFlowRenderer($event)"
+      :item-list-icon-display-mode="settingsStore.itemListIconDisplayMode"
+      @update:item-list-icon-display-mode="settingsStore.setItemListIconDisplayMode($event)"
+      :favorites-icon-display-mode="settingsStore.favoritesIconDisplayMode"
+      @update:favorites-icon-display-mode="settingsStore.setFavoritesIconDisplayMode($event)"
+      :item-icon-loading-animation="settingsStore.itemIconLoadingAnimation"
+      @update:item-icon-loading-animation="settingsStore.setItemIconLoadingAnimation($event)"
       :recipe-view-mode="settingsStore.recipeViewMode"
       @update:recipe-view-mode="settingsStore.setRecipeViewMode($event)"
+      :item-click-default-tab="settingsStore.itemClickDefaultTab"
+      @update:item-click-default-tab="settingsStore.setItemClickDefaultTab($event)"
       :recipe-slot-show-name="settingsStore.recipeSlotShowName"
       @update:recipe-slot-show-name="settingsStore.setRecipeSlotShowName($event)"
       :favorites-opens-new-stack="settingsStore.favoritesOpensNewStack"
       @update:favorites-open-stack="settingsStore.setFavoritesOpensNewStack($event)"
+      :persist-history-records="settingsStore.persistHistoryRecords"
+      @update:persist-history-records="settingsStore.setPersistHistoryRecords($event)"
+      :hover-tooltip-allow-mouse-enter="settingsStore.hoverTooltipAllowMouseEnter"
+      :hover-tooltip-display="settingsStore.hoverTooltipDisplay"
+      @update:hover-tooltip-allow-mouse-enter="settingsStore.setHoverTooltipAllowMouseEnter($event)"
+      @update:hover-tooltip-display-setting="onUpdateHoverTooltipDisplaySetting"
       :detect-pc-disable-mobile="settingsStore.detectPcDisableMobile"
       @update:detect-pc-disable-mobile="settingsStore.setDetectPcDisableMobile($event)"
       :pack-proxy-template="packProxyTemplate"
@@ -253,6 +283,9 @@
       @update:keybinding="onKeybindingChange"
       @reset:keybindings="onResetKeybindings"
       @refresh-mirror-latency="refreshActivePackMirrorLatency"
+      :language="settingsStore.language"
+      :i18n-items="pack?.items ?? []"
+      @update:language="onLanguageChange"
     />
 
     <pre v-if="settingsStore.debugLayout" class="jei-debug-overlay">{{ debugText }}</pre>
@@ -335,6 +368,13 @@ import {
   type LoadProgress,
 } from 'src/jei/pack/loader';
 import {
+  resolveItemLocale,
+  resolveAllItemsLocale,
+  resolveAllRecipeTypesLocale,
+  getTagDisplayName as getTagDisplayNameFromDef,
+  resolveTagDef,
+} from 'src/jei/i18n-resolver';
+import {
   applyImageProxyToPack,
   ensurePackImageProxyTokens,
   resolveImageUrl,
@@ -345,6 +385,9 @@ import {
   recipesProducingItem,
   type JeiIndex,
 } from 'src/jei/indexing/buildIndex';
+import { getItemLookupIds } from 'src/jei/indexing/itemLookup';
+import { buildTagIndex } from 'src/jei/tags/resolve';
+import { stableJsonStringify } from 'src/jei/utils/stableJson';
 import FavoritesPanel from './components/FavoritesPanel.vue';
 import ItemListPanel from './components/ItemListPanel.vue';
 import CenterPanel from './components/CenterPanel.vue';
@@ -361,7 +404,6 @@ import type {
   PlannerInitialState,
   PlannerLiveState,
   PlannerNodePosition,
-  PlannerRateDisplayUnit,
   PlannerSavePayload,
   PlannerTargetUnit,
   AdvancedObjectiveEntry,
@@ -388,17 +430,18 @@ import type {
   PluginSettingValue,
   PluginTabRuntime,
 } from 'src/jei/plugins/types';
-import { useSettingsStore } from 'src/stores/settings';
+import { useSettingsStore, type HoverTooltipDisplayKey, type Language } from 'src/stores/settings';
 import {
   useKeyBindingsStore,
   eventMatchesBinding,
+  eventReleasesBinding,
   type KeyBinding,
   type KeyAction,
 } from 'src/stores/keybindings';
 import { usePackRoutingRuntimeStore, type PackSourceSnapshot } from 'src/stores/packRoutingRuntime';
 import {
-  evaluateSearchExpression,
   parseSearchExpression,
+  type SearchExpressionNode,
   type SearchTerm,
 } from 'src/utils/searchExpression';
 import { storage } from 'src/utils/storage';
@@ -407,7 +450,7 @@ const settingsStore = useSettingsStore();
 const keyBindingsStore = useKeyBindingsStore();
 const packRoutingRuntimeStore = usePackRoutingRuntimeStore();
 const dialogManager = useDialogManager();
-const { t } = useI18n();
+const { t, locale } = useI18n();
 const pluginManager = new PluginManager();
 for (const plugin of builtinPlugins) {
   pluginManager.register(plugin);
@@ -573,17 +616,25 @@ const filterDisabled = computed(() => loading.value || !!error.value);
 const page = ref(1);
 const measuredCellHeight = ref(84);
 const gridGap = 8;
-const gridColumns = 2;
+const MODERN_GRID_COLUMNS = 2;
+const CLASSIC_GRID_MIN_CELL_WIDTH = 52;
 
 const pageSize = ref(120);
 
 const settingsOpen = ref(false);
 const mirrorLatencyLoading = ref(false);
+const aggregateMergeReportLoading = ref(false);
 const dialogOpen = ref(false);
 const contextMenuRef = ref();
 const centerPanelRef = ref();
 const contextMenuOpen = ref(false);
 const contextMenuKeyHash = ref<string | null>(null);
+
+const aggregateMergeReportAvailable = computed(() => {
+  const currentPack = pack.value;
+  if (!currentPack) return false;
+  return getAggregateSourcePackIds(currentPack.manifest.packId).length > 0;
+});
 
 const activePackMirrorMode = computed(
   () => settingsStore.packMirrorSelectionModeByPack[activePackId.value] ?? 'auto',
@@ -598,7 +649,7 @@ type MirrorRouteEntry = {
 
 function buildMirrorRouteEntriesForPack(packId: string): MirrorRouteEntry[] {
   const aggregateSources = getAggregateSourcePackIds(packId);
-  const sourcePackIds = aggregateSources.length > 0 ? aggregateSources : [packId];
+  const sourcePackIds = Array.from(new Set([packId, ...aggregateSources]));
   const out: MirrorRouteEntry[] = [];
 
   sourcePackIds.forEach((sourcePackId) => {
@@ -628,15 +679,21 @@ function buildMirrorRouteEntriesForPack(packId: string): MirrorRouteEntry[] {
   return out;
 }
 
-const activePackMirrorEntries = computed(() => buildMirrorRouteEntriesForPack(activePackId.value));
+function getRuntimeMirrorUrl(packId: string): string {
+  const runtime = packRoutingRuntimeStore.activeBaseUrlByPack[packId];
+  if (runtime) return runtime.replace(/\/+$/, '');
+  return (getActivePackBaseUrl(packId) ?? '').replace(/\/+$/, '');
+}
+
+const activePackMirrorEntries = computed(() => {
+  void pack.value?.manifest.version;
+  return buildMirrorRouteEntriesForPack(activePackId.value);
+});
 const activePackMirrors = computed(() => {
   return activePackMirrorEntries.value.map((entry) => entry.url);
 });
 const activePackMirrorUrl = computed(() => {
-  const packId = activePackId.value;
-  const runtime = packRoutingRuntimeStore.activeBaseUrlByPack[packId];
-  if (runtime) return runtime.replace(/\/+$/, '');
-  return (getActivePackBaseUrl(packId) ?? '').replace(/\/+$/, '');
+  return getRuntimeMirrorUrl(activePackId.value);
 });
 const activePackManualMirror = computed(() => {
   const saved = settingsStore.packManualMirrorByPack[activePackId.value];
@@ -649,6 +706,9 @@ const activePackMirrorRows = computed(() =>
     sourceLabel: entry.sourceLabel,
     url: entry.url,
     isDev: entry.isDev,
+    isCurrentUsed:
+      !!getRuntimeMirrorUrl(entry.sourcePackId) &&
+      getRuntimeMirrorUrl(entry.sourcePackId) === entry.url,
     latencyMs: packRoutingRuntimeStore.getLatency(entry.sourcePackId, entry.url),
   })),
 );
@@ -949,6 +1009,12 @@ const keybindingSettingGroups = computed<
         description: '',
         binding: keyBindingsStore.getBinding('addToAdvanced'),
       },
+      {
+        id: 'hoverTooltipInteract',
+        label: t('keybindingHoverTooltipInteract'),
+        description: '',
+        binding: keyBindingsStore.getBinding('hoverTooltipInteract'),
+      },
     ],
   },
   {
@@ -1014,6 +1080,15 @@ function onResetKeybindings() {
   keyBindingsStore.resetToDefaults();
 }
 
+function onLanguageChange(lang: Language) {
+  settingsStore.setLanguage(lang);
+  locale.value = lang;
+}
+
+function onUpdateHoverTooltipDisplaySetting(key: HoverTooltipDisplayKey, value: boolean) {
+  settingsStore.setHoverTooltipDisplaySetting(key, value);
+}
+
 // 更新网页标题
 watch(
   () => {
@@ -1050,6 +1125,55 @@ function mergeInlineItems(items: ItemDef[], recipes: Recipe[]): ItemDef[] {
   return Array.from(byHash.values());
 }
 
+function mergeItemI18nForDetailLoad(
+  base: ItemDef['i18n'] | undefined,
+  incoming: ItemDef['i18n'] | undefined,
+): ItemDef['i18n'] | undefined {
+  if (!base && !incoming) return undefined;
+  if (!base) return incoming;
+  if (!incoming) return base;
+  const out: NonNullable<ItemDef['i18n']> = { ...base };
+  Object.keys(incoming).forEach((locale) => {
+    const next = incoming[locale];
+    if (!next) return;
+    const prev = out[locale];
+    if (!prev) {
+      out[locale] = next;
+      return;
+    }
+    out[locale] = {
+      ...prev,
+      ...next,
+      ...(prev.wiki || next.wiki ? { wiki: next.wiki ?? prev.wiki } : {}),
+      ...(prev.source || next.source
+        ? {
+            source: {
+              ...(prev.source ?? {}),
+              ...(next.source ?? {}),
+            },
+          }
+        : {}),
+      ...(prev.sources || next.sources
+        ? {
+            sources: {
+              ...(prev.sources ?? {}),
+              ...(next.sources ?? {}),
+            },
+          }
+        : {}),
+      ...(prev.wikis || next.wikis
+        ? {
+            wikis: {
+              ...(prev.wikis ?? {}),
+              ...(next.wikis ?? {}),
+            },
+          }
+        : {}),
+    };
+  });
+  return out;
+}
+
 const itemDetailLoadTasks = new Map<string, Promise<void>>();
 const recipeDetailLoadTasks = new Map<string, Promise<void>>();
 
@@ -1079,12 +1203,20 @@ async function ensureItemDetailLoadedByKeyHash(keyHash: string): Promise<void> {
       )
         return;
 
+      const mergedWikis = {
+        ...(def.wikis ?? {}),
+        ...(detail.wikis ?? {}),
+      };
+      const mergedI18n = mergeItemI18nForDetailLoad(def.i18n, detail.i18n);
       const merged: ItemDef = {
         ...def,
         ...detail,
+        ...(Object.keys(mergedWikis).length ? { wikis: mergedWikis } : {}),
+        ...(mergedI18n ? { i18n: mergedI18n } : {}),
         detailPath,
         detailLoaded: true,
       };
+      resolveItemLocale(merged, settingsStore.language);
 
       const nextItems = currentPack.items.map((it) =>
         itemKeyHash(it.key) === keyHash ? merged : it,
@@ -1194,28 +1326,65 @@ watch(
 const parsedSearch = computed(() => parseSearchExpression(filterText.value));
 
 type NameSearchKeys = {
-  nameLower: string;
-  pinyinFull: string;
-  pinyinFirst: string;
+  namesLower: string[];
+  pinyinFulls: string[];
+  pinyinFirsts: string[];
 };
+
+type SearchableItemEntry = {
+  keyHash: string;
+  idTermsLower: string[];
+  gameIdTermsLower: string[];
+  namesLower: string[];
+  pinyinFulls: string[];
+  pinyinFirsts: string[];
+  tagsLower: string[];
+};
+
+type SearchWorkerResponse = {
+  type: 'result';
+  requestId: number;
+  keyHashes: string[];
+};
+
+type SearchWorkerRequest =
+  | {
+      type: 'init';
+      items: SearchableItemEntry[];
+    }
+  | {
+      type: 'search';
+      requestId: number;
+      expression: SearchExpressionNode | null;
+    };
 
 function normalizePinyinQuery(input: string): string {
   return input.toLowerCase().replace(/[^a-z0-9]+/g, '');
 }
 
-function buildNameSearchKeys(name: string): NameSearchKeys {
-  const nameLower = (name ?? '').toLowerCase();
-  try {
-    const pinyinFull = normalizePinyinQuery(
-      pinyin(name ?? '', { toneType: 'none', nonZh: 'consecutive' }),
-    );
-    const pinyinFirst = normalizePinyinQuery(
-      pinyin(name ?? '', { toneType: 'none', pattern: 'first', nonZh: 'consecutive' }),
-    );
-    return { nameLower, pinyinFull, pinyinFirst };
-  } catch {
-    return { nameLower, pinyinFull: '', pinyinFirst: '' };
+function buildNameSearchKeys(names: string[]): NameSearchKeys {
+  const namesLower: string[] = [];
+  const pinyinFulls: string[] = [];
+  const pinyinFirsts: string[] = [];
+
+  for (const name of names) {
+    if (!name) continue;
+    namesLower.push(name.toLowerCase());
+    try {
+      pinyinFulls.push(
+        normalizePinyinQuery(pinyin(name, { toneType: 'none', nonZh: 'consecutive' })),
+      );
+      pinyinFirsts.push(
+        normalizePinyinQuery(
+          pinyin(name, { toneType: 'none', pattern: 'first', nonZh: 'consecutive' }),
+        ),
+      );
+    } catch {
+      // ignore pinyin errors for non-Chinese names
+    }
   }
+
+  return { namesLower, pinyinFulls, pinyinFirsts };
 }
 
 const nameSearchKeysByKeyHash = computed(() => {
@@ -1223,7 +1392,15 @@ const nameSearchKeysByKeyHash = computed(() => {
   const out = new Map<string, NameSearchKeys>();
   if (!map) return out;
   for (const [keyHash, def] of map.entries()) {
-    out.set(keyHash, buildNameSearchKeys(def.name ?? ''));
+    const allNames = new Set<string>();
+    if (def.name) allNames.add(def.name);
+    const i18n = def.i18n ?? def.extensions?.jeiweb?.i18n;
+    if (i18n) {
+      for (const entry of Object.values(i18n)) {
+        if (entry?.name) allNames.add(entry.name);
+      }
+    }
+    out.set(keyHash, buildNameSearchKeys(Array.from(allNames)));
   }
   return out;
 });
@@ -1239,13 +1416,18 @@ const availableTags = computed(() => {
   return Array.from(tags).sort();
 });
 
+const getTagDisplayName = (tagId: string): string => {
+  const tagDef = resolveTagDef(
+    tagId,
+    pack.value?.tags?.item,
+    pack.value?.manifest.gameId ?? undefined,
+  );
+  return getTagDisplayNameFromDef(tagId, tagDef, settingsStore.language);
+};
+
 // 所有可用的物品 ID（去重）
 const availableItemIds = computed(() => {
-  const ids = new Set<string>();
-  for (const def of index.value?.itemsByKeyHash.values() ?? []) {
-    ids.add(def.key.id);
-  }
-  return Array.from(ids).sort();
+  return Array.from(index.value?.itemKeyHashesByItemId.keys() ?? []).sort();
 });
 
 // 所有可用的命名空间
@@ -1259,20 +1441,208 @@ const availableGameIds = computed(() => {
   return Array.from(namespaces).sort();
 });
 
+const searchableItemsForFilter = computed<SearchableItemEntry[]>(() => {
+  const idx = index.value;
+  if (!idx) return [];
+  const sortedEntries = Array.from(idx.itemsByKeyHash.entries()).sort((a, b) =>
+    a[1].name.localeCompare(b[1].name),
+  );
+  const keysByKeyHash = nameSearchKeysByKeyHash.value;
+  const out: SearchableItemEntry[] = [];
+  for (const [keyHash, def] of sortedEntries) {
+    const idTermsLower = Array.from(
+      new Set(
+        getItemLookupIds(def)
+          .map((id) => id.toLowerCase())
+          .filter(Boolean),
+      ),
+    );
+    const gameIdTermsLower = Array.from(
+      new Set(
+        idTermsLower
+          .map(
+            (idLower) =>
+              (idLower.includes(':') ? idLower.split(':')[0] : idLower.split('.')[0]) ?? '',
+          )
+          .filter(Boolean),
+      ),
+    );
+    const nameKeys = keysByKeyHash.get(keyHash);
+    const namesLower = nameKeys?.namesLower ?? [(def.name ?? '').toLowerCase()];
+    const pinyinFulls = nameKeys?.pinyinFulls ?? [];
+    const pinyinFirsts = nameKeys?.pinyinFirsts ?? [];
+    const tags = idx.tagIdsByItemId.get(def.key.id);
+    const tagsLowerSet = new Set<string>();
+    if (tags) {
+      Array.from(tags).forEach((tagId) => {
+        tagsLowerSet.add(tagId.toLowerCase());
+        const localized = getTagDisplayName(tagId).toLowerCase();
+        if (localized) tagsLowerSet.add(localized);
+      });
+    }
+    out.push({
+      keyHash,
+      idTermsLower,
+      gameIdTermsLower,
+      namesLower,
+      pinyinFulls,
+      pinyinFirsts,
+      tagsLower: Array.from(tagsLowerSet),
+    });
+  }
+  return out;
+});
+
+const filteredKeyHashes = ref<string[]>([]);
+const searchWorker = ref<Worker | null>(null);
+const searchRequestId = ref(0);
+const appliedSearchRequestId = ref(0);
+const SEARCH_FILTER_DEBOUNCE_MS = 90;
+let searchFilterDebounceTimer: ReturnType<typeof setTimeout> | null = null;
+
+function matchesSearchableItem(
+  entry: SearchableItemEntry,
+  searchExpression: SearchExpressionNode | null,
+): boolean {
+  const matchesTerm = (term: SearchTerm): boolean => {
+    switch (term.field) {
+      case 'text': {
+        if (entry.namesLower.some((name) => name.includes(term.value))) return true;
+        const query = normalizePinyinQuery(term.value);
+        if (query && entry.pinyinFulls.some((pinyinValue) => pinyinValue.includes(query)))
+          return true;
+        if (query && entry.pinyinFirsts.some((pinyinValue) => pinyinValue.includes(query)))
+          return true;
+        if (entry.idTermsLower.some((id) => id.includes(term.value))) return true;
+        if (entry.tagsLower.some((tag) => tag.includes(term.value))) return true;
+        return false;
+      }
+      case 'itemId':
+        return entry.idTermsLower.some((id) => id.includes(term.value));
+      case 'gameId':
+        return entry.gameIdTermsLower.some((id) => id.includes(term.value));
+      case 'tag':
+        return entry.tagsLower.some((tag) => tag.includes(term.value));
+    }
+  };
+
+  if (!searchExpression) return true;
+  switch (searchExpression.kind) {
+    case 'term':
+      return matchesTerm(searchExpression.term);
+    case 'and':
+      return searchExpression.children.every((child) => matchesSearchableItem(entry, child));
+    case 'or':
+      return searchExpression.children.some((child) => matchesSearchableItem(entry, child));
+    case 'not':
+      return !matchesSearchableItem(entry, searchExpression.child);
+  }
+}
+
+function filterKeyHashesInMainThread(
+  entries: SearchableItemEntry[],
+  searchExpression: SearchExpressionNode | null,
+): string[] {
+  return entries
+    .filter((entry) => matchesSearchableItem(entry, searchExpression))
+    .map((entry) => entry.keyHash);
+}
+
+function applyFilteredKeyHashes(keyHashes: string[], requestId: number): void {
+  if (requestId < appliedSearchRequestId.value) return;
+  appliedSearchRequestId.value = requestId;
+  filteredKeyHashes.value = keyHashes;
+}
+
+function ensureSearchWorker(): Worker | null {
+  if (typeof Worker === 'undefined') return null;
+  if (searchWorker.value) return searchWorker.value;
+  const worker = new Worker(new URL('../workers/itemSearch.worker.ts', import.meta.url), {
+    type: 'module',
+  });
+  worker.onmessage = (event: MessageEvent<SearchWorkerResponse>) => {
+    const data = event.data;
+    if (!data || data.type !== 'result') return;
+    applyFilteredKeyHashes(data.keyHashes, data.requestId);
+  };
+  worker.onerror = () => {
+    worker.terminate();
+    if (searchWorker.value === worker) searchWorker.value = null;
+    const entries = searchableItemsForFilter.value;
+    const requestId = searchRequestId.value + 1;
+    searchRequestId.value = requestId;
+    applyFilteredKeyHashes(filterKeyHashesInMainThread(entries, parsedSearch.value), requestId);
+  };
+  searchWorker.value = worker;
+  return worker;
+}
+
+function triggerSearchFilter(): void {
+  const entries = searchableItemsForFilter.value;
+  const searchExpression = parsedSearch.value;
+  const worker = ensureSearchWorker();
+  if (!worker) {
+    const requestId = searchRequestId.value + 1;
+    searchRequestId.value = requestId;
+    applyFilteredKeyHashes(filterKeyHashesInMainThread(entries, searchExpression), requestId);
+    return;
+  }
+  const requestId = searchRequestId.value + 1;
+  searchRequestId.value = requestId;
+  const payload: SearchWorkerRequest = {
+    type: 'search',
+    requestId,
+    expression: searchExpression,
+  };
+  worker.postMessage(payload);
+}
+
+function clearSearchFilterDebounceTimer(): void {
+  if (searchFilterDebounceTimer === null) return;
+  clearTimeout(searchFilterDebounceTimer);
+  searchFilterDebounceTimer = null;
+}
+
+function triggerSearchFilterDebounced(): void {
+  clearSearchFilterDebounceTimer();
+  searchFilterDebounceTimer = setTimeout(() => {
+    searchFilterDebounceTimer = null;
+    triggerSearchFilter();
+  }, SEARCH_FILTER_DEBOUNCE_MS);
+}
+
+watch(
+  searchableItemsForFilter,
+  (entries) => {
+    clearSearchFilterDebounceTimer();
+    filteredKeyHashes.value = entries.map((entry) => entry.keyHash);
+    const worker = ensureSearchWorker();
+    if (worker) {
+      const payload: SearchWorkerRequest = {
+        type: 'init',
+        items: entries,
+      };
+      worker.postMessage(payload);
+    }
+    triggerSearchFilter();
+  },
+  { immediate: true },
+);
+
+watch(parsedSearch, () => {
+  triggerSearchFilterDebounced();
+});
+
 const filteredItems = computed(() => {
   const map = index.value?.itemsByKeyHash;
   if (!map) return [];
-  const entries = Array.from(map.entries()).map(([keyHash, def]) => ({ keyHash, def }));
-  const searchExpression = parsedSearch.value;
-  const keysByKeyHash = nameSearchKeysByKeyHash.value;
-
-  const filtered = entries.filter((e) =>
-    matchesSearch(e.def, searchExpression, keysByKeyHash.get(e.keyHash)),
-  );
-  filtered.sort((a, b) => {
-    return a.def.name.localeCompare(b.def.name);
-  });
-  return filtered;
+  return filteredKeyHashes.value
+    .map((keyHash) => {
+      const def = map.get(keyHash);
+      if (!def) return null;
+      return { keyHash, def };
+    })
+    .filter((entry): entry is { keyHash: string; def: ItemDef } => entry !== null);
 });
 
 const pageCount = computed(() => {
@@ -1322,6 +1692,418 @@ async function copyText(text: string): Promise<void> {
     return;
   }
   window.prompt('请复制以下内容', text);
+}
+
+type AggregateMergeSourceRef = {
+  sourcePackId: string;
+  id: string;
+  name?: string;
+  tags?: string[];
+  source?: string;
+  rarity?: ItemDef['rarity'];
+  meta?: Record<string, unknown>;
+};
+
+type AggregateMergeItemSnapshot = {
+  key: ItemKey;
+  name: string;
+  tags: string[];
+  tagIds: string[];
+  source?: string;
+  rarity?: ItemDef['rarity'];
+  detailPath?: string;
+  jeiwebMeta?: Record<string, unknown>;
+};
+
+type AggregateMergeSourceSnapshot = AggregateMergeItemSnapshot & {
+  sourcePackId: string;
+  sourceItemId: string;
+  lookup: 'matched' | 'fallback';
+  candidateCount: number;
+};
+
+type AggregateMergeReportEntry = {
+  canonical: AggregateMergeItemSnapshot;
+  sourceCount: number;
+  sources: AggregateMergeSourceSnapshot[];
+};
+
+type AggregateUnmergedCandidateItem = AggregateMergeSourceSnapshot & {
+  merged: boolean;
+};
+
+type AggregateUnmergedCandidateGroup = {
+  nameKey: string;
+  displayNames: string[];
+  sourcePackIds: string[];
+  totalItemCount: number;
+  unmergedItemCount: number;
+  items: AggregateUnmergedCandidateItem[];
+};
+
+type AggregateMergeReport = {
+  version: 1;
+  generatedAt: string;
+  packId: string;
+  packDisplayName: string;
+  sourcePackIds: string[];
+  mergedItemCount: number;
+  groups: AggregateMergeReportEntry[];
+  unmergedCandidateCount: number;
+  unmergedGroups: AggregateUnmergedCandidateGroup[];
+};
+
+function isRecordLike(value: unknown): value is Record<string, unknown> {
+  return !!value && typeof value === 'object' && !Array.isArray(value);
+}
+
+function cloneJsonValue<T>(value: T): T {
+  return JSON.parse(stableJsonStringify(value)) as T;
+}
+
+function stripAggregateMeta(meta: unknown): Record<string, unknown> | undefined {
+  if (!isRecordLike(meta)) return undefined;
+  const next = cloneJsonValue(meta);
+  delete next.aggregateHoverSources;
+  delete next.aggregateDetailSources;
+  delete next.aggregateSourcePackId;
+  delete next.aggregateSourceItemId;
+  delete next.aggregateOriginalItemIds;
+  return Object.keys(next).length > 0 ? next : undefined;
+}
+
+function getSortedTagIds(tagIdsByItemId: Map<string, Set<string>>, itemId: string): string[] {
+  return Array.from(tagIdsByItemId.get(itemId) ?? []).sort((a, b) => a.localeCompare(b));
+}
+
+function normalizeAggregateExportItemName(name: string): string {
+  return name.replace(/\s+/g, ' ').trim().toLowerCase();
+}
+
+function buildAggregateMergeItemSnapshot(
+  item: ItemDef,
+  tagIds: string[],
+): AggregateMergeItemSnapshot {
+  const jeiwebMeta = stripAggregateMeta(item.extensions?.jeiweb?.meta);
+  return {
+    key: cloneJsonValue(item.key),
+    name: item.name,
+    tags: [...(item.tags ?? [])],
+    tagIds: [...tagIds],
+    ...(item.source ? { source: item.source } : {}),
+    ...(item.rarity ? { rarity: cloneJsonValue(item.rarity) } : {}),
+    ...(item.detailPath ? { detailPath: item.detailPath } : {}),
+    ...(jeiwebMeta ? { jeiwebMeta } : {}),
+  };
+}
+
+function extractAggregateMergeSourceRefs(item: ItemDef): AggregateMergeSourceRef[] {
+  const raw = item.extensions?.jeiweb?.meta?.aggregateHoverSources;
+  if (!Array.isArray(raw)) return [];
+  const seen = new Set<string>();
+  const out: AggregateMergeSourceRef[] = [];
+  raw.forEach((entry) => {
+    if (!isRecordLike(entry)) return;
+    const sourcePackId =
+      typeof entry.sourcePackId === 'string' && entry.sourcePackId.trim()
+        ? entry.sourcePackId.trim()
+        : '';
+    const id = typeof entry.id === 'string' && entry.id.trim() ? entry.id.trim() : '';
+    if (!sourcePackId || !id) return;
+    const key = `${sourcePackId}\u0000${id}`;
+    if (seen.has(key)) return;
+    seen.add(key);
+    const rarity = (() => {
+      if (!isRecordLike(entry.rarity)) return undefined;
+      if (typeof entry.rarity.stars !== 'number' || !Number.isFinite(entry.rarity.stars)) {
+        return undefined;
+      }
+      return cloneJsonValue({
+        stars: entry.rarity.stars,
+        ...(typeof entry.rarity.label === 'string' ? { label: entry.rarity.label } : {}),
+        ...(typeof entry.rarity.color === 'string' ? { color: entry.rarity.color } : {}),
+        ...(typeof entry.rarity.token === 'string' ? { token: entry.rarity.token } : {}),
+        ...(typeof entry.rarity.tagId === 'string' ? { tagId: entry.rarity.tagId } : {}),
+      });
+    })();
+    out.push({
+      sourcePackId,
+      id,
+      ...(typeof entry.name === 'string' && entry.name ? { name: entry.name } : {}),
+      ...(Array.isArray(entry.tags)
+        ? {
+            tags: entry.tags.filter((tag): tag is string => typeof tag === 'string'),
+          }
+        : {}),
+      ...(typeof entry.source === 'string' && entry.source ? { source: entry.source } : {}),
+      ...(rarity ? { rarity } : {}),
+      ...(isRecordLike(entry.meta) ? { meta: cloneJsonValue(entry.meta) } : {}),
+    });
+  });
+  return out;
+}
+
+function matchAggregateSourceItem(
+  sourcePack: PackData,
+  sourceItemId: string,
+  canonicalKey: ItemKey,
+): { item: ItemDef | null; candidateCount: number } {
+  const candidates = sourcePack.items.filter((item) => item.key.id === sourceItemId);
+  if (candidates.length === 0) return { item: null, candidateCount: 0 };
+  const canonicalNbt = stableJsonStringify(canonicalKey.nbt ?? null);
+  const exact = candidates.filter(
+    (item) =>
+      item.key.meta === canonicalKey.meta &&
+      stableJsonStringify(item.key.nbt ?? null) === canonicalNbt,
+  );
+  if (exact.length > 0) {
+    return {
+      item: exact[0] ?? null,
+      candidateCount: exact.length,
+    };
+  }
+  return {
+    item: candidates[0] ?? null,
+    candidateCount: candidates.length,
+  };
+}
+
+function buildAggregateFallbackSourceSnapshot(
+  sourceRef: AggregateMergeSourceRef,
+  canonicalKey: ItemKey,
+  tagIds: string[],
+): AggregateMergeSourceSnapshot {
+  const jeiwebMeta = stripAggregateMeta(sourceRef.meta);
+  const key: ItemKey = {
+    id: sourceRef.id,
+    ...(canonicalKey.meta !== undefined ? { meta: cloneJsonValue(canonicalKey.meta) } : {}),
+    ...(canonicalKey.nbt !== undefined ? { nbt: cloneJsonValue(canonicalKey.nbt) } : {}),
+  };
+  return {
+    sourcePackId: sourceRef.sourcePackId,
+    sourceItemId: sourceRef.id,
+    lookup: 'fallback',
+    candidateCount: 0,
+    key,
+    name: sourceRef.name ?? sourceRef.id,
+    tags: [...(sourceRef.tags ?? [])],
+    tagIds: [...tagIds],
+    ...(sourceRef.source ? { source: sourceRef.source } : {}),
+    ...(sourceRef.rarity ? { rarity: cloneJsonValue(sourceRef.rarity) } : {}),
+    ...(jeiwebMeta ? { jeiwebMeta } : {}),
+  };
+}
+
+function downloadTextFile(text: string, filename: string) {
+  const blob = new Blob([text], { type: 'application/json;charset=utf-8' });
+  const url = URL.createObjectURL(blob);
+  const anchor = document.createElement('a');
+  anchor.href = url;
+  anchor.download = filename;
+  anchor.click();
+  URL.revokeObjectURL(url);
+}
+
+function timestampForFilename(date = new Date()): string {
+  const pad = (value: number) => String(value).padStart(2, '0');
+  return [
+    date.getFullYear(),
+    pad(date.getMonth() + 1),
+    pad(date.getDate()),
+    '-',
+    pad(date.getHours()),
+    pad(date.getMinutes()),
+    pad(date.getSeconds()),
+  ].join('');
+}
+
+async function buildAggregateMergeReport(): Promise<AggregateMergeReport> {
+  const currentPack = pack.value;
+  if (!currentPack) {
+    throw new Error('当前没有已加载的数据包');
+  }
+
+  const sourcePackIds = getAggregateSourcePackIds(currentPack.manifest.packId);
+  if (sourcePackIds.length === 0) {
+    throw new Error('当前数据包不是聚合包');
+  }
+
+  const loadedSources = await Promise.all(
+    sourcePackIds.map(async (sourcePackId) => {
+      const loaded = await loadRuntimePack(sourcePackId);
+      return [sourcePackId, loaded.pack] as const;
+    }),
+  );
+  const sourcePackById = new Map<string, PackData>(loadedSources);
+  const sourceTagIdsByPackId = new Map(
+    loadedSources.map(([sourcePackId, sourcePack]) => [
+      sourcePackId,
+      buildTagIndex(sourcePack).tagIdsByItemId,
+    ]),
+  );
+  const currentTagIdsByItemId =
+    index.value?.tagIdsByItemId ?? buildTagIndex(currentPack).tagIdsByItemId;
+
+  const groups = currentPack.items
+    .map((item): AggregateMergeReportEntry | null => {
+      const sourceRefs = extractAggregateMergeSourceRefs(item);
+      if (sourceRefs.length <= 1) return null;
+
+      const sources = sourceRefs
+        .map((sourceRef): AggregateMergeSourceSnapshot => {
+          const sourcePack = sourcePackById.get(sourceRef.sourcePackId);
+          const sourceTagIdsByItemId = sourceTagIdsByPackId.get(sourceRef.sourcePackId);
+          const fallbackTagIds = sourceTagIdsByItemId
+            ? getSortedTagIds(sourceTagIdsByItemId, sourceRef.id)
+            : [];
+          if (!sourcePack || !sourceTagIdsByItemId) {
+            return buildAggregateFallbackSourceSnapshot(sourceRef, item.key, fallbackTagIds);
+          }
+
+          const matched = matchAggregateSourceItem(sourcePack, sourceRef.id, item.key);
+          if (!matched.item) {
+            return buildAggregateFallbackSourceSnapshot(sourceRef, item.key, fallbackTagIds);
+          }
+
+          return {
+            sourcePackId: sourceRef.sourcePackId,
+            sourceItemId: sourceRef.id,
+            lookup: 'matched',
+            candidateCount: matched.candidateCount,
+            ...buildAggregateMergeItemSnapshot(
+              matched.item,
+              getSortedTagIds(sourceTagIdsByItemId, matched.item.key.id),
+            ),
+          };
+        })
+        .sort(
+          (left, right) =>
+            left.sourcePackId.localeCompare(right.sourcePackId) ||
+            left.sourceItemId.localeCompare(right.sourceItemId),
+        );
+
+      return {
+        canonical: buildAggregateMergeItemSnapshot(
+          item,
+          getSortedTagIds(currentTagIdsByItemId, item.key.id),
+        ),
+        sourceCount: sources.length,
+        sources,
+      };
+    })
+    .filter((entry): entry is AggregateMergeReportEntry => entry !== null)
+    .sort(
+      (left, right) =>
+        left.canonical.name.localeCompare(right.canonical.name, 'zh-CN') ||
+        left.canonical.key.id.localeCompare(right.canonical.key.id),
+    );
+
+  const mergedSourceKeys = new Set(
+    groups.flatMap((group) =>
+      group.sources.map((source) => `${source.sourcePackId}\u0000${source.sourceItemId}`),
+    ),
+  );
+
+  const unmergedBuckets = new Map<string, AggregateUnmergedCandidateItem[]>();
+  loadedSources.forEach(([sourcePackId, sourcePack]) => {
+    const tagIdsByItemId = sourceTagIdsByPackId.get(sourcePackId);
+    if (!tagIdsByItemId) return;
+    sourcePack.items.forEach((item) => {
+      const nameKey = normalizeAggregateExportItemName(item.name ?? '');
+      if (!nameKey) return;
+      const bucket = unmergedBuckets.get(nameKey) ?? [];
+      bucket.push({
+        sourcePackId,
+        sourceItemId: item.key.id,
+        lookup: 'matched',
+        candidateCount: 1,
+        merged: mergedSourceKeys.has(`${sourcePackId}\u0000${item.key.id}`),
+        ...buildAggregateMergeItemSnapshot(item, getSortedTagIds(tagIdsByItemId, item.key.id)),
+      });
+      unmergedBuckets.set(nameKey, bucket);
+    });
+  });
+
+  const unmergedGroups = Array.from(unmergedBuckets.entries())
+    .map(([nameKey, items]): AggregateUnmergedCandidateGroup | null => {
+      const sourcePackIds = Array.from(new Set(items.map((item) => item.sourcePackId))).sort();
+      if (sourcePackIds.length < 2) return null;
+      const unmergedItems = items.filter((item) => !item.merged);
+      if (unmergedItems.length === 0) return null;
+      return {
+        nameKey,
+        displayNames: Array.from(new Set(items.map((item) => item.name))).sort((a, b) =>
+          a.localeCompare(b, 'zh-CN'),
+        ),
+        sourcePackIds,
+        totalItemCount: items.length,
+        unmergedItemCount: unmergedItems.length,
+        items: items.sort(
+          (left, right) =>
+            Number(left.merged) - Number(right.merged) ||
+            left.sourcePackId.localeCompare(right.sourcePackId) ||
+            left.sourceItemId.localeCompare(right.sourceItemId),
+        ),
+      };
+    })
+    .filter((entry): entry is AggregateUnmergedCandidateGroup => entry !== null)
+    .sort(
+      (left, right) =>
+        right.unmergedItemCount - left.unmergedItemCount ||
+        left.displayNames[0]?.localeCompare(right.displayNames[0] ?? '', 'zh-CN') ||
+        left.nameKey.localeCompare(right.nameKey),
+    );
+
+  return {
+    version: 1,
+    generatedAt: new Date().toISOString(),
+    packId: currentPack.manifest.packId,
+    packDisplayName: currentPack.manifest.displayName,
+    sourcePackIds,
+    mergedItemCount: groups.length,
+    groups,
+    unmergedCandidateCount: unmergedGroups.length,
+    unmergedGroups,
+  };
+}
+
+async function exportAggregateMergeReport(mode: 'copy' | 'download'): Promise<void> {
+  if (aggregateMergeReportLoading.value) return;
+  aggregateMergeReportLoading.value = true;
+  try {
+    const report = await buildAggregateMergeReport();
+    const text = JSON.stringify(report, null, 2);
+    if (mode === 'copy') {
+      await copyText(text);
+      $q.notify({
+        type: 'positive',
+        message: `已复制聚合分析 JSON：已合并 ${report.mergedItemCount} 组，未合并候选 ${report.unmergedCandidateCount} 组`,
+      });
+      return;
+    }
+
+    const filename = `${report.packId}-aggregate-merge-report-${timestampForFilename()}.json`;
+    downloadTextFile(text, filename);
+    $q.notify({
+      type: 'positive',
+      message: `已导出聚合分析 JSON：已合并 ${report.mergedItemCount} 组，未合并候选 ${report.unmergedCandidateCount} 组`,
+    });
+  } catch (err) {
+    $q.notify({
+      type: 'negative',
+      message: err instanceof Error ? err.message : '导出聚合合并分析失败',
+    });
+  } finally {
+    aggregateMergeReportLoading.value = false;
+  }
+}
+
+async function onCopyAggregateMergeReport(): Promise<void> {
+  await exportAggregateMergeReport('copy');
+}
+
+async function onDownloadAggregateMergeReport(): Promise<void> {
+  await exportAggregateMergeReport('download');
 }
 
 function openPlannerPayload(payload: PlannerSavePayload, loadKey = `share:${Date.now()}`): void {
@@ -1618,6 +2400,12 @@ const itemListPanelRef = ref<InstanceType<typeof ItemListPanel> | null>(null);
 const listScrollEl = computed(() => itemListPanelRef.value?.listScrollEl ?? null);
 const listGridEl = computed(() => itemListPanelRef.value?.listGridEl ?? null);
 const sampleCellEl = computed(() => itemListPanelRef.value?.sampleCellEl ?? null);
+const listGridColumns = computed(() => {
+  if (settingsStore.itemListIconDisplayMode !== 'jei_classic') return MODERN_GRID_COLUMNS;
+  const gridWidth = listGridEl.value?.clientWidth ?? listScrollEl.value?.clientWidth ?? 0;
+  if (!gridWidth) return 6;
+  return Math.max(1, Math.floor((gridWidth + 6) / (CLASSIC_GRID_MIN_CELL_WIDTH + 6)));
+});
 
 const debugMetrics = ref({
   containerClientHeight: 0,
@@ -1675,7 +2463,7 @@ function scheduleValidate() {
       const gridHeight = Math.ceil(grid.getBoundingClientRect().height);
       debugMetrics.value.gridHeight = gridHeight;
       if (gridHeight > contentHeight + 1) {
-        const nextSize = Math.max(gridColumns, pageSize.value - gridColumns);
+        const nextSize = Math.max(listGridColumns.value, pageSize.value - listGridColumns.value);
         if (nextSize !== pageSize.value) {
           debugLog('validate: overflow -> shrink', {
             contentHeight,
@@ -1716,7 +2504,7 @@ function recomputePageSize(explicitHeight?: number) {
     contentHeight,
     available,
     cell,
-    gridColumns,
+    gridColumns: listGridColumns.value,
     gridGap,
   });
 
@@ -1735,7 +2523,7 @@ function recomputePageSize(explicitHeight?: number) {
     used = rows * (cell + gridGap) - gridGap;
   }
 
-  const size = Math.max(gridColumns, rows * gridColumns);
+  const size = Math.max(listGridColumns.value, rows * listGridColumns.value);
 
   debugMetrics.value.contentHeight = Math.floor(contentHeight);
   debugMetrics.value.available = available;
@@ -1762,11 +2550,19 @@ const favoriteItems = computed(() => {
   return entries;
 });
 
+// JEI Classic 模式下每行能显示更多物品，历史记录数量按比例放大
+const effectiveHistoryLimit = computed(() => {
+  const base = settingsStore.historyLimit;
+  if (settingsStore.itemListIconDisplayMode === 'jei_classic') {
+    return base * 4;
+  }
+  return base;
+});
+
 const historyItems = computed(() => {
   const map = index.value?.itemsByKeyHash;
   if (!map) return [];
-  // 按照 settings.historyLimit 截取
-  const limit = settingsStore.historyLimit;
+  const limit = effectiveHistoryLimit.value;
   const sliced = historyKeyHashes.value.slice(0, limit);
 
   return sliced
@@ -1778,9 +2574,9 @@ const historyItems = computed(() => {
     .filter((v): v is { keyHash: string; def: ItemDef } => v !== null);
 });
 
-// 生成带占位的历史记录列表，长度固定为 historyLimit
+// 生成带占位的历史记录列表，长度固定为 effectiveHistoryLimit
 const paddedHistoryItems = computed(() => {
-  const limit = settingsStore.historyLimit;
+  const limit = effectiveHistoryLimit.value;
   const real = historyItems.value;
   const list: ({ keyHash: string; def: ItemDef } | null)[] = [...real];
   // 补齐 null
@@ -1804,6 +2600,8 @@ onMounted(async () => {
 
   window.addEventListener('jei:import-shared-plan', handleImportSharedPlanRequest);
   window.addEventListener('keydown', onKeyDown, true);
+  window.addEventListener('keyup', onKeyUp, true);
+  window.addEventListener('blur', onWindowBlur);
   window.addEventListener('resize', onWindowResize);
 });
 
@@ -1854,8 +2652,13 @@ watch(
 onUnmounted(() => {
   window.removeEventListener('jei:import-shared-plan', handleImportSharedPlanRequest);
   window.removeEventListener('keydown', onKeyDown, true);
+  window.removeEventListener('keyup', onKeyUp, true);
+  window.removeEventListener('blur', onWindowBlur);
   window.removeEventListener('resize', onWindowResize);
   resizeObserver.value?.disconnect();
+  clearSearchFilterDebounceTimer();
+  searchWorker.value?.terminate();
+  searchWorker.value = null;
   runtimePackDispose.value?.();
   runtimePackDispose.value = null;
 });
@@ -1900,6 +2703,30 @@ watch(activePackId, async (next) => {
   void recomputePageSize(); // 切 pack 后重新计算一次
 });
 watch(
+  () => settingsStore.itemListIconDisplayMode,
+  () => {
+    pageSize.value = 0;
+    void nextTick(() => recomputePageSize());
+  },
+);
+watch(
+  () => settingsStore.language,
+  (lang) => {
+    const p = pack.value;
+    if (!p) return;
+    resolveAllItemsLocale(p.items, lang);
+    resolveAllRecipeTypesLocale(p.recipeTypes, lang);
+    const wikiMap: Record<string, Record<string, unknown>> = {};
+    for (const item of p.items) {
+      if (item.wiki && item.key.id) {
+        wikiMap[item.key.id] = item.wiki;
+      }
+    }
+    p.wiki = wikiMap;
+    index.value = buildJeiIndex(p);
+  },
+);
+watch(
   () => [settingsOpen.value, activePackId.value] as const,
   async ([open]) => {
     if (!open) return;
@@ -1931,6 +2758,18 @@ watch(
     applyImageProxyToPack(pack.value);
   },
 );
+watch(
+  () => settingsStore.persistHistoryRecords,
+  (enabled) => {
+    const packId = pack.value?.manifest.packId;
+    if (!packId) return;
+    if (enabled) {
+      saveHistoryKeyHashes(packId, historyKeyHashes.value);
+      return;
+    }
+    removeHistoryKeyHashes(packId);
+  },
+);
 
 async function reloadPack(packId: string) {
   error.value = '';
@@ -1951,6 +2790,8 @@ async function reloadPack(packId: string) {
     });
     runtimePackDispose.value = loaded.dispose;
     pack.value = loaded.pack;
+    resolveAllItemsLocale(loaded.pack.items, settingsStore.language);
+    resolveAllRecipeTypesLocale(loaded.pack.recipeTypes, settingsStore.language);
     packRoutingRuntimeStore.setActiveBaseUrl(packId, getActivePackBaseUrl(packId));
 
     const startupDialog = loaded.pack.manifest.startupDialog;
@@ -2002,6 +2843,9 @@ async function reloadPack(packId: string) {
     favorites.value = await loadFavorites(loaded.pack.manifest.packId);
     savedPlans.value = await loadPlans(loaded.pack.manifest.packId);
     plannerLiveState.value = await loadPlannerLiveState(loaded.pack.manifest.packId);
+    historyKeyHashes.value = settingsStore.persistHistoryRecords
+      ? await loadHistoryKeyHashes(loaded.pack.manifest.packId)
+      : [];
     plannerInitialState.value = null;
     selectedKeyHash.value = filteredItems.value[0]?.keyHash ?? null;
 
@@ -2511,8 +3355,9 @@ function ensurePlannerAutoForCurrentItem() {
 
 function openDialogByKeyHash(
   keyHash: string,
-  tab: 'recipes' | 'uses' | 'wiki' | 'icon' | 'planner' = 'recipes',
+  tab?: 'recipes' | 'uses' | 'wiki' | 'icon' | 'planner',
 ) {
+  const actualTab = tab ?? settingsStore.itemClickDefaultTab;
   const def = index.value?.itemsByKeyHash.get(keyHash);
   if (!def) return;
 
@@ -2523,18 +3368,17 @@ function openDialogByKeyHash(
 
   selectedKeyHash.value = keyHash;
   navStack.value = [def.key];
-  activeTab.value = tab;
-  plannerInitialState.value = tab === 'planner' ? buildAutoPlannerInitialState(def.key) : null;
-  if (tab !== 'planner') plannerTab.value = 'tree';
+  activeTab.value = actualTab;
+  plannerInitialState.value =
+    actualTab === 'planner' ? buildAutoPlannerInitialState(def.key) : null;
+  if (actualTab !== 'planner') plannerTab.value = 'tree';
   dialogOpen.value = settingsStore.recipeViewMode === 'dialog';
   pushHistoryKeyHash(keyHash);
   void syncUrl('push');
 }
 
-function openDialogByItemKey(
-  key: ItemKey,
-  tab: 'recipes' | 'uses' | 'wiki' | 'icon' | 'planner' = 'recipes',
-) {
+function openDialogByItemKey(key: ItemKey, tab?: 'recipes' | 'uses' | 'wiki' | 'icon' | 'planner') {
+  const actualTab = tab ?? settingsStore.itemClickDefaultTab;
   // 如果当前不在资料查看器，切换到资料查看器
   if (centerTab.value !== 'recipe') {
     centerTab.value = 'recipe';
@@ -2543,39 +3387,38 @@ function openDialogByItemKey(
   // 防止重复压栈
   const last = navStack.value[navStack.value.length - 1];
   if (last && itemKeyHash(last) === itemKeyHash(key)) {
-    activeTab.value = tab;
-    if (tab === 'planner' && !plannerInitialState.value) {
+    activeTab.value = actualTab;
+    if (actualTab === 'planner' && !plannerInitialState.value) {
       plannerInitialState.value = buildAutoPlannerInitialState(key);
     }
     return;
   }
 
   navStack.value = [...navStack.value, key];
-  activeTab.value = tab;
-  plannerInitialState.value = tab === 'planner' ? buildAutoPlannerInitialState(key) : null;
-  if (tab !== 'planner') plannerTab.value = 'tree';
+  activeTab.value = actualTab;
+  plannerInitialState.value = actualTab === 'planner' ? buildAutoPlannerInitialState(key) : null;
+  if (actualTab !== 'planner') plannerTab.value = 'tree';
   pushHistoryKeyHash(itemKeyHash(key));
   void syncUrl('push');
 }
 
-function openStackDialog(
-  keyHash: string,
-  tab: 'recipes' | 'uses' | 'wiki' | 'icon' | 'planner' = 'recipes',
-) {
+function openStackDialog(keyHash: string, tab?: 'recipes' | 'uses' | 'wiki' | 'icon' | 'planner') {
+  const actualTab = tab ?? settingsStore.itemClickDefaultTab;
   const def = index.value?.itemsByKeyHash.get(keyHash);
   if (!def) return;
   if (dialogOpen.value || settingsStore.recipeViewMode === 'panel') {
-    openDialogByItemKey(def.key, tab);
+    openDialogByItemKey(def.key, actualTab);
   } else {
-    openDialogByKeyHash(keyHash, tab);
+    openDialogByKeyHash(keyHash, actualTab);
   }
 }
 
 function openDialogFromFavorites(keyHash: string) {
+  const tab = settingsStore.itemClickDefaultTab;
   if (settingsStore.favoritesOpensNewStack) {
-    openStackDialog(keyHash, 'recipes');
+    openStackDialog(keyHash, tab);
   } else {
-    openDialogByKeyHash(keyHash, 'recipes');
+    openDialogByKeyHash(keyHash, tab);
   }
 }
 
@@ -2671,14 +3514,16 @@ function closeDialog() {
 }
 
 function onKeyDown(e: KeyboardEvent) {
+  const bindings = keyBindingsStore.bindings;
+  if (eventMatchesBinding(e, bindings.hoverTooltipInteract)) {
+    settingsStore.setHoverTooltipTemporaryInteractive(true);
+  }
+
   const target = e.target as HTMLElement | null;
   const tag = target?.tagName?.toLowerCase() ?? '';
   const isTyping =
     tag === 'input' || tag === 'textarea' || target?.getAttribute('contenteditable') === 'true';
   if (isTyping) return;
-
-  // 获取快捷键绑定
-  const bindings = keyBindingsStore.bindings;
 
   // 导航快捷键（在面板模式和对话框模式下都工作）
   if (navStack.value.length > 0) {
@@ -2852,6 +3697,16 @@ function onKeyDown(e: KeyboardEvent) {
   }
 }
 
+function onKeyUp(e: KeyboardEvent) {
+  if (eventReleasesBinding(e, keyBindingsStore.bindings.hoverTooltipInteract)) {
+    settingsStore.setHoverTooltipTemporaryInteractive(false);
+  }
+}
+
+function onWindowBlur() {
+  settingsStore.setHoverTooltipTemporaryInteractive(false);
+}
+
 function favoritesStorageKey(packId: string) {
   return `jei.favorites.${packId}`;
 }
@@ -2862,6 +3717,49 @@ function plansStorageKey(packId: string) {
 
 function plannerLiveStorageKey(packId: string) {
   return `jei.planner.live.${packId}`;
+}
+
+function historyStorageKey(packId: string) {
+  return `jei.history.${packId}`;
+}
+
+function normalizeHistoryKeyHashes(v: unknown): string[] {
+  if (!Array.isArray(v)) return [];
+  const deduped = new Set<string>();
+  v.forEach((entry) => {
+    if (typeof entry === 'string' && entry) deduped.add(entry);
+  });
+  return Array.from(deduped).slice(0, 100);
+}
+
+async function loadHistoryKeyHashes(packId: string): Promise<string[]> {
+  const key = historyStorageKey(packId);
+  const raw = storage.isUsingJEIStorage() ? await storage.getItem(key) : localStorage.getItem(key);
+  if (!raw) return [];
+  try {
+    return normalizeHistoryKeyHashes(JSON.parse(raw) as unknown);
+  } catch {
+    return [];
+  }
+}
+
+function saveHistoryKeyHashes(packId: string, keys: string[]) {
+  const key = historyStorageKey(packId);
+  const value = JSON.stringify(normalizeHistoryKeyHashes(keys));
+  if (storage.isUsingJEIStorage()) {
+    void storage.setItem(key, value);
+  } else {
+    localStorage.setItem(key, value);
+  }
+}
+
+function removeHistoryKeyHashes(packId: string) {
+  const key = historyStorageKey(packId);
+  if (storage.isUsingJEIStorage()) {
+    void storage.removeItem(key);
+  } else {
+    localStorage.removeItem(key);
+  }
 }
 
 function normalizeStringRecord(v: unknown): Record<string, string> {
@@ -2887,8 +3785,10 @@ function normalizeNodePositionRecord(v: unknown): Record<string, PlannerNodePosi
   return Object.keys(out).length ? out : undefined;
 }
 
-function normalizeRateDisplayUnit(v: unknown): PlannerRateDisplayUnit | undefined {
-  return v === 'per_second' || v === 'per_minute' || v === 'per_hour' ? v : undefined;
+function normalizeRateDisplayUnit(v: unknown): PlannerTargetUnit | undefined {
+  return v === 'items' || v === 'per_second' || v === 'per_minute' || v === 'per_hour'
+    ? v
+    : undefined;
 }
 
 function normalizeAdvancedPlannerViewState(v: unknown): AdvancedPlannerViewState | undefined {
@@ -3387,48 +4287,11 @@ function toggleFavorite(keyHash: string) {
 }
 
 function pushHistoryKeyHash(keyHash: string) {
-  // 保持历史记录多一点,展示的时候再截断
   const next = [keyHash, ...historyKeyHashes.value.filter((k) => k !== keyHash)].slice(0, 100);
   historyKeyHashes.value = next;
-}
-
-function matchesSearch(
-  def: ItemDef,
-  searchExpression: ReturnType<typeof parseSearchExpression>,
-  nameKeys?: NameSearchKeys,
-): boolean {
-  const name = nameKeys?.nameLower ?? (def.name ?? '').toLowerCase();
-  const pinyinFull = nameKeys?.pinyinFull ?? '';
-  const pinyinFirst = nameKeys?.pinyinFirst ?? '';
-  const id = def.key.id.toLowerCase();
-  const gameId = (id.includes(':') ? id.split(':')[0] : id.split('.')[0]) ?? '';
-  const tags = index.value?.tagIdsByItemId.get(def.key.id);
-
-  const tagMatches = (term: string): boolean => {
-    if (!tags) return false;
-    return Array.from(tags).some((tagId) => tagId.toLowerCase().includes(term));
-  };
-
-  const matchesTerm = (term: SearchTerm): boolean => {
-    switch (term.field) {
-      case 'text': {
-        if (name.includes(term.value)) return true;
-        const q = normalizePinyinQuery(term.value);
-        if (q && (pinyinFull.includes(q) || pinyinFirst.includes(q))) return true;
-        if (id.includes(term.value)) return true;
-        if (tagMatches(term.value)) return true;
-        return false;
-      }
-      case 'itemId':
-        return id.includes(term.value);
-      case 'gameId':
-        return gameId.includes(term.value);
-      case 'tag':
-        return tagMatches(term.value);
-    }
-  };
-
-  return evaluateSearchExpression(searchExpression, matchesTerm);
+  const packId = pack.value?.manifest.packId;
+  if (!packId || !settingsStore.persistHistoryRecords) return;
+  saveHistoryKeyHashes(packId, next);
 }
 </script>
 

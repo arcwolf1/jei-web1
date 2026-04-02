@@ -23,14 +23,7 @@
         class="col"
       >
         <template #append>
-          <q-btn
-            flat
-            round
-            dense
-            icon="sell"
-            color="grey-7"
-            @click="quickTagDialogOpen = true"
-          />
+          <q-btn flat round dense icon="sell" color="grey-7" @click="quickTagDialogOpen = true" />
           <q-icon
             v-if="filterText"
             name="filter_list"
@@ -190,6 +183,10 @@
                 :key="idx"
                 :model-value="tag"
                 :options="filteredTagsOptions"
+                emit-value
+                map-options
+                option-label="label"
+                option-value="value"
                 dense
                 outlined
                 clearable
@@ -237,7 +234,9 @@
           <div class="text-h6">{{ t('quickTagFilter') }}</div>
         </q-card-section>
         <q-card-section class="q-pt-none">
-          <div v-if="props.availableTags.length === 0" class="text-grey-7">{{ t('noOptions') }}</div>
+          <div v-if="props.availableTags.length === 0" class="text-grey-7">
+            {{ t('noOptions') }}
+          </div>
           <div v-else class="row q-gutter-xs wrap">
             <q-chip
               v-for="tag in props.availableTags"
@@ -247,7 +246,7 @@
               clickable
               @click="applyQuickTag(tag)"
             >
-              {{ tag }}
+              {{ props.getTagDisplayName(tag) }}
             </q-chip>
           </div>
         </q-card-section>
@@ -274,6 +273,7 @@ type ParsedSearch = {
   gameId: string[];
   tag: string[];
 };
+type TagOption = { label: string; value: string };
 
 const props = defineProps<{
   activePackId: string;
@@ -284,6 +284,7 @@ const props = defineProps<{
   availableItemIds: string[];
   availableGameIds: string[];
   availableTags: string[];
+  getTagDisplayName: (tagId: string) => string;
 }>();
 
 const emit = defineEmits<{
@@ -312,10 +313,22 @@ const availableItemIdsFiltered = ref<string[]>([]);
 const availableGameIdsFiltered = ref<string[]>([]);
 const availableTagsFiltered = ref<string[]>([]);
 
-const filteredTagsOptions = computed(() => {
-  return availableTagsFiltered.value.length > 0
-    ? availableTagsFiltered.value
-    : props.availableTags.slice(0, 50);
+const tagOptions = computed<TagOption[]>(() => {
+  return props.availableTags.map((tag) => ({
+    value: tag,
+    label: props.getTagDisplayName(tag),
+  }));
+});
+
+const filteredTagsOptions = computed<TagOption[]>(() => {
+  const candidates =
+    availableTagsFiltered.value.length > 0
+      ? availableTagsFiltered.value
+      : props.availableTags.slice(0, 50);
+  return candidates.map((tag) => ({
+    value: tag,
+    label: props.getTagDisplayName(tag),
+  }));
 });
 
 function filterItemIds(val: string, update: (callback: () => void) => void) {
@@ -361,8 +374,14 @@ function filterTags(val: string, update: (callback: () => void) => void, idx: nu
   update(() => {
     const needle = val.toLowerCase();
     const selected = new Set(filterForm.value.tags.filter((_, i) => i !== idx));
-    availableTagsFiltered.value = props.availableTags
-      .filter((v) => v.toLowerCase().includes(needle) && !selected.has(v))
+    availableTagsFiltered.value = tagOptions.value
+      .filter(
+        (option) =>
+          (option.value.toLowerCase().includes(needle) ||
+            option.label.toLowerCase().includes(needle)) &&
+          !selected.has(option.value),
+      )
+      .map((option) => option.value)
       .slice(0, 50);
   });
 }
@@ -504,7 +523,7 @@ function insertExpressionToken(token: string) {
 }
 
 function applyQuickTag(tag: string) {
-  emit('update:filter-text', `@tag:${tag}`);
+  emit('update:filter-text', `@tag:${props.getTagDisplayName(tag)}`);
   quickTagDialogOpen.value = false;
 }
 

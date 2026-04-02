@@ -5,10 +5,16 @@ import { storage } from 'src/utils/storage';
 import messages from 'src/i18n';
 
 export type MessageLanguages = keyof typeof messages;
-// Type-define 'en-US' as master schema for resource keys (not values)
-export type MessageSchema = {
-  [K in keyof (typeof messages)['en-US']]: string;
+type LocaleSchema<T> = {
+  [K in keyof T]: T[K] extends string
+    ? string
+    : T[K] extends ReadonlyArray<unknown>
+      ? string[]
+      : T[K] extends Record<string, unknown>
+        ? LocaleSchema<T[K]>
+        : string;
 };
+export type MessageSchema = LocaleSchema<(typeof messages)['en-US']>;
 
 // See https://vue-i18n.intlify.dev/guide/advanced/typescript.html#global-resource-schema-type-definition
 /* eslint-disable @typescript-eslint/no-empty-object-type */

@@ -5,18 +5,20 @@
   >
     <div class="collection-shell">
       <section class="collection-head">
-        <h1>电路谜题收录</h1>
+        <h1>{{ t('circuitPuzzleCollection') }}</h1>
         <p class="collection-tip">
-          目录约定：`public/circuit-puzzle-levels/index.json` + 每题 `json/md` 文件。
+          {{ t('circuitPuzzleDirTip') }}
         </p>
         <div class="head-actions">
-          <button type="button" class="collection-btn" @click="reloadIndex">重新加载索引</button>
+          <button type="button" class="collection-btn" @click="reloadIndex">
+            {{ t('reloadIndex') }}
+          </button>
           <label class="search-box">
-            <span>关卡搜索</span>
+            <span>{{ t('levelSearch') }}</span>
             <input
               v-model.trim="searchKeyword"
               type="text"
-              placeholder="标题 / ID / 标签 / 作者 / 难度"
+              :placeholder="t('levelSearchPlaceholder')"
             />
           </label>
           <label class="preview-toggle">
@@ -25,23 +27,23 @@
               :checked="settingsStore.circuitCollectionPreviewShowPieces"
               @change="onPreviewToggleChange"
             />
-            <span>预览显示方块覆盖</span>
+            <span>{{ t('previewShowPieces') }}</span>
           </label>
         </div>
       </section>
 
-      <div v-if="indexLoading" class="state-card">正在加载收录索引...</div>
+      <div v-if="indexLoading" class="state-card">{{ t('loadingIndex') }}</div>
       <div v-else-if="indexError" class="state-card state-card--error">{{ indexError }}</div>
 
       <div v-else class="collection-grid">
         <aside class="entry-list-panel">
-          <h2>{{ collectionIndex?.title ?? '题目列表' }}</h2>
+          <h2>{{ collectionIndex?.title ?? t('puzzleList') }}</h2>
           <div class="entry-list-body">
             <div v-if="!entries.length" class="empty-text">
-              索引为空，请先在 public 目录添加题目。
+              {{ t('indexEmpty') }}
             </div>
             <div v-else-if="!visibleEntries.length" class="empty-text">
-              未匹配到关卡，请调整搜索关键词。
+              {{ t('noMatch') }}
             </div>
             <button
               v-for="entry in visibleEntries"
@@ -54,8 +56,8 @@
               <div class="entry-title">{{ entry.title }}</div>
               <div class="entry-meta">
                 <span>{{ entry.id }}</span>
-                <span v-if="entry.difficulty">难度: {{ entry.difficulty }}</span>
-                <span v-if="entry.author">作者: {{ entry.author }}</span>
+                <span v-if="entry.difficulty">{{ t('difficulty') }}: {{ entry.difficulty }}</span>
+                <span v-if="entry.author">{{ t('author') }}: {{ entry.author }}</span>
               </div>
               <div v-if="entry.tags.length" class="entry-tags">
                 <span v-for="tag in entry.tags" :key="`${entry.id}-${tag}`" class="tag-chip">{{
@@ -67,10 +69,10 @@
                   v-if="entry.id in previewErrorById"
                   class="entry-preview-tip entry-preview-tip--error"
                 >
-                  预览加载失败
+                  {{ t('previewLoadFailed') }}
                 </div>
                 <div v-else-if="previewLoadingById[entry.id]" class="entry-preview-tip">
-                  预览加载中...
+                  {{ t('previewLoading') }}
                 </div>
                 <div
                   v-else-if="entry.id in previewById"
@@ -113,7 +115,7 @@
 
         <main class="entry-detail-panel">
           <div class="entry-detail-body">
-            <div v-if="!selectedEntry" class="state-card">请选择左侧题目。</div>
+            <div v-if="!selectedEntry" class="state-card">{{ t('selectPuzzle') }}</div>
 
             <template v-else>
               <header class="detail-head">
@@ -128,7 +130,7 @@
                     :disabled="!loadedLevel"
                     @click="openInPuzzle('play')"
                   >
-                    在试玩打开
+                    {{ t('openInPlay') }}
                   </button>
                   <button
                     type="button"
@@ -136,7 +138,7 @@
                     :disabled="!loadedLevel"
                     @click="openInPuzzle('editor')"
                   >
-                    在编辑器打开
+                    {{ t('openInEditor') }}
                   </button>
                 </div>
               </header>
@@ -156,20 +158,20 @@
                 </div>
               </section>
 
-              <div v-if="entryLoading" class="state-card">正在加载题目文件...</div>
+              <div v-if="entryLoading" class="state-card">{{ t('loadingPuzzle') }}</div>
               <div v-else-if="entryError" class="state-card state-card--error">
                 {{ entryError }}
               </div>
 
               <template v-else>
                 <section class="markdown-card">
-                  <h3>题目说明</h3>
+                  <h3>{{ t('puzzleDescription') }}</h3>
                   <div class="doc-md" v-html="renderedMarkdown"></div>
                 </section>
 
                 <section class="markdown-card">
                   <details class="json-details">
-                    <summary>关卡 JSON 预览</summary>
+                    <summary>{{ t('levelJsonPreview') }}</summary>
                     <pre class="json-preview">{{ levelJsonPreview }}</pre>
                   </details>
                 </section>
@@ -186,6 +188,7 @@
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue';
 import { useQuasar } from 'quasar';
 import { useRoute, useRouter } from 'vue-router';
+import { useI18n } from 'vue-i18n';
 import MarkdownIt from 'markdown-it';
 import {
   parseCollectionIndex,
@@ -202,13 +205,18 @@ import {
   type PuzzleJsonDocument,
   type PuzzleMultiLevelDefinition,
 } from 'src/components/circuit-puzzle/multi-level-format';
+
+const { t } = useI18n();
 import {
   collectType2BlockIds,
   isType2PuzzleDocument,
   parseType2BlockJson,
   parseType2PuzzleDocument,
 } from 'src/components/circuit-puzzle/type2-format';
-import { encodeMultiLevelForUrlV3, encodeSingleLevelForUrlV3 } from 'src/components/circuit-puzzle/url-format-v3';
+import {
+  encodeMultiLevelForUrlV3,
+  encodeSingleLevelForUrlV3,
+} from 'src/components/circuit-puzzle/url-format-v3';
 import type { GridCell, PuzzleLevelDefinition } from 'src/components/circuit-puzzle/types';
 import { useSettingsStore } from 'src/stores/settings';
 
@@ -286,7 +294,9 @@ onUnmounted(() => {
 
 const indexLoading = ref(false);
 const indexError = ref('');
-const collectionIndex = ref<(Omit<PuzzleCollectionIndex, 'entries'> & { entries: RuntimeCollectionEntry[] }) | null>(null);
+const collectionIndex = ref<
+  (Omit<PuzzleCollectionIndex, 'entries'> & { entries: RuntimeCollectionEntry[] }) | null
+>(null);
 const selectedEntryId = ref<string | null>(null);
 
 const entryLoading = ref(false);
@@ -331,7 +341,7 @@ const resolvedMarkdownPath = computed(() => {
   return resolveCollectionAssetPath(collectionIndex.value.basePath, selectedEntry.value.markdown);
 });
 const renderedMarkdown = computed(() =>
-  markdown.render(loadedMarkdown.value || '_暂无题目说明。_'),
+  markdown.render(loadedMarkdown.value || `_${t('noDescription')}_`),
 );
 const levelJsonPreview = computed(() => {
   if (loadedMultiPuzzle.value) {
@@ -368,7 +378,10 @@ async function loadType2BlockLibrary(
       const blockPath = resolveType2BlockPath(jsonPath, blockId);
       const cached = type2BlockCache.get(blockPath);
       if (cached) {
-        blockCellsById.set(blockId, cached.map((cell) => ({ ...cell })));
+        blockCellsById.set(
+          blockId,
+          cached.map((cell) => ({ ...cell })),
+        );
         return;
       }
 
@@ -384,8 +397,14 @@ async function loadType2BlockLibrary(
           errors.push(`type2 block invalid (${blockPath}): ${parsed.errors.join('; ')}`);
           return;
         }
-        type2BlockCache.set(blockPath, parsed.cells.map((cell) => ({ ...cell })));
-        blockCellsById.set(blockId, parsed.cells.map((cell) => ({ ...cell })));
+        type2BlockCache.set(
+          blockPath,
+          parsed.cells.map((cell) => ({ ...cell })),
+        );
+        blockCellsById.set(
+          blockId,
+          parsed.cells.map((cell) => ({ ...cell })),
+        );
       } catch (err) {
         const message = err instanceof Error ? err.message : 'unknown';
         errors.push(`type2 block load failed (${blockPath}): ${message}`);
@@ -443,12 +462,20 @@ async function parsePrimaryLevelFromDocument(
 }
 
 function normalizeRelativeAssetPath(path: string): string {
-  return path.replace(/\\/g, '/').replace(/^\.\/+/, '').replace(/^\/+/, '').replace(/\/+$/, '').trim();
+  return path
+    .replace(/\\/g, '/')
+    .replace(/^\.\/+/, '')
+    .replace(/^\/+/, '')
+    .replace(/\/+$/, '')
+    .trim();
 }
 
 function joinRelativeAssetPath(baseDir: string, child: string): string {
   const base = normalizeRelativeAssetPath(baseDir);
-  const next = child.replace(/\\/g, '/').replace(/^\.\/+/, '').trim();
+  const next = child
+    .replace(/\\/g, '/')
+    .replace(/^\.\/+/, '')
+    .trim();
   if (!next) return base;
   if (next.startsWith('/')) return next.slice(1);
   if (!base) return next;
@@ -456,12 +483,17 @@ function joinRelativeAssetPath(baseDir: string, child: string): string {
 }
 
 function sanitizeEntryIdSegment(value: string): string {
-  const safe = value.trim().replace(/[^a-zA-Z0-9_-]+/g, '-').replace(/-+/g, '-').replace(/^-|-$/g, '');
+  const safe = value
+    .trim()
+    .replace(/[^a-zA-Z0-9_-]+/g, '-')
+    .replace(/-+/g, '-')
+    .replace(/^-|-$/g, '');
   return safe || 'stage';
 }
 
 function addDirectoryTag(tags: string[], directory: string): string[] {
-  const base = normalizeRelativeAssetPath(directory).split('/').filter(Boolean).pop() ?? 'directory';
+  const base =
+    normalizeRelativeAssetPath(directory).split('/').filter(Boolean).pop() ?? 'directory';
   const next = [...tags];
   if (!next.includes(base)) next.push(base);
   return next;
@@ -585,7 +617,9 @@ async function expandCollectionEntries(
   basePath: string,
   inputEntries: PuzzleCollectionEntry[],
 ): Promise<RuntimeCollectionEntry[]> {
-  const groups = await Promise.all(inputEntries.map((entry) => expandDirectoryEntry(entry, basePath)));
+  const groups = await Promise.all(
+    inputEntries.map((entry) => expandDirectoryEntry(entry, basePath)),
+  );
   const output: RuntimeCollectionEntry[] = [];
   const usedIds = new Set<string>();
   for (const group of groups) {
@@ -873,11 +907,11 @@ async function loadEntryAssets(entry: PuzzleCollectionEntry): Promise<void> {
   try {
     const jsonPath = resolveCollectionAssetPath(collectionIndex.value.basePath, entry.json);
     const jsonResp = await fetch(jsonPath, { headers: { Accept: 'application/json' } });
-    if (!jsonResp.ok) throw new Error(`JSON 文件加载失败: ${jsonPath}`);
+    if (!jsonResp.ok) throw new Error(`${t('jsonLoadFailed')}: ${jsonPath}`);
     const rawJson = (await jsonResp.json()) as unknown;
     const parsed = await parseDocumentWithType2Fallback(rawJson, jsonPath);
     if (!parsed.document) {
-      throw new Error(`关卡 JSON 校验失败: ${parsed.errors.join('; ')}`);
+      throw new Error(`${t('levelJsonValidationFailed')}: ${parsed.errors.join('; ')}`);
     }
     if (parsed.document.kind === 'multi') {
       const preferredLevelIndex = getEntryStageIndex(entry) ?? 0;
@@ -891,11 +925,11 @@ async function loadEntryAssets(entry: PuzzleCollectionEntry): Promise<void> {
     if (entry.markdown) {
       const mdPath = resolveCollectionAssetPath(collectionIndex.value.basePath, entry.markdown);
       const mdResp = await fetch(mdPath, { headers: { Accept: 'text/markdown, text/plain' } });
-      if (!mdResp.ok) throw new Error(`Markdown 文件加载失败: ${mdPath}`);
+      if (!mdResp.ok) throw new Error(`${t('mdLoadFailed')}: ${mdPath}`);
       loadedMarkdown.value = await mdResp.text();
     }
   } catch (err) {
-    entryError.value = err instanceof Error ? err.message : '题目资源加载失败';
+    entryError.value = err instanceof Error ? err.message : t('puzzleResourceLoadFailed');
   } finally {
     entryLoading.value = false;
   }
@@ -919,13 +953,16 @@ async function reloadIndex(): Promise<void> {
 
   try {
     const resp = await fetch(INDEX_PATH, { headers: { Accept: 'application/json' } });
-    if (!resp.ok) throw new Error(`索引文件加载失败: ${INDEX_PATH}`);
+    if (!resp.ok) throw new Error(`${t('indexFileLoadFailed')}: ${INDEX_PATH}`);
     const raw = (await resp.json()) as unknown;
     const parsed = parseCollectionIndex(raw);
     if (!parsed.index) {
-      throw new Error(`索引格式错误: ${parsed.errors.join('; ')}`);
+      throw new Error(`${t('indexFormatError')}: ${parsed.errors.join('; ')}`);
     }
-    const expandedEntries = await expandCollectionEntries(parsed.index.basePath, parsed.index.entries);
+    const expandedEntries = await expandCollectionEntries(
+      parsed.index.basePath,
+      parsed.index.entries,
+    );
     collectionIndex.value = {
       ...parsed.index,
       entries: expandedEntries,
@@ -942,7 +979,7 @@ async function reloadIndex(): Promise<void> {
     }
     void loadAllPreviews(expandedEntries);
   } catch (err) {
-    indexError.value = err instanceof Error ? err.message : '收录索引加载失败';
+    indexError.value = err instanceof Error ? err.message : t('indexLoadFailed');
   } finally {
     indexLoading.value = false;
   }
@@ -976,7 +1013,7 @@ function openInPuzzle(tab: 'play' | 'editor'): void {
   } catch {
     $q.notify({
       type: 'negative',
-      message: '题目编码失败，无法跳转到试玩页。',
+      message: t('puzzleEncodeFailed'),
     });
   }
 }

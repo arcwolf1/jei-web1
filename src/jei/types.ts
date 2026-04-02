@@ -28,6 +28,22 @@ export interface JeiWebWikiRendererDef {
   data?: unknown;
 }
 
+export interface ItemI18nEntry {
+  name: string;
+  description?: string;
+  wiki?: Record<string, unknown>;
+  raw?: unknown;
+  source?: Record<string, unknown>;
+  wikis?: Record<string, Record<string, unknown>>;
+  sources?: Record<string, unknown>;
+}
+
+export interface JeiWebLocaleDataEntry {
+  wiki?: Record<string, unknown>;
+  raw?: unknown;
+  sources?: Record<string, unknown>;
+}
+
 export interface ItemExtensions {
   jeiweb?: {
     wiki?: {
@@ -35,7 +51,8 @@ export interface ItemExtensions {
       sources?: Record<string, unknown>;
       meta?: Record<string, unknown>;
     };
-    i18n?: Record<string, Record<string, unknown>>;
+    i18n?: Record<string, ItemI18nEntry>;
+    localeData?: Record<string, JeiWebLocaleDataEntry>;
     meta?: Record<string, unknown>;
   };
   [extensionId: string]: unknown;
@@ -60,6 +77,10 @@ export interface ItemDef {
   };
   detailPath?: string;
   detailLoaded?: boolean;
+  wiki?: Record<string, unknown>;
+  wikis?: Record<string, Record<string, unknown>>;
+  i18n?: Record<string, ItemI18nEntry>;
+  extensions?: ItemExtensions;
 }
 
 export interface StackItem {
@@ -113,12 +134,14 @@ export interface ParamSchemaEntry {
 export interface RecipeTypeDef {
   key: string;
   displayName: string;
+  category?: string;
   renderer: string;
   plannerPriority?: number;
   machine?: RecipeTypeMachine | RecipeTypeMachine[];
   slots?: SlotDef[];
   paramSchema?: Record<string, ParamSchemaEntry>;
   defaults?: Record<string, unknown>;
+  i18n?: Record<string, { displayName: string }>;
 }
 
 export interface Recipe {
@@ -160,6 +183,8 @@ export interface ItemDef {
   detailLoaded?: boolean;
   recipes?: InlineRecipe[];
   wiki?: Record<string, unknown>;
+  wikis?: Record<string, Record<string, unknown>>;
+  i18n?: Record<string, ItemI18nEntry>;
   extensions?: ItemExtensions;
 }
 
@@ -173,6 +198,7 @@ export type TagValue = string | TagValueObject;
 export interface TagDef {
   replace?: boolean;
   values: TagValue[];
+  i18n?: Record<string, { displayName: string }>;
 }
 
 export interface PackTags {

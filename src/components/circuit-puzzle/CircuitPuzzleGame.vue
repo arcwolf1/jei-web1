@@ -5,9 +5,11 @@
       <div v-if="solved && showVictory" class="victory-overlay" @click="showVictory = false">
         <div class="victory-modal" @click.stop>
           <div class="victory-icon">🎉</div>
-          <h2 class="victory-title">恭喜通关！</h2>
-          <p class="victory-message">你成功完成了电路修复挑战！</p>
-          <button type="button" class="victory-btn" @click="showVictory = false">继续</button>
+          <h2 class="victory-title">{{ t('congratulations') }}</h2>
+          <p class="victory-message">{{ t('circuitChallengeComplete') }}</p>
+          <button type="button" class="victory-btn" @click="showVictory = false">
+            {{ t('continue') }}
+          </button>
         </div>
       </div>
     </Transition>
@@ -61,7 +63,11 @@
         </div>
         <div class="status-line">
           <span>Row/Col</span>
-          <span>{{ satisfiedRowCount }}/{{ level.rows }} + {{ satisfiedColCount }}/{{ level.cols }}</span>
+          <span
+            >{{ satisfiedRowCount }}/{{ level.rows }} + {{ satisfiedColCount }}/{{
+              level.cols
+            }}</span
+          >
         </div>
         <div class="status-hint" :class="{ 'status-hint--ok': solved }">
           {{ solved ? 'Solved' : 'Not solved yet' }}
@@ -82,7 +88,7 @@
             :class="{ 'switch-btn--active': displayMode === 'graphic' }"
             @click="displayMode = 'graphic'"
           >
-            图形模式
+            {{ t('graphicMode') }}
           </button>
           <button
             type="button"
@@ -90,7 +96,7 @@
             :class="{ 'switch-btn--active': displayMode === 'numeric' }"
             @click="displayMode = 'numeric'"
           >
-            数字模式
+            {{ t('numericMode') }}
           </button>
         </div>
 
@@ -101,18 +107,13 @@
             :class="{ 'switch-btn--active': showHints }"
             @click="showHints = !showHints"
           >
-            提示轮廓 {{ showHints ? '开' : '关' }}
+            {{ t('hintOutline') }} {{ showHints ? t('on') : t('off') }}
           </button>
         </div>
 
         <div class="status-actions">
-          <button
-            type="button"
-            class="action-btn"
-            :disabled="autoSolving"
-            @click="autoSolve"
-          >
-            {{ autoSolving ? '自动解密中...' : '自动解密' }}
+          <button type="button" class="action-btn" :disabled="autoSolving" @click="autoSolve">
+            {{ autoSolving ? t('autoSolving') : t('autoSolve') }}
           </button>
           <button type="button" class="action-btn" @click="resetAll">Reset All</button>
           <button
@@ -137,8 +138,8 @@
             :item-id="entry.piece.id"
             :piece="entry.piece"
             :label="entry.piece.name"
-            :counter-text="`剩余 ${entry.remaining}/${entry.total}`"
-            :footer-text="entry.remaining === 0 ? '不可用' : `已放置 ${entry.used}`"
+            :counter-text="`${t('remaining')} ${entry.remaining}/${entry.total}`"
+            :footer-text="entry.remaining === 0 ? t('unavailable') : `${t('placed')} ${entry.used}`"
             :rotation="entry.rotation"
             :placed-anchor="null"
             :selected="entry.selected"
@@ -158,6 +159,7 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue';
 import { useQuasar } from 'quasar';
+import { useI18n } from 'vue-i18n';
 import CircuitPuzzleBoard from './CircuitPuzzleBoard.vue';
 import CircuitPuzzlePieceCard from './CircuitPuzzlePieceCard.vue';
 import { solveLevel, verifySolution } from './auto-solver';
@@ -170,6 +172,8 @@ import type {
   PuzzlePieceDefinition,
   PuzzleScorePart,
 } from './types';
+
+const { t } = useI18n();
 
 const keyBindingsStore = useKeyBindingsStore();
 
@@ -357,7 +361,9 @@ const selectedPieceName = computed(() => {
   return `${piece.name} (${remaining}/${total})`;
 });
 
-const fixedPlacements = computed<PuzzleFixedPlacementDefinition[]>(() => level.value.fixedPlacements ?? []);
+const fixedPlacements = computed<PuzzleFixedPlacementDefinition[]>(
+  () => level.value.fixedPlacements ?? [],
+);
 
 const fixedOccupiedCellEntries = computed<FixedOccupiedCellEntry[]>(() => {
   const entries: FixedOccupiedCellEntry[] = [];
@@ -463,19 +469,34 @@ const colFilledParts = computed<PuzzleScorePart[][]>(() =>
   buildAxisScoreParts(level.value.cols, boardOccupiedCellEntries.value, 'col'),
 );
 
-const satisfiedRowCount = computed(() =>
-  Array.from({ length: level.value.rows }, (_, i) =>
-    isAxisSatisfied(rowTargetParts.value[i] ?? [], rowFilledParts.value[i] ?? [], level.value.rowTargets[i] ?? 0, rowFilled.value[i] ?? 0),
-  ).filter(Boolean).length,
+const satisfiedRowCount = computed(
+  () =>
+    Array.from({ length: level.value.rows }, (_, i) =>
+      isAxisSatisfied(
+        rowTargetParts.value[i] ?? [],
+        rowFilledParts.value[i] ?? [],
+        level.value.rowTargets[i] ?? 0,
+        rowFilled.value[i] ?? 0,
+      ),
+    ).filter(Boolean).length,
 );
-const satisfiedColCount = computed(() =>
-  Array.from({ length: level.value.cols }, (_, i) =>
-    isAxisSatisfied(colTargetParts.value[i] ?? [], colFilledParts.value[i] ?? [], level.value.colTargets[i] ?? 0, colFilled.value[i] ?? 0),
-  ).filter(Boolean).length,
+const satisfiedColCount = computed(
+  () =>
+    Array.from({ length: level.value.cols }, (_, i) =>
+      isAxisSatisfied(
+        colTargetParts.value[i] ?? [],
+        colFilledParts.value[i] ?? [],
+        level.value.colTargets[i] ?? 0,
+        colFilled.value[i] ?? 0,
+      ),
+    ).filter(Boolean).length,
 );
 
 const placedCount = computed(
-  () => pieceInstances.value.filter((inst) => (pieceStates.value[inst.instanceId]?.anchor ?? null) !== null).length,
+  () =>
+    pieceInstances.value.filter(
+      (inst) => (pieceStates.value[inst.instanceId]?.anchor ?? null) !== null,
+    ).length,
 );
 const totalPieceCount = computed(() => pieceInstances.value.length);
 
@@ -560,10 +581,20 @@ const focusCol = computed(() => hoverCell.value?.x ?? null);
 
 const solved = computed(() => {
   const rowOk = Array.from({ length: level.value.rows }, (_, i) =>
-    isAxisSatisfied(rowTargetParts.value[i] ?? [], rowFilledParts.value[i] ?? [], level.value.rowTargets[i] ?? 0, rowFilled.value[i] ?? 0),
+    isAxisSatisfied(
+      rowTargetParts.value[i] ?? [],
+      rowFilledParts.value[i] ?? [],
+      level.value.rowTargets[i] ?? 0,
+      rowFilled.value[i] ?? 0,
+    ),
   ).every(Boolean);
   const colOk = Array.from({ length: level.value.cols }, (_, i) =>
-    isAxisSatisfied(colTargetParts.value[i] ?? [], colFilledParts.value[i] ?? [], level.value.colTargets[i] ?? 0, colFilled.value[i] ?? 0),
+    isAxisSatisfied(
+      colTargetParts.value[i] ?? [],
+      colFilledParts.value[i] ?? [],
+      level.value.colTargets[i] ?? 0,
+      colFilled.value[i] ?? 0,
+    ),
   ).every(Boolean);
   return rowOk && colOk;
 });
@@ -714,7 +745,7 @@ function getCurrentPlaceableInstanceId(): string | null {
     selectedPieceInstanceId.value = best;
     if (best) {
       const state = pieceStates.value[best];
-      selectedPlacementRotation.value = state ? (((state.rotation % 4) + 4) % 4) : 0;
+      selectedPlacementRotation.value = state ? ((state.rotation % 4) + 4) % 4 : 0;
     } else {
       selectedPlacementRotation.value = 0;
     }
@@ -761,7 +792,7 @@ function getTransformedCells(instanceId: string, rotation: number): GridCell[] {
 function getFixedPlacementCells(fixed: PuzzleFixedPlacementDefinition): GridCell[] {
   if (!fixed.cells?.length) return [];
   const base = normalizeShapeCells(fixed.cells);
-  const rotation = ((fixed.rotation ?? 0) % 4 + 4) % 4;
+  const rotation = (((fixed.rotation ?? 0) % 4) + 4) % 4;
   return rotateCells(base, rotation);
 }
 
@@ -867,7 +898,7 @@ function selectPieceType(pieceId: string): void {
   selectedPieceInstanceId.value = nextInstanceId;
   if (nextInstanceId) {
     const state = pieceStates.value[nextInstanceId];
-    selectedPlacementRotation.value = state ? (((state.rotation % 4) + 4) % 4) : 0;
+    selectedPlacementRotation.value = state ? ((state.rotation % 4) + 4) % 4 : 0;
   } else {
     selectedPlacementRotation.value = 0;
   }
@@ -880,7 +911,7 @@ function rotatePieceType(pieceId: string): void {
     selectedPieceInstanceId.value = nextInstanceId;
     if (nextInstanceId) {
       const state = pieceStates.value[nextInstanceId];
-      selectedPlacementRotation.value = state ? (((state.rotation % 4) + 4) % 4) : 0;
+      selectedPlacementRotation.value = state ? ((state.rotation % 4) + 4) % 4 : 0;
     } else {
       selectedPlacementRotation.value = 0;
     }
@@ -942,10 +973,9 @@ function buildResetPieceStates(): Record<string, PieceRuntimeState> {
   return Object.fromEntries(
     pieceInstances.value.map((inst) => {
       const prevState = pieceStates.value[inst.instanceId];
-      const shape =
-        prevState?.shape?.length
-          ? cloneShapeCells(prevState.shape)
-          : cloneShapeCells(getDefaultShapeForPiece(inst.pieceId));
+      const shape = prevState?.shape?.length
+        ? cloneShapeCells(prevState.shape)
+        : cloneShapeCells(getDefaultShapeForPiece(inst.pieceId));
       return [
         inst.instanceId,
         {
@@ -991,14 +1021,17 @@ function autoSolve(): void {
 
     if (result.status !== 'solved' || !result.solution) {
       if (result.status === 'timeout') {
-        $q.notify({ type: 'warning', message: `自动解密超时（已搜索 ${result.nodes} 节点）。` });
+        $q.notify({ type: 'warning', message: t('autoSolveTimeout', { nodes: result.nodes }) });
         return;
       }
       if (result.status === 'node-limit') {
-        $q.notify({ type: 'warning', message: `自动解密达到搜索上限（${result.nodes} 节点）。` });
+        $q.notify({
+          type: 'warning',
+          message: t('autoSolveLimitReached', { nodes: result.nodes }),
+        });
         return;
       }
-      $q.notify({ type: 'negative', message: '未找到可行解，请检查关卡配置。' });
+      $q.notify({ type: 'negative', message: t('autoSolveFailed') });
       return;
     }
 
@@ -1007,8 +1040,8 @@ function autoSolve(): void {
       enforceHintColors: solverOptions.enforceHintColors,
     });
     if (!verify.ok) {
-      const firstError = verify.errors[0] ?? '结果校验失败';
-      $q.notify({ type: 'negative', message: `自动解密结果无效：${firstError}` });
+      const firstError = verify.errors[0] ?? t('validationFailed');
+      $q.notify({ type: 'negative', message: t('autoSolveResultInvalid', { error: firstError }) });
       return;
     }
 
@@ -1047,9 +1080,11 @@ function autoSolve(): void {
 
     if (missingPieceIds.size > 0 || exhaustedPieceIds.size > 0) {
       const labels: string[] = [];
-      if (missingPieceIds.size > 0) labels.push(`未知方块: ${Array.from(missingPieceIds).join(', ')}`);
-      if (exhaustedPieceIds.size > 0) labels.push(`实例不足: ${Array.from(exhaustedPieceIds).join(', ')}`);
-      $q.notify({ type: 'negative', message: `自动解密失败（${labels.join('；')}）` });
+      if (missingPieceIds.size > 0)
+        labels.push(`${t('unknownBlocks')}: ${Array.from(missingPieceIds).join(', ')}`);
+      if (exhaustedPieceIds.size > 0)
+        labels.push(`${t('instancesExhausted')}: ${Array.from(exhaustedPieceIds).join(', ')}`);
+      $q.notify({ type: 'negative', message: t('autoSolveFailed') });
       return;
     }
 
@@ -1067,7 +1102,7 @@ function autoSolve(): void {
 
     $q.notify({
       type: 'positive',
-      message: `自动解密完成：共 ${result.solution.length} 个摆放（搜索 ${result.nodes} 节点）。`,
+      message: t('autoSolveComplete', { count: result.solution.length, nodes: result.nodes }),
     });
   } finally {
     autoSolving.value = false;
@@ -1132,7 +1167,11 @@ watch(solved, (isSolved) => {
 <style scoped>
 .circuit-game {
   --cg-panel-border: rgba(106, 133, 125, 0.35);
-  --cg-board-bg: radial-gradient(circle at 10% 10%, rgba(231, 243, 239, 0.96), rgba(219, 233, 228, 0.98));
+  --cg-board-bg: radial-gradient(
+    circle at 10% 10%,
+    rgba(231, 243, 239, 0.96),
+    rgba(219, 233, 228, 0.98)
+  );
   --cg-surface-bg: rgba(246, 251, 249, 0.94);
   --cg-muted-bg: rgba(236, 245, 242, 0.92);
   --cg-title: #29443f;
@@ -1148,7 +1187,11 @@ watch(solved, (isSolved) => {
   --cg-modal-title: #3d6b14;
   --cg-modal-text: rgba(44, 66, 61, 0.92);
   --cg-victory-btn-bg: linear-gradient(145deg, rgba(167, 220, 70, 0.28), rgba(146, 199, 56, 0.2));
-  --cg-victory-btn-hover-bg: linear-gradient(145deg, rgba(167, 220, 70, 0.4), rgba(146, 199, 56, 0.32));
+  --cg-victory-btn-hover-bg: linear-gradient(
+    145deg,
+    rgba(167, 220, 70, 0.4),
+    rgba(146, 199, 56, 0.32)
+  );
   display: grid;
   grid-template-columns: minmax(0, 1fr) 320px;
   gap: 14px;
@@ -1173,7 +1216,11 @@ watch(solved, (isSolved) => {
   --cg-modal-title: #e8ff9f;
   --cg-modal-text: rgba(205, 220, 217, 0.9);
   --cg-victory-btn-bg: linear-gradient(145deg, rgba(198, 255, 73, 0.25), rgba(157, 219, 34, 0.18));
-  --cg-victory-btn-hover-bg: linear-gradient(145deg, rgba(198, 255, 73, 0.35), rgba(157, 219, 34, 0.28));
+  --cg-victory-btn-hover-bg: linear-gradient(
+    145deg,
+    rgba(198, 255, 73, 0.35),
+    rgba(157, 219, 34, 0.28)
+  );
 }
 
 .board-section {

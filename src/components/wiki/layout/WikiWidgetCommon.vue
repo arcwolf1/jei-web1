@@ -2,6 +2,7 @@
   <div v-if="widgetCommon" class="widget-common">
     <div v-if="tabs.length" class="tabbed-panels">
       <q-tabs
+        v-if="showTabHeader"
         v-model="activeTab"
         dense
         class="tab-header"
@@ -33,7 +34,11 @@
         <q-tab-panel v-for="tab in tabs" :key="tab.key" :name="tab.key" class="wiki-tab-panel">
           <WikiWidgetIntro v-if="tab.intro" :intro="tab.intro" :document-map="documentMap" />
 
-          <WikiDocument v-if="tab.document" :document="tab.document" />
+          <WikiDocument
+            v-if="tab.document"
+            :document="tab.document"
+            :hide-leading-horizontal-rule="hideAnonymousSinglePanelLeadSeparator"
+          />
         </q-tab-panel>
       </q-tab-panels>
     </div>
@@ -41,15 +46,15 @@
     <div v-else class="stack-panels">
       <template v-for="panel in panels" :key="panel.key">
         <div class="stack-panel">
-          <div v-if="panel.title || panel.icon" class="stack-title">
+          <div v-if="panel.displayTitle || panel.icon" class="stack-title">
             <span
               v-if="panel.icon"
               class="tab-icon-wrapper"
-              @click.stop="handleIconClick(panel.icon, panel.title)"
+              @click.stop="handleIconClick(panel.icon, panel.displayTitle || panel.title)"
             >
               <ImageLoader
                 :url="panel.icon"
-                :alt="panel.title"
+                :alt="panel.displayTitle || panel.title"
                 :max-width="24"
                 :use-proxy="useProxy"
                 :proxy-url="proxyUrl"
@@ -57,12 +62,16 @@
                 class="tab-icon"
               />
             </span>
-            <span>{{ panel.title }}</span>
+            <span>{{ panel.displayTitle }}</span>
           </div>
 
           <WikiWidgetIntro v-if="panel.intro" :intro="panel.intro" :document-map="documentMap" />
 
-          <WikiDocument v-if="panel.document" :document="panel.document" />
+          <WikiDocument
+            v-if="panel.document"
+            :document="panel.document"
+            :hide-leading-horizontal-rule="hideAnonymousSinglePanelLeadSeparator"
+          />
         </div>
       </template>
     </div>
@@ -96,6 +105,7 @@ const proxyUrl = computed(() => proxyUrlRef.value);
 type Panel = {
   key: string;
   title: string;
+  displayTitle: string;
   icon: string;
   intro: WidgetIntro | null;
   document: Document | null;
@@ -111,12 +121,16 @@ function getTabContentDocument(tabId: string): Document | null {
   return props.documentMap[tabData.content] || null;
 }
 
-function buildTitle(tabId: string, title: string, index: number): string {
+function buildDisplayTitle(tabId: string, title: string): string {
   if (title) return title;
   const tabData = getTabData(tabId);
   if (tabData?.intro?.name) return tabData.intro.name;
   if (tabData?.intro?.type) return tabData.intro.type;
-  return `Tab ${index + 1}`;
+  return '';
+}
+
+function buildTitle(tabId: string, title: string, index: number): string {
+  return buildDisplayTitle(tabId, title) || `Tab ${index + 1}`;
 }
 
 function handleIconClick(url: string, title?: string) {
@@ -134,6 +148,7 @@ const panels = computed<Panel[]>(() => {
       return {
         key: tab.tabId,
         title: buildTitle(tab.tabId, tab.title, index),
+        displayTitle: buildDisplayTitle(tab.tabId, tab.title),
         icon: tab.icon || '',
         intro: data?.intro ?? null,
         document: getTabContentDocument(tab.tabId),
@@ -147,6 +162,7 @@ const panels = computed<Panel[]>(() => {
     return {
       key,
       title: buildTitle(key, '', index),
+      displayTitle: buildDisplayTitle(key, ''),
       icon: '',
       intro: data?.intro ?? null,
       document: getTabContentDocument(key),
@@ -159,6 +175,18 @@ const tabs = computed(() => {
   const list = props.widgetCommon.tabList || [];
   if (!list.length) return [] as Panel[];
   return panels.value;
+});
+
+const showTabHeader = computed(() => {
+  if (tabs.value.length !== 1) return true;
+  const firstTab = tabs.value[0];
+  return Boolean(firstTab?.displayTitle || firstTab?.icon);
+});
+
+const hideAnonymousSinglePanelLeadSeparator = computed(() => {
+  if (panels.value.length !== 1) return false;
+  const firstPanel = panels.value[0];
+  return !firstPanel?.displayTitle && !firstPanel?.icon;
 });
 
 const activeTab = ref('');

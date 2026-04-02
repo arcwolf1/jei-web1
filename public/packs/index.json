@@ -28,8 +28,13 @@
         "https://warfarin.api.jeiweb.sirrus.cc/"
       ],
       "devMirrors": [
-        "http://127.0.0.1:4179/"
+        "http://127.0.0.1:4180/"
       ]
+    },
+    {
+      "packId": "aef-aggregated-full",
+      "label": "[DEV] Arknights:Endfield (Aggregated Full)",
+      "aggregateDescriptor": "aggregates-full/aef-aggregated.json"
     }
   ]
 }

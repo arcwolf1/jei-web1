@@ -1,0 +1,35 @@
+{
+  "displayName": "[DEV] Arknights:Endfield (Aggregated Full)",
+  "gameId": "aef",
+  "aggregatorScript": "./aef-aggregated.js",
+  "sources": [
+    {
+      "packId": "aef-skland",
+      "priority": 30,
+      "matchByName": true,
+      "mirrors": [
+        "https://fastjeiskland.sirrus.cc/",
+        "https://jeiskland.sirrus.cc/",
+        "https://skland-data.api.jei.mic.run/"
+      ]
+    },
+    {
+      "packId": "aef",
+      "priority": 20,
+      "matchByName": true,
+      "mirrors": [
+        "https://aef.api.jeiweb.sirrus.cc/"
+      ]
+    },
+    {
+      "packId": "warfarin-next",
+      "label": "Warfarin Wiki (Next Gen)",
+      "mirrors": [
+        "https://warfarin.api.jeiweb.sirrus.cc/"
+      ],
+      "devMirrors": [
+        "http://127.0.0.1:4179/"
+      ]
+    }
+  ]
+}

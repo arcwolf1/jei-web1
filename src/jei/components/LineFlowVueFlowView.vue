@@ -77,12 +77,16 @@
           <div class="planner__flow-node-title">{{ p.data.title }}</div>
           <div class="planner__flow-node-sub">
             {{ p.data.subtitle }}
-            <q-badge v-if="p.data.isRoot" color="primary" class="q-ml-xs">目标</q-badge>
+            <q-badge v-if="p.data.isRoot" color="primary" class="q-ml-xs">{{
+              t('target')
+            }}</q-badge>
             <q-badge v-if="p.data.recovery" color="teal" class="q-ml-xs">
-              回收
+              {{ t('recovery') }}
               <q-tooltip v-if="p.data.recoverySource">{{ p.data.recoverySource }}</q-tooltip>
             </q-badge>
-            <q-badge v-if="p.data.forcedRaw" color="warning" class="q-ml-xs">原料</q-badge>
+            <q-badge v-if="p.data.forcedRaw" color="warning" class="q-ml-xs">{{
+              t('rawMaterial')
+            }}</q-badge>
           </div>
         </div>
       </div>
@@ -166,13 +170,13 @@
             <div class="planner__flow-node-output-meta">
               <span class="planner__flow-node-output-name">{{ outputNameOf(outDetail) }}</span>
               <span class="planner__flow-node-output-produced">
-                总 {{ outputProducedTextOf(outDetail) }}
+                {{ t('total') }} {{ outputProducedTextOf(outDetail) }}
               </span>
               <span class="planner__flow-node-output-used"
-                >用 {{ outputUsedTextOf(outDetail) }}</span
+                >{{ t('used') }} {{ outputUsedTextOf(outDetail) }}</span
               >
               <span v-if="outDetail.surplusText" class="planner__flow-node-output-surplus">
-                余 {{ outDetail.surplusText }}
+                {{ t('surplus') }} {{ outDetail.surplusText }}
               </span>
             </div>
           </div>
@@ -224,9 +228,12 @@ import { Handle, Position, VueFlow } from '@vue-flow/core';
 import { Background } from '@vue-flow/background';
 import { Controls } from '@vue-flow/controls';
 import { MiniMap } from '@vue-flow/minimap';
+import { useI18n } from 'vue-i18n';
 import { itemKeyHash } from 'src/jei/indexing/key';
 import type { ItemDef, ItemKey } from 'src/jei/types';
 import StackView from 'src/jei/components/StackView.vue';
+
+const { t } = useI18n();
 
 type MachineOutputDetail = {
   key: ItemKey;

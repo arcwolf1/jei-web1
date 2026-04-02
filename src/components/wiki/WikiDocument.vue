@@ -16,10 +16,20 @@ import type { Document, Block } from '../../types/wiki';
 
 const props = defineProps<{
   document: Document;
+  hideLeadingHorizontalRule?: boolean;
 }>();
 
 const topBlocks = computed(() => {
-  return props.document.blockIds
+  let blockIds = props.document.blockIds;
+
+  if (props.hideLeadingHorizontalRule) {
+    const firstContentIndex = props.document.blockIds.findIndex(
+      (id) => props.document.blockMap[id]?.kind !== 'horizontalLine',
+    );
+    blockIds = firstContentIndex >= 0 ? props.document.blockIds.slice(firstContentIndex) : [];
+  }
+
+  return blockIds
     .map((id) => ({ id, block: props.document.blockMap[id] }))
     .filter((entry): entry is { id: string; block: Block } => Boolean(entry.block));
 });

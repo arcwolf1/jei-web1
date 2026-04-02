@@ -1,7 +1,11 @@
 <template>
   <span
     v-if="isInline"
-    :class="['wiki-entry-inline', `show-type-${element.entry.showType}`]"
+    :class="[
+      'wiki-entry-inline',
+      `show-type-${element.entry.showType}`,
+      { 'wiki-entry-inline--dark': isDark },
+    ]"
     @click.prevent="handleClick"
   >
     <StackView
@@ -13,7 +17,7 @@
     <span v-if="showCount" class="entry-count">×{{ element.entry.count }}</span>
   </span>
 
-  <div v-else class="wiki-entry-card" @click="handleClick">
+  <div v-else :class="['wiki-entry-card', { 'wiki-entry-card--dark': isDark }]" @click="handleClick">
     <StackView
       class="entry-stack entry-stack--card"
       :content="stackContent"
@@ -26,6 +30,7 @@
 
 <script setup lang="ts">
 import { computed, inject, ref, type Ref } from 'vue';
+import { useQuasar } from 'quasar';
 import type { ItemDef, SlotContent } from 'src/jei/types';
 import { itemKeyHash } from 'src/jei/indexing/key';
 import StackView from 'src/jei/components/StackView.vue';
@@ -35,6 +40,7 @@ const props = defineProps<{
   element: EntryInline;
 }>();
 
+const $q = useQuasar();
 const catalogMap = inject<Ref<CatalogItemMap>>('wikiCatalogMap', ref({} as CatalogItemMap));
 const useProxyRef = inject<Ref<boolean>>('wikiImageUseProxy', ref(false));
 const proxyUrlRef = inject<Ref<string>>('wikiImageProxyUrl', ref(''));
@@ -91,6 +97,7 @@ const showCount = computed(() => {
 });
 
 const isInline = computed(() => props.element.entry.showType !== 'card-big');
+const isDark = computed(() => $q.dark.isActive);
 
 const useProxy = computed(() => useProxyRef.value);
 const proxyUrl = computed(() => proxyUrlRef.value);
@@ -121,6 +128,10 @@ function resolveIconUrl(url: string): string {
 
   &:hover {
     background-color: rgba(25, 118, 210, 0.1);
+  }
+
+  &.wiki-entry-inline--dark:hover {
+    background-color: rgba(144, 202, 249, 0.14);
   }
 
   .entry-count {
@@ -193,11 +204,29 @@ function resolveIconUrl(url: string): string {
     color: #333;
     font-weight: 600;
   }
+
+  &.wiki-entry-card--dark {
+    background-color: rgba(255, 255, 255, 0.08);
+    border-color: rgba(255, 255, 255, 0.18);
+
+    &:hover {
+      background-color: rgba(255, 255, 255, 0.12);
+      border-color: rgba(255, 255, 255, 0.28);
+    }
+
+    :deep(.stack-view__name) {
+      color: rgba(255, 255, 255, 0.92);
+    }
+  }
 }
 
 .card-count {
   font-size: 0.85em;
   opacity: 0.8;
   color: #666 !important;
+}
+
+.wiki-entry-card--dark .card-count {
+  color: rgba(255, 255, 255, 0.7) !important;
 }
 </style>

@@ -129,7 +129,9 @@ export function assertItemDef(value: unknown, jsonPath: string): ItemDef {
   }
   const detailPath = assertOptionalString(obj.detailPath, `${jsonPath}.detailPath`);
   const wikiRaw = assertOptionalRecord(obj.wiki, `${jsonPath}.wiki`);
+  const wikisRaw = assertOptionalRecord(obj.wikis, `${jsonPath}.wikis`);
   const extensionsRaw = assertOptionalRecord(obj.extensions, `${jsonPath}.extensions`);
+  const i18nRaw = assertOptionalRecord(obj.i18n, `${jsonPath}.i18n`);
   const recipesRaw = assertOptionalArray(obj.recipes, `${jsonPath}.recipes`);
   const recipes = recipesRaw?.map((r, i) => assertRecipe(r, `${jsonPath}.recipes[${i}]`));
 
@@ -146,6 +148,10 @@ export function assertItemDef(value: unknown, jsonPath: string): ItemDef {
   if (detailPath !== undefined) def.detailPath = detailPath;
   if (belt !== undefined) def.belt = belt;
   if (wikiRaw !== undefined) def.wiki = wikiRaw;
+  if (wikisRaw !== undefined) def.wikis = wikisRaw as NonNullable<ItemDef['wikis']>;
+  if (i18nRaw !== undefined) {
+    def.i18n = i18nRaw as NonNullable<ItemDef['i18n']>;
+  }
   if (extensionsRaw !== undefined) {
     def.extensions = extensionsRaw as NonNullable<ItemDef['extensions']>;
   }
@@ -272,11 +278,19 @@ export function assertRecipeTypeDef(value: unknown, jsonPath: string): RecipeTyp
     displayName: assertString(obj.displayName, `${jsonPath}.displayName`),
     renderer: assertString(obj.renderer, `${jsonPath}.renderer`),
   };
+  const category = assertOptionalString(obj.category, `${jsonPath}.category`);
+  if (category !== undefined) out.category = category;
   if (plannerPriority !== undefined) out.plannerPriority = plannerPriority;
   if (machine !== undefined) out.machine = machine;
   if (slots !== undefined) out.slots = slots;
   if (paramSchema !== undefined) out.paramSchema = paramSchema;
   if (defaults !== undefined) out.defaults = defaults;
+
+  const i18nRaw = obj.i18n;
+  if (i18nRaw !== undefined && typeof i18nRaw === 'object' && i18nRaw !== null) {
+    out.i18n = i18nRaw as NonNullable<RecipeTypeDef['i18n']>;
+  }
+
   return out;
 }
 
@@ -377,7 +391,10 @@ export function assertPackManifest(value: unknown, jsonPath: string): PackManife
 
       let halfPerMinute: number | undefined;
       if (halfPerMinuteRaw !== undefined) {
-        halfPerMinute = assertNumber(halfPerMinuteRaw, `${jsonPath}.planner.targetRatePresets.halfPerMinute`);
+        halfPerMinute = assertNumber(
+          halfPerMinuteRaw,
+          `${jsonPath}.planner.targetRatePresets.halfPerMinute`,
+        );
         if (!Number.isFinite(halfPerMinute) || halfPerMinute <= 0) {
           throw new PackValidationError(
             `${jsonPath}.planner.targetRatePresets.halfPerMinute`,
@@ -388,7 +405,10 @@ export function assertPackManifest(value: unknown, jsonPath: string): PackManife
 
       let fullPerMinute: number | undefined;
       if (fullPerMinuteRaw !== undefined) {
-        fullPerMinute = assertNumber(fullPerMinuteRaw, `${jsonPath}.planner.targetRatePresets.fullPerMinute`);
+        fullPerMinute = assertNumber(
+          fullPerMinuteRaw,
+          `${jsonPath}.planner.targetRatePresets.fullPerMinute`,
+        );
         if (!Number.isFinite(fullPerMinute) || fullPerMinute <= 0) {
           throw new PackValidationError(
             `${jsonPath}.planner.targetRatePresets.fullPerMinute`,
@@ -431,7 +451,10 @@ export function assertPackManifest(value: unknown, jsonPath: string): PackManife
       const tq = ip.tokenQuery;
       const tqEnabledRaw = tq.enabled;
       if (tqEnabledRaw !== undefined && typeof tqEnabledRaw !== 'boolean') {
-        throw new PackValidationError(`${jsonPath}.imageProxy.tokenQuery.enabled`, 'expected boolean');
+        throw new PackValidationError(
+          `${jsonPath}.imageProxy.tokenQuery.enabled`,
+          'expected boolean',
+        );
       }
       const accessTokenStorageKey = assertOptionalString(
         tq.accessTokenStorageKey,
@@ -542,7 +565,13 @@ function assertTagDef(value: unknown, jsonPath: string) {
   }
   const valuesRaw = assertArray(obj.values, `${jsonPath}.values`);
   const values = valuesRaw.map((v, i) => assertTagValue(v, `${jsonPath}.values[${i}]`));
-  return replace === undefined ? { values } : { replace, values };
+  const i18nRaw = obj.i18n;
+  const result: Record<string, unknown> = { values };
+  if (replace !== undefined) result.replace = replace;
+  if (i18nRaw !== undefined && typeof i18nRaw === 'object' && i18nRaw !== null) {
+    result.i18n = i18nRaw;
+  }
+  return result;
 }
 
 export function assertPackTags(value: unknown, jsonPath: string): PackTags {

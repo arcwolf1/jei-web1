@@ -2,7 +2,7 @@
   <div class="wiki-doc-view">
     <div v-if="inputSlotIds.length || outputSlotIds.length" class="wiki-doc-view__io">
       <q-card v-if="inputSlotIds.length" flat bordered class="wiki-doc-view__io-card">
-        <div class="wiki-doc-view__io-title">输入</div>
+        <div class="wiki-doc-view__io-title">{{ t('input') }}</div>
         <div class="wiki-doc-view__io-list">
           <stack-view
             v-for="slotId in inputSlotIds"
@@ -14,14 +14,18 @@
             @item-click="emit('item-click', $event)"
             @item-mouseenter="emit('item-mouseenter', $event)"
             @item-mouseleave="emit('item-mouseleave')"
-            @item-context-menu="(evt: Event, keyHash: string) => emit('item-context-menu', evt, keyHash)"
-            @item-touch-hold="(evt: unknown, keyHash: string) => emit('item-touch-hold', evt, keyHash)"
+            @item-context-menu="
+              (evt: Event, keyHash: string) => emit('item-context-menu', evt, keyHash)
+            "
+            @item-touch-hold="
+              (evt: unknown, keyHash: string) => emit('item-touch-hold', evt, keyHash)
+            "
           />
         </div>
       </q-card>
 
       <q-card v-if="outputSlotIds.length" flat bordered class="wiki-doc-view__io-card">
-        <div class="wiki-doc-view__io-title">产出</div>
+        <div class="wiki-doc-view__io-title">{{ t('output') }}</div>
         <div class="wiki-doc-view__io-list">
           <stack-view
             v-for="slotId in outputSlotIds"
@@ -33,8 +37,12 @@
             @item-click="emit('item-click', $event)"
             @item-mouseenter="emit('item-mouseenter', $event)"
             @item-mouseleave="emit('item-mouseleave')"
-            @item-context-menu="(evt: Event, keyHash: string) => emit('item-context-menu', evt, keyHash)"
-            @item-touch-hold="(evt: unknown, keyHash: string) => emit('item-touch-hold', evt, keyHash)"
+            @item-context-menu="
+              (evt: Event, keyHash: string) => emit('item-context-menu', evt, keyHash)
+            "
+            @item-touch-hold="
+              (evt: unknown, keyHash: string) => emit('item-touch-hold', evt, keyHash)
+            "
           />
         </div>
       </q-card>
@@ -46,8 +54,16 @@
       <div v-if="contextLine" class="wiki-doc-view__context">{{ contextLine }}</div>
 
       <WikiDocument v-if="wikiDocument" :document="wikiDocument" />
-      <div v-else-if="renderedMarkdown" class="wiki-doc-view__markdown wiki-description" v-html="renderedMarkdown"></div>
-      <div v-else-if="htmlText" class="wiki-doc-view__markdown wiki-description" v-html="htmlText"></div>
+      <div
+        v-else-if="renderedMarkdown"
+        class="wiki-doc-view__markdown wiki-description"
+        v-html="renderedMarkdown"
+      ></div>
+      <div
+        v-else-if="htmlText"
+        class="wiki-doc-view__markdown wiki-description"
+        v-html="htmlText"
+      ></div>
       <ul v-else-if="methods.length" class="wiki-doc-view__methods">
         <li v-for="(line, index) in methods" :key="index">{{ line }}</li>
       </ul>
@@ -58,10 +74,13 @@
 <script setup lang="ts">
 import { computed, onMounted, watch } from 'vue';
 import MarkdownIt from 'markdown-it';
+import { useI18n } from 'vue-i18n';
 import type { ItemDef, ItemKey, Recipe, RecipeTypeDef } from 'src/jei/types';
 import type { Document } from 'src/types/wiki';
 import StackView from './StackView.vue';
 import WikiDocument from 'src/components/wiki/WikiDocument.vue';
+
+const { t } = useI18n();
 
 const props = defineProps<{
   recipe: Recipe;
@@ -138,9 +157,9 @@ const displayTitle = computed(() => {
   const title = params.value.title;
   if (typeof title === 'string' && title.trim()) return title.trim();
   const sectionType = params.value.sectionType;
-  if (sectionType === 'usage') return '用途';
-  if (sectionType === 'acquisition') return '获取方式';
-  return props.recipeType.displayName || '文档';
+  if (sectionType === 'usage') return t('usage');
+  if (sectionType === 'acquisition') return t('acquisition');
+  return props.recipeType.displayName || t('document');
 });
 
 const contextLine = computed(() => {

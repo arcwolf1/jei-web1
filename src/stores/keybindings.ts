@@ -17,6 +17,7 @@ export type KeyAction =
   | 'plannerQuant'       // Q/5 - 量化视图
   | 'toggleFavorite'     // A - 收藏/取消收藏
   | 'addToAdvanced'      // D - 添加到高级计划器
+  | 'hoverTooltipInteract' // 临时允许鼠标移入 hover
   // CircuitPuzzle 快捷键
   | 'circuitRotate'      // R - 旋转
   | 'circuitRun'         // G - 运行
@@ -50,6 +51,7 @@ const defaultKeyBindings: KeyBindingsConfig = {
   plannerQuant: { key: 'q' },
   toggleFavorite: { key: 'a' },
   addToAdvanced: { key: 'd' },
+  hoverTooltipInteract: { key: 'Shift' },
   circuitRotate: { key: 'r' },
   circuitRun: { key: 'g' },
   circuitDeselect: { key: 'Escape' },
@@ -60,10 +62,11 @@ const KEYBINDINGS_KEY = 'jei.keybindings';
 
 export function keyBindingToString(binding: KeyBinding): string {
   const parts: string[] = [];
-  if (binding.ctrl) parts.push('Ctrl');
-  if (binding.alt) parts.push('Alt');
-  if (binding.shift) parts.push('Shift');
-  parts.push(binding.key.toUpperCase());
+  const normalizedKey = binding.key.toLowerCase();
+  if (binding.ctrl && normalizedKey !== 'control') parts.push('Ctrl');
+  if (binding.alt && normalizedKey !== 'alt') parts.push('Alt');
+  if (binding.shift && normalizedKey !== 'shift') parts.push('Shift');
+  parts.push(binding.key.length === 1 ? binding.key.toUpperCase() : binding.key);
   return parts.join('+');
 }
 
@@ -82,10 +85,29 @@ export function parseKeyBindingString(str: string): KeyBinding | null {
 }
 
 export function eventMatchesBinding(event: KeyboardEvent, binding: KeyBinding): boolean {
-  if (event.key.toLowerCase() !== binding.key.toLowerCase()) return false;
-  if (!!event.ctrlKey !== !!binding.ctrl) return false;
-  if (!!event.altKey !== !!binding.alt) return false;
-  if (!!event.shiftKey !== !!binding.shift) return false;
+  const normalizedKey = binding.key.toLowerCase();
+  if (event.key.toLowerCase() !== normalizedKey) return false;
+  const expectsCtrl = !!binding.ctrl || normalizedKey === 'control';
+  const expectsAlt = !!binding.alt || normalizedKey === 'alt';
+  const expectsShift = !!binding.shift || normalizedKey === 'shift';
+  if (!!event.ctrlKey !== expectsCtrl) return false;
+  if (!!event.altKey !== expectsAlt) return false;
+  if (!!event.shiftKey !== expectsShift) return false;
+  return true;
+}
+
+export function eventReleasesBinding(event: KeyboardEvent, binding: KeyBinding): boolean {
+  const normalizedKey = binding.key.toLowerCase();
+  if (event.key.toLowerCase() !== normalizedKey) return false;
+  if (normalizedKey === 'control' || normalizedKey === 'alt' || normalizedKey === 'shift') {
+    return true;
+  }
+  const expectsCtrl = !!binding.ctrl;
+  const expectsAlt = !!binding.alt;
+  const expectsShift = !!binding.shift;
+  if (!!event.ctrlKey !== expectsCtrl) return false;
+  if (!!event.altKey !== expectsAlt) return false;
+  if (!!event.shiftKey !== expectsShift) return false;
   return true;
 }
 

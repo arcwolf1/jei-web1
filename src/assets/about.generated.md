@@ -1,16 +1,175 @@
 # About
 
 ## Build
-- Version: 39325f9-dirty
-- Commit: 39325f9 (39325f9837f5afed88477987cd20f8f416d5f25e)
-- Commit count: 133
-- Subject: feat: 添加FreskyZ-flow-vue子模块同步脚本
+- Version: 6e5c050-dirty
+- Commit: 6e5c050 (6e5c05089a0e8aa2949ebf9d6186445c19fe27e8)
+- Commit count: 155
+- Subject: fix: 优化 SettingsDialog 组件中的文本格式和事件处理
 - Author: AndreaFrederica
-- Date: 2026-03-18T03:27:45+08:00
-- Generated at: 2026-03-21T22:03:11.664Z
+- Date: 2026-04-02T00:15:00+08:00
+- Generated at: 2026-04-01T17:00:48.974Z
 - Remote: https://github.com/AndreaFrederica/jei-web.git
 
 ## Version History
+
+### r155 (2026-04-02T00:15:00+08:00)
+- 6e5c050
+  fix: 优化 SettingsDialog 组件中的文本格式和事件处理
+
+### r154 (2026-04-01T22:02:19+08:00)
+- a41ed6c
+  feat: 添加 AEF 聚合完整数据支持，更新设置对话框样式和布局
+
+### r153 (2026-04-01T20:32:05+08:00)
+- 11816e7
+  feat: 优化 WarfarinEndpointRenderer 组件，简化代码结构并增强可读性
+
+### r152 (2026-04-01T20:31:50+08:00)
+- 297438f
+  feat: 更新 WInfoGrid 组件，增强样式和响应式布局
+
+### r151 (2026-04-01T17:54:48+08:00)
+- 1d6581e
+  feat: 增强悬浮提示功能，添加可配置的显示选项和预览功能
+
+### r150 (2026-04-01T05:25:43+08:00)
+- 82ae7d2
+  feat: add AEF aggregation logic and enhance wiki components
+  
+  - Implemented `aggregateAefPack` function to aggregate items from AEF and AEF-Skland packs based on unique names.
+  - Enhanced `WikiDocument.vue` to conditionally hide leading horizontal rules based on a new prop.
+  - Introduced `LinkInline.vue` component for rendering inline links in wiki documents.
+  - Updated `WikiInlineElement.vue` to support rendering of link elements.
+  - Improved `EntryInline.vue` with dark mode support and styling adjustments.
+  - Modified `WikiWidgetCommon.vue` to handle display titles and conditional rendering of document components.
+  - Added aggregate merge report functionality in `IndexPage.vue` with copy and download options.
+  - Updated `SettingsDialog.vue` to include buttons for exporting aggregate merge analysis.
+  - Extended `InlineElement` type in `wiki.ts` to include `LinkInline` type for better type safety.
+
+### r149 (2026-04-01T04:34:42+08:00)
+- 27987df
+  feat: 优化 WItemCostGrid 组件，调整成本显示样式并增强 StackView 组件的工具提示功能
+
+### r148 (2026-04-01T04:22:36+08:00)
+- c505292
+  feat: 添加 itemDefsByKeyHash 属性到 WItemCostGrid 组件，增强物品成本显示
+
+### r147 (2026-04-01T04:09:46+08:00)
+- 2c9d209
+  feat: add hover tooltip interaction settings and keybinding
+  
+  - Introduced a new setting to allow mouse enter for hover tooltips in the settings dialog.
+  - Added a keybinding for interacting with hover tooltips, including handling keydown and keyup events.
+  - Updated relevant components to support the new hover tooltip interaction feature.
+  - Refactored item search logic to accommodate changes in item ID handling.
+  - Enhanced settings store to manage new hover tooltip settings and their persistence.
+
+### r146 (2026-03-31T22:48:36+08:00)
+- 17561c5
+  feat: 更新单位处理逻辑，统一使用 PlannerTargetUnit 类型
+
+### r145 (2026-03-31T22:17:28+08:00)
+- f092228
+  feat: 添加获取 Warfarin 分发和获取方式标签的功能
+
+### r144 (2026-03-31T22:01:21+08:00)
+- d1d5ad7
+  feat: localize mission and operator voices components
+  
+  - Updated WMissionRenderer.vue to use localization for mission titles, descriptions, quests, dialogs, and radio messages.
+  - Enhanced WOperatorVoices.vue to utilize localized labels for unlock types.
+  - Introduced displayLabels.ts for centralized localization functions and mappings.
+  - Improved text rendering in WarfarinEndpointRenderer.vue to support localization.
+  - Added support for basic HTML tag preservation in text rendering.
+  - Enhanced utility functions for localized scalar formatting.
+  - Updated i18n files for English, Japanese, and Chinese to include new localization keys.
+  - Modified RecipeContentView.vue to display localized legacy descriptions and wiki debug information.
+
+### r143 (2026-03-31T20:14:00+08:00)
+- 9548bea
+  feat: enhance warfarin utilities and localization
+  
+  - Added new MaterialCostEntry interface and functions for resolving item definitions and pack item IDs in warfarin utilities.
+  - Refactored existing functions for better clarity and performance.
+  - Introduced new methods for normalizing material costs and bundles.
+  - Updated localization files for English, Japanese, and Chinese to include new warfarin-related terms and phrases.
+  - Enhanced tutorial manager with additional interaction types and validation options.
+  - Improved RecipeContentView component to support new renderer features and source pack IDs.
+
+### r142 (2026-03-30T21:38:51+08:00)
+- 4948f4b
+  feat: 添加外观设置，支持主题模式和图标显示模式的选择
+
+### r141 (2026-03-30T21:05:57+08:00)
+- e641242
+  feat: add favorites page size settings and localization
+  
+  - Introduced new settings for minimum and maximum items per page for favorites.
+  - Added reset defaults option for favorites page size settings.
+  - Updated English, Japanese, and Chinese localization files to include new strings.
+  - Enhanced FavoritesPanel component to display total items and items per page.
+  - Implemented pagination for favorite items in FavoritesPanel.
+  - Updated SettingsDialog to allow users to adjust favorites page size settings.
+  - Added corresponding methods in settings store to manage favorites page size.
+
+### r140 (2026-03-30T06:51:32+08:00)
+- 17e3816
+  feat: 添加 Warfarin wiki 渲染器系统，新增 commonmark 和 warfarin-raw-operator 两种 wiki 格式支持
+  - 添加完整的 Warfarin wiki 渲染器系统，包括操作员、敌人、设施、装备等多种内容类型的渲染组件
+  - 新增 commonmark wiki 格式支持，基于 CommonMark 标准的 Markdown 渲染
+  - 新增 warfarin-raw-operator wiki 格式支持，用于渲染 Warfarin 原始操作员数据
+  - 添加从 C# 枚举文件自动生成 TypeScript 枚举的脚本 (generate-genums.mjs)
+  - 扩展 i18n 系统，新增 localeData 数据结构支持本地化 wiki 内容
+  - 增强 pack 加载器，支持获取共享 JSON 数据和处理本地化数据
+  - 扩展类型系统，添加 JeiWebLocaleDataEntry 接口和 category 字段支持
+  - 更新验证逻辑以支持新的 category 字段
+  - 更新 RecipeContentView 以集成新的 wiki 渲染器
+
+### r139 (2026-03-25T21:15:18+08:00)
+- 080e46e
+  feat: 添加持久化历史记录功能，允许用户保存历史记录设置
+
+### r138 (2026-03-24T06:54:45+08:00)
+- 5d0802a
+  feat: 添加搜索功能的工作线程支持，优化搜索性能和响应速度
+
+### r137 (2026-03-24T06:54:32+08:00)
+- cd5eb06
+  feat: enhance pack mirror handling and add wiki debug information
+
+### r136 (2026-03-24T05:13:34+08:00)
+- cf6975a
+  feat: add I18nSettingsPanel for language settings and i18n coverage statistics
+  
+  - Introduced I18nSettingsPanel.vue to manage language settings and display i18n coverage.
+  - Updated BottomBar.vue to utilize getTagDisplayName for tag display.
+  - Refactored CenterPanel.vue to use translation for titles.
+  - Enhanced RecipeContentView.vue with structured wiki renderer headers and improved tag display.
+  - Updated SettingsDialog.vue to include I18nSettingsPanel and manage language updates.
+
+### r135 (2026-03-23T00:58:57+08:00)
+- 268f948
+  feat: enhance search functionality with advanced filtering options
+  
+  - Updated Japanese and Chinese translations for filter placeholders and help texts.
+  - Refactored search parsing logic to support complex expressions using a new search expression parser.
+  - Introduced a new filter mode toggle (builder and expression) in the BottomBar and ItemEditorPage components.
+  - Added UI elements for quick tag filtering and expression token insertion.
+  - Improved search matching logic to accommodate new expression syntax.
+  - Enhanced filter form to handle negation and tag join modes.
+
+### r134 (2026-03-22T06:09:54+08:00)
+- 82ea775
+  feat: add SimpleWikiRenderer component for rendering various wiki content types
+  
+  - Introduced SimpleWikiRenderer.vue to handle markdown, quotes, tables, lists, and dividers.
+  - Implemented normalization functions for input blocks and wiki content.
+  - Enhanced i18n support by adding new translations for dev mirrors in English, Japanese, and Chinese.
+  - Updated PackSource interface to include optional devMirrors.
+  - Added functionality to enable and manage dev mirrors in the settings and pack routing.
+  - Enhanced RecipeContentView to support new wiki renderers and improved rendering logic.
+  - Updated settings dialog to include a toggle for enabling dev mirrors.
+  - Refactored pack routing runtime store to handle dev mirrors in mirror URL retrieval.
 
 ### r133 (2026-03-18T03:27:45+08:00)
 - 39325f9

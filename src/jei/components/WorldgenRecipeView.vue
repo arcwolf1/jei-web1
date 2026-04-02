@@ -2,7 +2,7 @@
   <div class="worldgen-view">
     <div v-if="outputSlotIds.length" class="worldgen-view__outputs">
       <q-card flat bordered class="worldgen-view__outputs-card">
-        <div class="worldgen-view__outputs-title">产出</div>
+        <div class="worldgen-view__outputs-title">{{ t('output') }}</div>
         <div class="worldgen-view__outputs-list">
           <div v-for="slotId in outputSlotIds" :key="slotId" class="worldgen-view__output">
             <stack-view
@@ -21,10 +21,10 @@
     </div>
 
     <q-card flat bordered class="worldgen-view__params">
-      <div class="worldgen-view__params-title">世界生成参数</div>
+      <div class="worldgen-view__params-title">{{ t('worldgenParams') }}</div>
       <recipe-params-view :recipe="recipe" :recipe-type="recipeType" />
       <div v-if="extraParamsText" class="worldgen-view__extra">
-        <div class="worldgen-view__extra-title">其他</div>
+        <div class="worldgen-view__extra-title">{{ t('other') }}</div>
         <pre class="worldgen-view__extra-pre">{{ extraParamsText }}</pre>
       </div>
     </q-card>
@@ -33,10 +33,13 @@
 
 <script setup lang="ts">
 import { computed } from 'vue';
+import { useI18n } from 'vue-i18n';
 import type { ItemDef, ItemKey, Recipe, RecipeTypeDef } from 'src/jei/types';
 import { useSettingsStore } from 'src/stores/settings';
 import StackView from './StackView.vue';
 import RecipeParamsView from './RecipeParamsView.vue';
+
+const { t } = useI18n();
 
 const props = defineProps<{
   recipe: Recipe;

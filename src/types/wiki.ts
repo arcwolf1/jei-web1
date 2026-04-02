@@ -196,7 +196,7 @@ export interface TextBlock extends BaseBlock {
   };
 }
 
-export type InlineElement = TextInline | EntryInline;
+export type InlineElement = TextInline | EntryInline | LinkInline;
 
 export interface TextInline {
   kind: 'text';
@@ -217,6 +217,14 @@ export interface EntryInline {
     id: string;
     showType: string; // 'link-imgText', 'card-big', etc.
     count?: string;
+  };
+}
+
+export interface LinkInline {
+  kind: 'link';
+  link: {
+    link: string;
+    text: string;
   };
 }
 

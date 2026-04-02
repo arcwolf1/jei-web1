@@ -4,7 +4,7 @@
     <q-card flat bordered class="q-pa-md">
       <div class="row items-center q-gutter-sm q-mb-md">
         <div class="text-subtitle2">{{ t('targetProducts') }}</div>
-        <q-toggle v-model="useProductRecovery" dense label="使用产物回收" />
+        <q-toggle v-model="useProductRecovery" dense :label="t('useProductRecovery')" />
         <q-space />
         <q-btn
           dense
@@ -63,14 +63,14 @@
                     map-options
                     popup-content-class="planner__select-menu"
                     style="width: 110px"
-                    :options="rateUnitOptions"
+                    :options="targetUnitOptions"
                     :model-value="target.unit"
                     @update:model-value="(v) => updateTargetUnit(index, v)"
                   />
                 </template>
-                <span v-else class="text-caption text-grey-7"
-                  >权重 {{ target.rate }}（自动最大化）</span
-                >
+                <span v-else class="text-caption text-grey-7">{{
+                  t('weightAutoMaximize', { rate: target.rate })
+                }}</span>
               </div>
             </q-item-label>
           </q-item-section>
@@ -100,12 +100,12 @@
       <div v-if="targets.length" class="q-mt-md row items-center q-gutter-sm">
         <q-toggle
           v-model="lpMode"
-          label="LP优化模式"
+          :label="t('lpMode')"
           color="deep-purple"
           checked-icon="science"
           unchecked-icon="account_tree"
         >
-          <q-tooltip>启用后使用线性规划求解器；支持产出、投入、最大化、限制四种目标类型</q-tooltip>
+          <q-tooltip>{{ t('lpModeTooltip') }}</q-tooltip>
         </q-toggle>
         <q-btn
           :color="lpMode ? 'deep-purple' : 'primary'"
@@ -119,14 +119,12 @@
           outline
           :color="lpMode ? 'deep-purple' : 'primary'"
           icon="auto_awesome"
-          :label="lpMode ? '自动配方 + LP' : t('autoOptimize')"
+          :label="lpMode ? t('autoRecipePlusLP') : t('autoOptimize')"
           :disable="targets.length === 0"
           :loading="lpMode && lpSolving"
           @click="autoOptimize"
         >
-          <q-tooltip>{{
-            lpMode ? '自动选择最优配方，然后用 LP 求解' : t('autoOptimizeHint')
-          }}</q-tooltip>
+          <q-tooltip>{{ lpMode ? t('autoRecipePlusLPTooltip') : t('autoOptimizeHint') }}</q-tooltip>
         </q-btn>
       </div>
     </q-card>
@@ -209,7 +207,8 @@
           <!-- 标签物品选择 -->
           <q-card v-else-if="d.kind === 'tag_item'" flat bordered class="q-pa-md">
             <div class="text-caption text-weight-medium q-mb-sm">
-              {{ t('tagSelection') }} {{ d.tagId }} - {{ t('chooseSpecificItem') }}
+              {{ t('tagSelection') }} {{ getTagDisplayName(d.tagId) }} -
+              {{ t('chooseSpecificItem') }}
             </div>
             <q-select
               dense
@@ -247,25 +246,25 @@
           dense
           outline
           icon="share"
-          label="分享"
+          :label="t('share')"
           :disable="pendingDecisions.length > 0"
         >
           <q-list dense style="min-width: 180px">
             <q-item clickable v-close-popup @click="shareAsUrl">
               <q-item-section avatar><q-icon name="link" /></q-item-section>
-              <q-item-section>复制分享链接</q-item-section>
+              <q-item-section>{{ t('copyShareLink') }}</q-item-section>
             </q-item>
             <q-item clickable v-close-popup @click="copyShareJson">
               <q-item-section avatar><q-icon name="data_object" /></q-item-section>
-              <q-item-section>复制 JSON</q-item-section>
+              <q-item-section>{{ t('copyJson') }}</q-item-section>
             </q-item>
             <q-item clickable v-close-popup @click="shareByJsonUrl">
               <q-item-section avatar><q-icon name="link" /></q-item-section>
-              <q-item-section>用 JSON 链接分享</q-item-section>
+              <q-item-section>{{ t('shareWithJsonUrl') }}</q-item-section>
             </q-item>
             <q-item clickable v-close-popup @click="importShareJson">
               <q-item-section avatar><q-icon name="upload_file" /></q-item-section>
-              <q-item-section>导入 JSON</q-item-section>
+              <q-item-section>{{ t('importJson') }}</q-item-section>
             </q-item>
           </q-list>
         </q-btn-dropdown>
@@ -307,7 +306,7 @@
         <q-tab name="line" :label="t('productionLine')" />
         <q-tab name="quant" :label="t('quantificationView')" />
         <q-tab name="calc" :label="t('calculator')" />
-        <q-tab v-if="lpMode && lpResult" name="lp_raw" label="LP 原始数据" />
+        <q-tab v-if="lpMode && lpResult" name="lp_raw" :label="t('lpRawData')" />
       </q-tabs>
       <q-separator class="q-my-md" />
 
@@ -331,7 +330,7 @@
                     <q-item-label>{{ getItemName(itemId) }}</q-item-label>
                   </q-item-section>
                   <q-item-section side>
-                    <q-item-label caption>{{ amount.toFixed(2) }} / 分钟</q-item-label>
+                    <q-item-label caption>{{ formatSummaryAmount(amount) }}</q-item-label>
                   </q-item-section>
                 </q-item>
               </q-list>
@@ -353,9 +352,7 @@
                     <q-item-label>{{ fluidId }}</q-item-label>
                   </q-item-section>
                   <q-item-section side>
-                    <q-item-label caption
-                      >{{ amount.toFixed(2) }} {{ t('perMinute') }}</q-item-label
-                    >
+                    <q-item-label caption>{{ formatSummaryAmount(amount) }}</q-item-label>
                   </q-item-section>
                 </q-item>
               </q-list>
@@ -401,7 +398,7 @@
                   <q-item-section>
                     <q-item-label>{{ itemName(seed.itemKey) }}</q-item-label>
                     <q-item-label caption>
-                      {{ t('need') }} {{ formatAmount(seed.amountNeeded) }} {{ t('perMinute') }}
+                      {{ t('need') }} {{ formatSummaryAmount(seed.amountNeeded) }}
                     </q-item-label>
                   </q-item-section>
                   <q-item-section side>
@@ -430,7 +427,7 @@
                 map-options
                 popup-content-class="planner__select-menu"
                 style="min-width: 120px"
-                :options="rateUnitOptions"
+                :options="targetUnitOptions"
                 :model-value="treeDisplayUnit"
                 @update:model-value="(v) => (treeDisplayUnit = v)"
               />
@@ -441,8 +438,8 @@
                 outline
                 toggle-color="primary"
                 :options="[
-                  { label: '列表', value: 'list' },
-                  { label: '紧凑', value: 'compact' },
+                  { label: t('displayModeList'), value: 'list' },
+                  { label: t('displayModeCompact'), value: 'compact' },
                 ]"
               />
             </div>
@@ -450,13 +447,21 @@
             <div v-if="mergedTree" class="q-mt-md">
               <div v-if="treeDisplayMode === 'list'" class="planner__tree-table">
                 <div class="planner__tree-table-header">
-                  <div class="planner__tree-col planner__tree-col--tree">树结构</div>
+                  <div class="planner__tree-col planner__tree-col--tree">
+                    {{ t('treeStructure') }}
+                  </div>
                   <div class="planner__tree-col planner__tree-col--rate text-right">
                     {{ rateColumnLabel }}
                   </div>
-                  <div class="planner__tree-col planner__tree-col--belts text-right">传送带</div>
-                  <div class="planner__tree-col planner__tree-col--machines text-right">设备</div>
-                  <div class="planner__tree-col planner__tree-col--power text-right">电量</div>
+                  <div class="planner__tree-col planner__tree-col--belts text-right">
+                    {{ t('conveyorBelt') }}
+                  </div>
+                  <div class="planner__tree-col planner__tree-col--machines text-right">
+                    {{ t('equipment') }}
+                  </div>
+                  <div class="planner__tree-col planner__tree-col--power text-right">
+                    {{ t('power') }}
+                  </div>
                 </div>
                 <div
                   v-for="row in treeListRows"
@@ -530,7 +535,7 @@
                           "
                           class="planner__tree-name-sub text-caption text-teal-8"
                         >
-                          回收产出：{{ recoveryProducedText(row.node.nodeId) }}
+                          {{ t('recoveryOutput') }}：{{ recoveryProducedText(row.node.nodeId) }}
                         </div>
                       </div>
                       <q-badge
@@ -548,7 +553,7 @@
                         color="teal-6"
                         class="q-ml-sm"
                       >
-                        回收产出
+                        {{ t('recoveryOutput') }}
                         <q-tooltip>{{ recoveryProducedText(row.node.nodeId) }}</q-tooltip>
                       </q-badge>
                       <q-badge
@@ -640,7 +645,7 @@
                       color="teal-6"
                       class="q-ml-sm"
                     >
-                      回收产出
+                      {{ t('recoveryOutput') }}
                       <q-tooltip>{{ recoveryProducedText(row.node.nodeId) }}</q-tooltip>
                     </q-badge>
                   </div>
@@ -654,7 +659,7 @@
         <q-tab-panel name="graph" class="q-pa-none">
           <div :class="['planner__pagefull', { 'planner__pagefull--active': graphPageFull }]">
             <div class="row items-center q-gutter-sm">
-              <div class="text-caption text-grey-8">显示单位</div>
+              <div class="text-caption text-grey-8">{{ t('displayUnit') }}</div>
               <q-select
                 dense
                 filled
@@ -662,7 +667,7 @@
                 map-options
                 popup-content-class="planner__select-menu"
                 style="min-width: 120px"
-                :options="rateUnitOptions"
+                :options="targetUnitOptions"
                 :model-value="graphDisplayUnit"
                 @update:model-value="(v) => (graphDisplayUnit = v)"
               />
@@ -676,7 +681,9 @@
                 :icon="graphPageFull ? 'close_fullscreen' : 'fit_screen'"
                 @click="graphPageFull = !graphPageFull"
               >
-                <q-tooltip>{{ graphPageFull ? '退出页面内全屏' : '页面内全屏' }}</q-tooltip>
+                <q-tooltip>{{
+                  graphPageFull ? t('exitPageFullscreen') : t('pageFullscreen')
+                }}</q-tooltip>
               </q-btn>
               <q-btn
                 flat
@@ -685,7 +692,7 @@
                 :icon="graphFullscreen ? 'fullscreen_exit' : 'fullscreen'"
                 @click="toggleGraphFullscreen"
               >
-                <q-tooltip>{{ graphFullscreen ? '退出全屏' : '全屏' }}</q-tooltip>
+                <q-tooltip>{{ graphFullscreen ? t('exitFullscreen') : t('fullscreen') }}</q-tooltip>
               </q-btn>
             </div>
             <div
@@ -785,7 +792,7 @@
                 </template>
               </VueFlow>
             </div>
-            <div v-else class="text-center text-grey q-pa-lg">暂无节点</div>
+            <div v-else class="text-center text-grey q-pa-lg">{{ t('noNodes') }}</div>
           </div>
         </q-tab-panel>
 
@@ -793,7 +800,7 @@
         <q-tab-panel name="line" class="q-pa-none">
           <div :class="['planner__pagefull', { 'planner__pagefull--active': linePageFull }]">
             <div class="row items-center q-gutter-sm">
-              <div class="text-caption text-grey-8">显示单位</div>
+              <div class="text-caption text-grey-8">{{ t('displayUnit') }}</div>
               <q-select
                 dense
                 filled
@@ -801,7 +808,7 @@
                 map-options
                 popup-content-class="planner__select-menu"
                 style="min-width: 120px"
-                :options="rateUnitOptions"
+                :options="targetUnitOptions"
                 :model-value="lineDisplayUnit"
                 @update:model-value="(v) => (lineDisplayUnit = v)"
               />
@@ -811,7 +818,7 @@
               <q-toggle
                 :model-value="settingsStore.lineIntermediateColoring"
                 dense
-                label="中间产物着色"
+                :label="t('intermediateColoring')"
                 @update:model-value="settingsStore.setLineIntermediateColoring(!!$event)"
               />
               <q-toggle
@@ -823,7 +830,7 @@
                 :model-value="selectedLineItemForcedRaw"
                 dense
                 color="warning"
-                label="视为原料"
+                :label="t('treatAsRawMaterial')"
                 @update:model-value="(v) => setSelectedLineItemForcedRaw(!!v)"
               />
               <q-btn
@@ -859,7 +866,9 @@
                 :icon="linePageFull ? 'close_fullscreen' : 'fit_screen'"
                 @click="linePageFull = !linePageFull"
               >
-                <q-tooltip>{{ linePageFull ? '退出页面内全屏' : '页面内全屏' }}</q-tooltip>
+                <q-tooltip>{{
+                  linePageFull ? t('exitPageFullscreen') : t('pageFullscreen')
+                }}</q-tooltip>
               </q-btn>
               <q-btn
                 flat
@@ -868,7 +877,7 @@
                 :icon="lineFullscreen ? 'fullscreen_exit' : 'fullscreen'"
                 @click="toggleLineFullscreen"
               >
-                <q-tooltip>{{ lineFullscreen ? '退出全屏' : '全屏' }}</q-tooltip>
+                <q-tooltip>{{ lineFullscreen ? t('exitFullscreen') : t('fullscreen') }}</q-tooltip>
               </q-btn>
             </div>
             <div
@@ -890,14 +899,14 @@
                 @node-drag-stop="onLineNodeDragStop"
               />
             </div>
-            <div v-else class="text-center text-grey q-pa-lg">暂无节点</div>
+            <div v-else class="text-center text-grey q-pa-lg">{{ t('noNodes') }}</div>
           </div>
         </q-tab-panel>
 
         <q-tab-panel name="quant" class="q-pa-none">
           <div :class="['planner__pagefull', { 'planner__pagefull--active': quantPageFull }]">
             <div class="row items-center q-gutter-sm">
-              <div class="text-caption text-grey-8">显示单位</div>
+              <div class="text-caption text-grey-8">{{ t('displayUnit') }}</div>
               <q-select
                 dense
                 filled
@@ -905,7 +914,7 @@
                 map-options
                 popup-content-class="planner__select-menu"
                 style="min-width: 120px"
-                :options="rateUnitOptions"
+                :options="targetUnitOptions"
                 :model-value="quantDisplayUnit"
                 @update:model-value="(v) => (quantDisplayUnit = v)"
               />
@@ -918,8 +927,8 @@
                 toggle-color="primary"
                 :model-value="settingsStore.quantFlowRenderer"
                 :options="[
-                  { label: '节点图', value: 'nodes' },
-                  { label: '桑基图', value: 'sankey' },
+                  { label: t('nodeGraph'), value: 'nodes' },
+                  { label: t('sankeyGraph'), value: 'sankey' },
                 ]"
                 @update:model-value="
                   settingsStore.setQuantFlowRenderer(($event as 'nodes' | 'sankey') ?? 'nodes')
@@ -933,7 +942,9 @@
                 :icon="quantPageFull ? 'close_fullscreen' : 'fit_screen'"
                 @click="quantPageFull = !quantPageFull"
               >
-                <q-tooltip>{{ quantPageFull ? '退出页面内全屏' : '页面内全屏' }}</q-tooltip>
+                <q-tooltip>{{
+                  quantPageFull ? t('exitPageFullscreen') : t('pageFullscreen')
+                }}</q-tooltip>
               </q-btn>
               <q-btn
                 flat
@@ -942,7 +953,7 @@
                 :icon="quantFullscreen ? 'fullscreen_exit' : 'fullscreen'"
                 @click="toggleQuantFullscreen"
               >
-                <q-tooltip>{{ quantFullscreen ? '退出全屏' : '全屏' }}</q-tooltip>
+                <q-tooltip>{{ quantFullscreen ? t('exitFullscreen') : t('fullscreen') }}</q-tooltip>
               </q-btn>
             </div>
             <div
@@ -965,7 +976,7 @@
                 @node-drag-stop="onQuantNodeDragStop"
               />
             </div>
-            <div v-else class="text-center text-grey q-pa-lg">暂无节点</div>
+            <div v-else class="text-center text-grey q-pa-lg">{{ t('noNodes') }}</div>
           </div>
         </q-tab-panel>
 
@@ -973,7 +984,7 @@
         <q-tab-panel name="calc" class="q-pa-none">
           <div class="column q-gutter-md">
             <div class="row items-center q-gutter-sm">
-              <div class="text-caption text-grey-8">显示单位</div>
+              <div class="text-caption text-grey-8">{{ t('displayUnit') }}</div>
               <q-select
                 dense
                 filled
@@ -981,7 +992,7 @@
                 map-options
                 popup-content-class="planner__select-menu"
                 style="min-width: 120px"
-                :options="rateUnitOptions"
+                :options="targetUnitOptions"
                 :model-value="calcDisplayUnit"
                 @update:model-value="(v) => (calcDisplayUnit = v)"
               />
@@ -990,31 +1001,33 @@
             <div class="row q-col-gutter-md">
               <div class="col-12 col-md-4">
                 <q-card flat bordered class="q-pa-md">
-                  <div class="text-subtitle2">总功耗</div>
+                  <div class="text-subtitle2">{{ t('totalPower') }}</div>
                   <div class="text-h6">{{ formatAmount(calcTotals?.power ?? 0) }} kW</div>
                   <div class="text-caption text-grey-7">
-                    污染 {{ formatAmount(calcTotals?.pollution ?? 0) }} / 分
+                    {{ t('pollutionPerMin', { amount: formatAmount(calcTotals?.pollution ?? 0) }) }}
                   </div>
                 </q-card>
               </div>
               <div class="col-12 col-md-4">
                 <q-card flat bordered class="q-pa-md">
-                  <div class="text-subtitle2">设备总数</div>
+                  <div class="text-subtitle2">{{ t('totalEquipment') }}</div>
                   <div class="text-h6">{{ formatAmount(calcMachineTotal) }}</div>
-                  <div class="text-caption text-grey-7">{{ calcMachineRows.length }} 种设备</div>
+                  <div class="text-caption text-grey-7">
+                    {{ calcMachineRows.length }} {{ t('machineTypes') }}
+                  </div>
                 </q-card>
               </div>
               <div class="col-12 col-md-4">
                 <q-card flat bordered class="q-pa-md">
-                  <div class="text-subtitle2">产出种类</div>
+                  <div class="text-subtitle2">{{ t('outputTypes') }}</div>
                   <div class="text-h6">{{ calcItemRows.length }}</div>
-                  <div class="text-caption text-grey-7">按节点汇总</div>
+                  <div class="text-caption text-grey-7">{{ t('summaryByNode') }}</div>
                 </q-card>
               </div>
             </div>
 
             <q-card flat bordered class="q-pa-md">
-              <div class="text-subtitle2 q-mb-md">设备需求</div>
+              <div class="text-subtitle2 q-mb-md">{{ t('equipmentRequirements') }}</div>
               <q-table
                 dense
                 flat
@@ -1046,7 +1059,7 @@
             </q-card>
 
             <q-card flat bordered class="q-pa-md">
-              <div class="text-subtitle2 q-mb-md">中间产物生产计数</div>
+              <div class="text-subtitle2 q-mb-md">{{ t('intermediateProductionCount') }}</div>
               <q-table
                 dense
                 flat
@@ -1088,7 +1101,7 @@
                       size="sm"
                       :color="props.row.forcedRaw ? 'warning' : 'primary'"
                       :icon="props.row.forcedRaw ? 'undo' : 'inventory_2'"
-                      :label="props.row.forcedRaw ? '取消原料' : '设为原料'"
+                      :label="props.row.forcedRaw ? t('cancelRawMaterial') : t('setAsRawMaterial')"
                       @click="setForcedRawForItemId(props.row.id, !props.row.forcedRaw)"
                     />
                   </q-td>
@@ -1097,7 +1110,7 @@
             </q-card>
 
             <q-card v-if="calcForcedRawRows.length" flat bordered class="q-pa-md">
-              <div class="text-subtitle2 q-mb-md">视为原料清单（可取消）</div>
+              <div class="text-subtitle2 q-mb-md">{{ t('rawMaterialList') }}</div>
               <q-table
                 dense
                 flat
@@ -1149,7 +1162,7 @@
                       size="sm"
                       color="warning"
                       icon="undo"
-                      label="取消原料"
+                      :label="t('cancelRawMaterial')"
                       @click="setForcedRawByKeyHash(props.row.keyHash, false)"
                     />
                   </q-td>
@@ -1158,7 +1171,7 @@
             </q-card>
 
             <q-card flat bordered class="q-pa-md">
-              <div class="text-subtitle2 q-mb-md">产出速率</div>
+              <div class="text-subtitle2 q-mb-md">{{ t('outputRate') }}</div>
               <q-table
                 dense
                 flat
@@ -1196,9 +1209,10 @@
           <div class="column q-gutter-md">
             <q-card flat bordered class="q-pa-md">
               <div class="text-subtitle2 q-mb-sm">
-                LP 求解结果 — 配方运行速率（每秒）
+                {{ t('lpSolutionResult') }}
                 <q-badge color="deep-purple" class="q-ml-sm"
-                  >{{ lpResult.steps.filter((s) => s.recipeId).length }} 条配方</q-badge
+                  >{{ lpResult.steps.filter((s) => s.recipeId).length }}
+                  {{ t('recipes2') }}</q-badge
                 >
               </div>
               <q-table
@@ -1221,7 +1235,7 @@
                         :show-subtitle="false"
                       />
                       <span>{{ props.row.name }}</span>
-                      <q-badge v-if="!props.row.recipeId" color="grey" label="原料" />
+                      <q-badge v-if="!props.row.recipeId" color="grey" :label="t('rawMaterial')" />
                     </div>
                   </q-td>
                 </template>
@@ -1241,15 +1255,15 @@
 
     <div v-else-if="!targets.length" class="col column items-center justify-center text-grey">
       <q-icon name="lightbulb" size="64px" class="q-mb-md" />
-      <div class="text-h6">高级计划器</div>
-      <div class="text-caption q-mt-sm">添加目标产物开始规划</div>
+      <div class="text-h6">{{ t('advancedPlanner') }}</div>
+      <div class="text-caption q-mt-sm">{{ t('addTargetToStart') }}</div>
     </div>
   </div>
 
   <q-dialog v-model="saveDialogOpen">
     <q-card style="min-width: 420px">
       <q-card-section class="row items-center q-gutter-sm">
-        <div class="text-subtitle2">保存合成线路</div>
+        <div class="text-subtitle2">{{ t('saveSynthesisLine') }}</div>
         <q-space />
         <q-btn flat round icon="close" v-close-popup />
       </q-card-section>
@@ -1295,6 +1309,10 @@ import { useI18n } from 'vue-i18n';
 import type { ItemKey, ItemDef, ItemId, PackData, Stack } from 'src/jei/types';
 import type { JeiIndex } from 'src/jei/indexing/buildIndex';
 import { itemKeyHash } from 'src/jei/indexing/key';
+import {
+  getTagDisplayName as getTagDisplayNameFromDef,
+  resolveTagDef,
+} from 'src/jei/i18n-resolver';
 import { DEFAULT_BELT_SPEED } from 'src/jei/planner/units';
 import {
   type PlannerDecision,
@@ -1328,7 +1346,6 @@ import type {
   AdvancedPlannerViewState,
   PlannerLiveState,
   PlannerNodePosition,
-  PlannerRateDisplayUnit,
   PlannerSavePayload,
   PlannerTargetUnit,
 } from 'src/jei/planner/plannerUi';
@@ -1354,7 +1371,7 @@ interface Target {
   itemKey: ItemKey;
   itemName: string;
   rate: number;
-  unit: 'per_second' | 'per_minute' | 'per_hour';
+  unit: PlannerTargetUnit;
   /** LP 目标类型：产出/投入/最大化/限制 */
   type: ObjectiveType;
 }
@@ -1370,6 +1387,15 @@ const props = withDefaults(defineProps<Props>(), {
   index: null,
   itemDefsByKeyHash: () => ({}),
 });
+
+function getTagDisplayName(tagId: string): string {
+  const tagDef = resolveTagDef(
+    tagId,
+    props.pack?.tags?.item,
+    props.pack?.manifest.gameId ?? undefined,
+  );
+  return getTagDisplayNameFromDef(tagId, tagDef, settingsStore.language);
+}
 
 const beltSpeed = computed(() => {
   const items = props.pack?.items ?? [];
@@ -1407,28 +1433,29 @@ const planningStarted = ref(false);
 const mergedTree = ref<EnhancedBuildTreeResult | null>(null);
 const mergedRootItemKey = ref<ItemKey | null>(null);
 
-const rateUnitOptions = [
-  { label: '每秒', value: 'per_second' },
-  { label: '每分钟', value: 'per_minute' },
-  { label: '每小时', value: 'per_hour' },
-];
+const targetUnitOptions = computed(() => [
+  { label: t('itemCount'), value: 'items' },
+  { label: t('itemsPerSecond'), value: 'per_second' },
+  { label: t('itemsPerMinute'), value: 'per_minute' },
+  { label: t('itemsPerHour'), value: 'per_hour' },
+]);
 
-const objectiveTypeOptions = [
-  { label: '产出', value: ObjectiveType.Output },
-  { label: '投入', value: ObjectiveType.Input },
-  { label: '最大化', value: ObjectiveType.Maximize },
-  { label: '限制', value: ObjectiveType.Limit },
-];
+const objectiveTypeOptions = computed(() => [
+  { label: t('objectiveTypeOutput'), value: ObjectiveType.Output },
+  { label: t('objectiveTypeInput'), value: ObjectiveType.Input },
+  { label: t('objectiveTypeMaximize'), value: ObjectiveType.Maximize },
+  { label: t('objectiveTypeLimit'), value: ObjectiveType.Limit },
+]);
 
 const treeDisplayMode = ref<'list' | 'compact'>('list');
-const treeDisplayUnit = ref<'per_second' | 'per_minute' | 'per_hour'>('per_minute');
+const treeDisplayUnit = ref<PlannerTargetUnit>('per_minute');
 const collapsed = ref<Set<string>>(new Set());
-const graphDisplayUnit = ref<'per_second' | 'per_minute' | 'per_hour'>('per_minute');
+const graphDisplayUnit = ref<PlannerTargetUnit>('per_minute');
 const graphShowFluids = ref(true);
 const graphMergeRawMaterials = ref(false);
 const selectedGraphNodeId = ref<string | null>(null);
 const graphNodePositions = ref(new Map<string, { x: number; y: number }>());
-const lineDisplayUnit = ref<'per_second' | 'per_minute' | 'per_hour'>('per_minute');
+const lineDisplayUnit = ref<PlannerTargetUnit>('per_minute');
 const lineCollapseIntermediate = ref(true);
 const lineIncludeCycleSeeds = ref(true);
 const lineWidthByRate = computed({
@@ -1441,14 +1468,14 @@ const lineWidthCurveConfig = computed({
   get: () => settingsStore.lineWidthCurveConfig,
   set: (v: LineWidthCurveConfig) => settingsStore.setLineWidthCurveConfig(v),
 });
-const quantDisplayUnit = ref<'per_second' | 'per_minute' | 'per_hour'>('per_minute');
+const quantDisplayUnit = ref<PlannerTargetUnit>('per_minute');
 const quantShowFluids = ref(true);
 const forcedRawItemKeyHashes = ref<Set<string>>(new Set());
 const useProductRecovery = ref(false);
 const selectedLineNodeId = ref<string | null>(null);
 const lineNodePositions = ref(new Map<string, { x: number; y: number }>());
 const quantNodePositions = ref(new Map<string, { x: number; y: number }>());
-const calcDisplayUnit = ref<'per_second' | 'per_minute' | 'per_hour'>('per_minute');
+const calcDisplayUnit = ref<PlannerTargetUnit>('per_minute');
 
 const graphPageFull = ref(false);
 const linePageFull = ref(false);
@@ -1472,11 +1499,6 @@ const VALID_ADVANCED_PLANNER_TABS = new Set<AdvancedPlannerTab>([
   'calc',
 ]);
 
-const VALID_RATE_DISPLAY_UNITS = new Set<PlannerRateDisplayUnit>([
-  'per_second',
-  'per_minute',
-  'per_hour',
-]);
 const VALID_TARGET_UNITS = new Set<PlannerTargetUnit>([
   'items',
   'per_second',
@@ -1513,10 +1535,6 @@ function recordToNodePositionMap(
   return out;
 }
 
-function isRateDisplayUnit(value: unknown): value is PlannerRateDisplayUnit {
-  return typeof value === 'string' && VALID_RATE_DISPLAY_UNITS.has(value as PlannerRateDisplayUnit);
-}
-
 function isAdvancedPlannerTab(value: unknown): value is AdvancedPlannerTab {
   return typeof value === 'string' && VALID_ADVANCED_PLANNER_TABS.has(value as AdvancedPlannerTab);
 }
@@ -1530,11 +1548,11 @@ async function copyText(text: string): Promise<void> {
     await navigator.clipboard.writeText(text);
     return;
   }
-  window.prompt('请复制以下内容', text);
+  window.prompt(t('copyPrompt'), text);
 }
 
 function buildCurrentPlanPayload(
-  name = `${targets.value[0]?.itemName ?? '多目标规划'} 线路`,
+  name = `${targets.value[0]?.itemName ?? t('multiTargetPlanning2')} ${t('savedLines')}`,
 ): PlannerSavePayload | null {
   if (!targets.value.length) return null;
   return {
@@ -1577,36 +1595,36 @@ function copyShareJson(): void {
   const share = createPlannerShareData(props.pack.manifest.packId, payload);
   void copyText(stringifyPlannerShareJson(share))
     .then(() => {
-      $q.notify({ type: 'positive', message: '线路 JSON 已复制。' });
+      $q.notify({ type: 'positive', message: t('lineJsonCopied') });
     })
     .catch(() => {
-      $q.notify({ type: 'negative', message: '复制线路 JSON 失败。' });
+      $q.notify({ type: 'negative', message: t('copyLineJsonFailed') });
     });
 }
 
 function importShareJson(): void {
   $q.dialog({
-    title: '导入线路 JSON',
-    message: '粘贴分享出来的线路 JSON。',
+    title: t('importLineJsonTitle'),
+    message: t('importLineJsonMessage'),
     prompt: {
       model: '',
       type: 'textarea',
     },
     cancel: true,
-    ok: { label: '导入' },
+    ok: { label: t('import') },
   }).onOk((text: unknown) => {
     try {
       const share = parsePlannerShareJson(typeof text === 'string' ? text : '');
       if (!props.pack || share.packId !== props.pack.manifest.packId) {
-        $q.notify({ type: 'negative', message: `分享线路属于包 ${share.packId}，当前包不匹配。` });
+        $q.notify({ type: 'negative', message: t('sharePackMismatch', { packId: share.packId }) });
         return;
       }
       if (share.plan.kind !== 'advanced' || !share.plan.targets?.length) {
-        $q.notify({ type: 'negative', message: '这不是高级规划器分享。' });
+        $q.notify({ type: 'negative', message: t('notAdvancedPlannerShare') });
         return;
       }
       loadSavedPlan(share.plan);
-      $q.notify({ type: 'positive', message: '线路 JSON 已导入。' });
+      $q.notify({ type: 'positive', message: t('lineJsonImported') });
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       $q.notify({ type: 'negative', message });
@@ -1642,7 +1660,7 @@ function applySavedViewState(viewState: AdvancedPlannerViewState | undefined): v
   }
 
   const lineView = viewState?.line;
-  if (isRateDisplayUnit(lineView?.displayUnit)) {
+  if (isPlannerTargetUnit(lineView?.displayUnit)) {
     lineDisplayUnit.value = lineView.displayUnit;
   }
   if (typeof lineView?.collapseIntermediate === 'boolean') {
@@ -1656,7 +1674,7 @@ function applySavedViewState(viewState: AdvancedPlannerViewState | undefined): v
   lineNodePositions.value = recordToNodePositionMap(lineView?.nodePositions);
 
   const quantView = viewState?.quant;
-  if (isRateDisplayUnit(quantView?.displayUnit)) {
+  if (isPlannerTargetUnit(quantView?.displayUnit)) {
     quantDisplayUnit.value = quantView.displayUnit;
   }
   if (typeof quantView?.showFluids === 'boolean') {
@@ -1668,7 +1686,7 @@ function applySavedViewState(viewState: AdvancedPlannerViewState | undefined): v
   quantNodePositions.value = recordToNodePositionMap(quantView?.nodePositions);
 
   const calcView = viewState?.calc;
-  if (isRateDisplayUnit(calcView?.displayUnit)) {
+  if (isPlannerTargetUnit(calcView?.displayUnit)) {
     calcDisplayUnit.value = calcView.displayUnit;
   }
 }
@@ -1790,6 +1808,15 @@ const rawItemEntries = computed(() => {
 const rawFluidEntries = computed(() => {
   return Array.from(rawFluidTotals.value.entries()).sort((a, b) => b[1] - a[1]);
 });
+
+const allTargetsUseItems = computed(
+  () => targets.value.length > 0 && targets.value.every((target) => target.unit === 'items'),
+);
+
+function formatSummaryAmount(amount: number): string {
+  const formatted = formatAmount(amount);
+  return allTargetsUseItems.value ? String(formatted) : `${formatted} ${t('perMinute')}`;
+}
 
 type CycleSeedInfo = {
   nodeId: string;
@@ -2032,7 +2059,13 @@ const addTarget = (itemKey: ItemKey, itemName: string, rate = 1) => {
     existing.rate += rate;
     invalidatePlanningIfNeeded();
   } else {
-    targets.value.push({ itemKey, itemName, rate, unit: 'per_minute', type: ObjectiveType.Output });
+    targets.value.push({
+      itemKey,
+      itemName,
+      rate,
+      unit: 'per_minute',
+      type: ObjectiveType.Output,
+    });
     invalidatePlanningIfNeeded();
   }
 };
@@ -2043,7 +2076,7 @@ const loadSavedPlan = (payload: PlannerSavePayload) => {
     itemKey: t.itemKey,
     itemName: t.itemName ?? itemName(t.itemKey),
     rate: t.value ?? 1,
-    unit: t.unit as 'per_second' | 'per_minute' | 'per_hour',
+    unit: isPlannerTargetUnit(t.unit) ? t.unit : 'per_minute',
     type: t.type ?? ObjectiveType.Output,
   }));
 
@@ -2087,7 +2120,7 @@ const updateTargetRate = (index: number, rate: number) => {
   }
 };
 
-const updateTargetUnit = (index: number, unit: 'per_second' | 'per_minute' | 'per_hour') => {
+const updateTargetUnit = (index: number, unit: PlannerTargetUnit) => {
   if (targets.value[index]) {
     targets.value[index].unit = unit;
     invalidatePlanningIfNeeded();
@@ -2255,7 +2288,7 @@ const autoOptimize = () => {
 };
 
 const itemName = (itemKey: ItemKey): string => {
-  if (itemKey.id === '__multi_target__') return '多目标规划';
+  if (itemKey.id === '__multi_target__') return t('multiTargetPlanning2');
   const keyHash = itemKeyHash(itemKey);
   return props.itemDefsByKeyHash?.[keyHash]?.name ?? itemKey.id;
 };
@@ -2282,7 +2315,7 @@ const recoverySourceText = (node: {
   if (sourceItem && sourceRecipe) return `回收自 ${sourceItem} (${sourceRecipe})`;
   if (sourceItem) return `回收自 ${sourceItem}`;
   if (sourceRecipe) return `回收自 ${sourceRecipe}`;
-  return '回收';
+  return t('recovery');
 };
 
 function isForcedRawKey(itemKey: ItemKey): boolean {
@@ -2382,7 +2415,7 @@ function emitLiveState() {
 }
 
 function openSaveDialog() {
-  const base = targets.value.length ? targets.value[0]!.itemName : '多目标规划';
+  const base = targets.value.length ? targets.value[0]!.itemName : t('multiTargetPlanning2');
   saveName.value = `${base} 线路`;
   saveDialogOpen.value = true;
 }
@@ -2537,9 +2570,10 @@ function recoveryProducedText(nodeId: string): string {
 }
 
 const rateColumnLabel = computed(() => {
-  if (treeDisplayUnit.value === 'per_second') return '物品/秒';
-  if (treeDisplayUnit.value === 'per_hour') return '物品/时';
-  return '物品/分';
+  if (treeDisplayUnit.value === 'items') return t('itemCount');
+  if (treeDisplayUnit.value === 'per_second') return t('itemsPerSecond');
+  if (treeDisplayUnit.value === 'per_hour') return t('itemsPerHour');
+  return t('itemsPerMinute');
 });
 
 function finiteOr(n: unknown, fallback: number): number {
@@ -2553,6 +2587,7 @@ function nodeDisplayAmount(node: RequirementNode): number {
 
 function nodeDisplayRate(node: RequirementNode): number {
   const amount = nodeDisplayAmount(node);
+  if (treeDisplayUnit.value === 'items') return amount;
   if (treeDisplayUnit.value === 'per_second') return amount / 60;
   if (treeDisplayUnit.value === 'per_hour') return amount * 60;
   return amount;
@@ -2560,9 +2595,10 @@ function nodeDisplayRate(node: RequirementNode): number {
 
 function nodeDisplayRateByUnit(
   node: RequirementNode,
-  unit: 'per_second' | 'per_minute' | 'per_hour',
+  unit: PlannerTargetUnit,
 ): number {
   const amount = nodeDisplayAmount(node);
+  if (unit === 'items') return amount;
   if (unit === 'per_second') return amount / 60;
   if (unit === 'per_hour') return amount * 60;
   return amount;
@@ -2600,7 +2636,8 @@ function formatAmount(n: number) {
   return rounded;
 }
 
-function unitSuffix(unit: 'per_second' | 'per_minute' | 'per_hour') {
+function unitSuffix(unit: PlannerTargetUnit) {
+  if (unit === 'items') return '';
   if (unit === 'per_second') return '/s';
   if (unit === 'per_hour') return '/h';
   return '/min';
@@ -2608,8 +2645,9 @@ function unitSuffix(unit: 'per_second' | 'per_minute' | 'per_hour') {
 
 function displayRateFromAmount(
   amountPerMinute: number,
-  unit: 'per_second' | 'per_minute' | 'per_hour',
+  unit: PlannerTargetUnit,
 ) {
+  if (unit === 'items') return amountPerMinute;
   if (unit === 'per_second') return amountPerMinute / 60;
   if (unit === 'per_hour') return amountPerMinute * 60;
   return amountPerMinute;
@@ -2617,8 +2655,9 @@ function displayRateFromAmount(
 
 function rateByUnitFromPerSecond(
   perSecond: number,
-  unit: 'per_second' | 'per_minute' | 'per_hour',
+  unit: PlannerTargetUnit,
 ) {
+  if (unit === 'items') return perSecond * 60;
   if (unit === 'per_second') return perSecond;
   if (unit === 'per_hour') return perSecond * 3600;
   return perSecond * 60;
@@ -4075,74 +4114,83 @@ const lpRawRows = computed(() => {
   }));
 });
 
-const lpRawColumns = [
-  { name: 'name', label: '物品/配方', field: 'name', align: 'left' as const },
+const lpRawColumns = computed(() => [
+  { name: 'name', label: t('itemOrRecipe'), field: 'name', align: 'left' as const },
   {
     name: 'perSecond',
-    label: '产出/s',
+    label: t('outputPerSecond'),
     field: 'perSecond',
     align: 'right' as const,
     format: (v: number) => (v > 0 ? v.toFixed(4) : '-'),
   },
   {
     name: 'perMinute',
-    label: '产出/min',
+    label: t('outputPerMinute'),
     field: 'perMinute',
     align: 'right' as const,
     format: (v: number) => (v > 0 ? v.toFixed(2) : '-'),
   },
   {
     name: 'machines',
-    label: '机器数',
+    label: t('machineCount'),
     field: 'machines',
     align: 'right' as const,
     format: (v: number) => (v > 0 ? v.toFixed(2) : '-'),
   },
-  { name: 'surplus', label: '剩余/s', field: 'surplus', align: 'right' as const },
-];
+  { name: 'surplus', label: t('surplusPerSecond'), field: 'surplus', align: 'right' as const },
+]);
 // ──────────────────────────────────────────────────────────────────────────────
 
-const calcMachineColumns = [
-  { name: 'name', label: '设备', field: 'name', align: 'left' as const },
-  { name: 'count', label: '数量', field: 'count', align: 'right' as const },
-];
+const calcMachineColumns = computed(() => [
+  { name: 'name', label: t('equipment'), field: 'name', align: 'left' as const },
+  { name: 'count', label: t('itemCount'), field: 'count', align: 'right' as const },
+]);
+
+function labelWithUnit(label: string, unit: PlannerTargetUnit): string {
+  const suffix = unitSuffix(unit);
+  return suffix ? `${label} (${suffix})` : label;
+}
+
+const calcAmountLabel = computed(() =>
+  calcDisplayUnit.value === 'items' ? t('itemCount') : t('amountPerMin'),
+);
 
 const calcItemColumns = computed(() => [
-  { name: 'name', label: '物品', field: 'name', align: 'left' as const },
+  { name: 'name', label: t('item'), field: 'name', align: 'left' as const },
   {
     name: 'rate',
-    label: `产出速率 (${unitSuffix(calcDisplayUnit.value)})`,
+    label: labelWithUnit(t('outputRate'), calcDisplayUnit.value),
     field: 'rate',
     align: 'right' as const,
   },
 ]);
 
 const calcIntermediateColumns = computed(() => [
-  { name: 'name', label: '物品', field: 'name', align: 'left' as const },
-  { name: 'amount', label: '数量(/min)', field: 'amount', align: 'right' as const },
+  { name: 'name', label: t('item'), field: 'name', align: 'left' as const },
+  { name: 'amount', label: calcAmountLabel.value, field: 'amount', align: 'right' as const },
   {
     name: 'rate',
-    label: `速率 (${unitSuffix(calcDisplayUnit.value)})`,
+    label: labelWithUnit(t('productionSpeed'), calcDisplayUnit.value),
     field: 'rate',
     align: 'right' as const,
   },
-  { name: 'action', label: '操作', field: 'action', align: 'right' as const },
+  { name: 'action', label: t('action'), field: 'action', align: 'right' as const },
 ]);
 
 const calcForcedRawColumns = computed(() => [
-  { name: 'name', label: '物品', field: 'name', align: 'left' as const },
-  { name: 'amount', label: '数量(/min)', field: 'amount', align: 'right' as const },
+  { name: 'name', label: t('item'), field: 'name', align: 'left' as const },
+  { name: 'amount', label: calcAmountLabel.value, field: 'amount', align: 'right' as const },
   {
     name: 'rate',
-    label: `速率 (${unitSuffix(calcDisplayUnit.value)})`,
+    label: labelWithUnit(t('productionSpeed'), calcDisplayUnit.value),
     field: 'rate',
     align: 'right' as const,
   },
-  { name: 'action', label: '操作', field: 'action', align: 'right' as const },
+  { name: 'action', label: t('action'), field: 'action', align: 'right' as const },
 ]);
 
-const getRateUnitLabel = (unit: 'per_second' | 'per_minute' | 'per_hour') => {
-  return rateUnitOptions.find((o) => o.value === unit)?.label ?? unit;
+const getRateUnitLabel = (unit: PlannerTargetUnit) => {
+  return targetUnitOptions.value.find((o) => o.value === unit)?.label ?? unit;
 };
 
 const getItemName = (itemId: ItemId): string => {
