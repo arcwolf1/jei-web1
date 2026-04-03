@@ -17,7 +17,7 @@
     <q-card class="q-mb-md">
       <q-card-section>
         <div class="text-subtitle1">Pack Asset Base</div>
-        <q-input :model-value="packBasePath" readonly filled />
+        <q-input :model-value="packBase" readonly filled />
       </q-card-section>
     </q-card>
 
@@ -120,6 +120,7 @@ import { useEditorStore } from 'src/stores/editor';
 import { useQuasar } from 'quasar';
 import { collectPackAssetUrls } from 'src/jei/pack/collectAssetUrls';
 import InlineImageViewer from 'src/components/InlineImageViewer.vue';
+import { packBasePath as buildPackBasePath } from 'src/utils/app-path';
 
 const store = useEditorStore();
 const $q = useQuasar();
@@ -130,11 +131,10 @@ const viewerOpen = ref(false);
 const viewerSrc = ref('');
 const viewerName = ref('');
 
-const packBasePath = computed(() => `/packs/${store.manifest.packId || 'pack'}/`);
+const packBase = computed(() => buildPackBasePath(store.manifest.packId || 'pack', true));
 
 function packUrlFor(path: string) {
-  const base = store.manifest.packId || 'pack';
-  return `/packs/${base}/${path}`;
+  return `${packBase.value}${path}`;
 }
 
 const referencedAssets = computed(() => {
@@ -149,8 +149,7 @@ const referencedAssets = computed(() => {
 });
 
 function urlToPackRelativePath(url: string): string {
-  const packId = store.manifest.packId || 'pack';
-  const base = `/packs/${encodeURIComponent(packId)}/`;
+  const base = packBase.value;
   if (!url.startsWith(base)) return url;
   return url.slice(base.length);
 }

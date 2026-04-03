@@ -82,6 +82,7 @@ import { useQuasar } from 'quasar';
 import { loadPack } from 'src/jei/pack/loader';
 import JSZip from 'jszip';
 import { collectPackAssetUrls } from 'src/jei/pack/collectAssetUrls';
+import { appPath, packBasePath } from 'src/utils/app-path';
 
 interface PackEntry {
   packId: string;
@@ -97,7 +98,7 @@ const loading = ref(false);
 
 onMounted(async () => {
   try {
-    const res = await fetch('/packs/index.json');
+    const res = await fetch(appPath('/packs/index.json'));
     if (res.ok) {
       const data = await res.json();
       availablePacks.value = data.packs || [];
@@ -208,7 +209,7 @@ async function exportZip() {
     recipes: store.recipes,
   });
   if (referenced.length) {
-    const base = `/packs/${encodeURIComponent(packId)}/`;
+    const base = packBasePath(packId, true);
     const existing = new Set(store.assets.map((a) => `${base}${a.path}`));
     for (const url of referenced) {
       if (existing.has(url)) continue;

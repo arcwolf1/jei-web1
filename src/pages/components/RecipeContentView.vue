@@ -204,7 +204,8 @@
             <div class="wiki-renderer-header q-mb-sm">
               <div class="wiki-renderer-header__title">{{ t('legacyDescription') }}</div>
               <div class="wiki-renderer-header__meta">
-                {{ legacyWikiSourceTitle }} · {{ legacyDescriptionSourceLabel }} · {{ t('description') }}
+                {{ legacyWikiSourceTitle }} · {{ legacyDescriptionSourceLabel }} ·
+                {{ t('description') }}
               </div>
             </div>
             <div class="text-subtitle2 q-mb-sm">{{ t('description') }}</div>
@@ -1566,6 +1567,8 @@ provide('wikiImageOpen', openViewer);
 
 .jei-type-layout {
   display: flex;
+  width: 100%;
+  min-width: 0;
   min-height: 0;
 }
 
@@ -1585,7 +1588,8 @@ provide('wikiImageOpen', openViewer);
 }
 
 .jei-type-main {
-  flex: 1 1 auto;
+  flex: 1 1 0;
+  width: 0;
   min-width: 0;
   display: flex;
   flex-direction: column;

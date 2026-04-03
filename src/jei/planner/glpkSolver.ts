@@ -30,6 +30,7 @@ import { loadModule, Model } from 'glpk-ts';
 import type { Variable } from 'glpk-ts';
 import type { MatrixStateWithNorm } from './matrixState';
 import type { ResultType } from './types';
+import { appPath } from 'src/utils/app-path';
 
 // ─── Public types ──────────────────────────────────────────────────────────────
 
@@ -74,7 +75,7 @@ export async function ensureGlpkLoaded(): Promise<void> {
   if (_modulePromise) return _modulePromise;
   // Pass the WASM file URL so the browser always fetches it from the correct
   // location, regardless of how the dev server resolves module relative paths.
-  _modulePromise = loadModule('/glpk.all.wasm').then(() => {
+  _modulePromise = loadModule(appPath('/glpk.all.wasm')).then(() => {
     _moduleLoaded = true;
   });
   return _modulePromise;
@@ -126,10 +127,7 @@ export async function solveLp(
     const iv = state.itemValues[h];
 
     // Surplus (always present, small penalty)
-    surplusVars.set(
-      h,
-      model.addVar({ name: `surplus_${h}`, lb: 0, obj: costs.surplus }),
-    );
+    surplusVars.set(h, model.addVar({ name: `surplus_${h}`, lb: 0, obj: costs.surplus }));
 
     // External input (only for Input objectives)
     if (iv?.in && iv.in.toNumber() > 0) {

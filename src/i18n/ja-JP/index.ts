@@ -83,6 +83,9 @@ export default {
   recipeSlotShowName: 'レシピスロットにアイテム名を表示',
   favoritesOpenStack: 'お気に入りでナビ履歴を作成',
   persistHistoryRecords: '履歴を永続化する',
+  mobileItemClickOpensDetail: 'モバイルでアイテムをタップしたら詳細タブへ自動移動',
+  openSetupWizard: '初回セットアップを再表示',
+  setupWizardOpenHint: '既定の表示先、モバイル挙動、よく使うプラグイン設定をやり直します。',
   hoverTooltipAllowMouseEnter: 'アイテムホバーにマウスを移動できるようにする',
   hoverTooltipTemporaryShortcutHint: '無効時は {key} を押している間だけホバーへマウス移動できます',
   hoverTooltipInteractionGroup: '操作',
@@ -391,6 +394,70 @@ export default {
   sectionMirror: 'ミラールーティング',
   sectionProxy: '画像プロキシ',
   sectionI18n: '国際化 / i18n',
+  setupWizardTitle: '初回セットアップ',
+  setupWizardWelcomeTitle: '最初に普段の使い方へ合わせておきます',
+  setupWizardWelcomeBody:
+    'このウィザードでは主な用途を確認し、アイテムクリック時の既定ページ、お気に入りの挙動、UI スタイル、よく使うプラグインを設定します。',
+  setupWizardIntentTitle: '主な用途',
+  setupWizardIntentBody:
+    'JEI Web を主に何に使いますか。この選択で、アイテムをクリックしたとき最初に開くページを決めます。',
+  setupWizardIntentWiki: 'Wiki / 資料を調べる',
+  setupWizardIntentRecipes: 'レシピ / 用途を調べる',
+  setupWizardIntentPlanner: '育成や計画を立てる',
+  setupWizardPluginsTitle: 'よく使うプラグイン',
+  setupWizardPluginsBody:
+    '普段使いするプラグインを先に整えておきます。後から設定でいつでも変更できます。',
+  setupWizardBehaviorTitle: '既定の挙動',
+  setupWizardBehaviorBody: '日常操作に影響しやすい項目だけ最後に確認します。',
+  setupWizardDefaultOpenTab: 'アイテムクリック後に最初に開くページ',
+  setupWizardFavoritesCurrent: 'お気に入りは現在の詳細スタックを再利用する',
+  setupWizardFavoritesNewStack: 'お気に入りは毎回新しい詳細スタックを開く',
+  setupWizardUiStyleLabel: 'アイテム一覧とお気に入りの UI スタイル',
+  setupWizardMobileBehavior: 'モバイルでアイテムをタップしたら自動で詳細タブへ移動する',
+  setupWizardPluginExternalLinkDesc: '追加で検索エンジンへ飛びたいときに使います。',
+  setupWizardPluginProtocolTerminalDesc: 'プロトコルターミナル用の独立ツールページを追加します。',
+  setupWizardPluginBilibiliWikiDesc: 'アイテム詳細から BilibiliWiki を直接開きます。',
+  setupWizardPluginEndfieldPlannerDesc: '武器・装備詳細で基質計画や詞条比較を使えるようにします。',
+  setupWizardPluginRecommended: 'おすすめ',
+  setupWizardIntentPreviewWiki: '資料確認向けです。アイテムクリック時は Wiki を優先します。',
+  setupWizardIntentPreviewRecipes:
+    'レシピ確認向けです。アイテムクリック時はレシピページを優先します。',
+  setupWizardIntentPreviewPlanner:
+    '計画向けです。アイテムクリック時はプランナーを優先し、お気に入りも独立スタック向きになります。',
+  setupWizardDataPackLabel: '既定のデータパック',
+  setupWizardAutoSelectedPackHint:
+    '上で選んだ使い方に合わせて既定データパックを自動選択しています：{pack}',
+  setupWizardDataSourceThanks:
+    'すべての上流データソースとツールのメンテナーに感謝します。このウィザードでは Warfarin Wiki、Skland Wiki、終末地基質プランナーのような代表的なソースを前提に案内します。',
+  setupWizardPackAefDesc:
+    '生産ライン、レシピ、用途確認向けです。Wiki本文よりも合成チェーン確認を優先したいときに向いています。',
+  setupWizardPackAggregatedDesc:
+    '合成チェーンと Skland の資料情報をまとめた構成です。レシピ確認と資料参照を両立したい初回利用向けです。',
+  setupWizardPackAggregatedFullDesc:
+    'より多くの上流ソースを混ぜた先行体験向けの集約版です。広めの統合結果を先に試したいときに向いています。',
+  setupWizardPackSklandDesc:
+    'Skland Wiki ベースの資料確認に向いています。アイテム、レシピ、設備の参照情報を広く見たいときに便利です。',
+  setupWizardPackWarfarinDesc:
+    'Warfarin Wiki ベースの資料確認に向いています。別系統の Wiki ソースで見比べたいときに便利です。',
+  setupWizardPackLocalDesc:
+    'これはローカルで取り込んだ、または編集中のデータパックです：{label}。試験利用や校正、未公開内容の先行確認に向いています。',
+  setupWizardPackCustomDesc:
+    'これは追加接続したデータパックです：{label}。そのソース自体の内容に合わせて使い分けてください。',
+  setupWizardBilibiliNote:
+    'BilibiliWiki は現在更新頻度がやや低めなので、補助的な参照先として使うのが無難です。',
+  setupWizardUiStyleModernDesc: 'Modern はシンプルで、一般的な Web UI に馴染みやすい表示です。',
+  setupWizardUiStyleClassicDesc:
+    'JEI Classic は Minecraft の JEI mod に近い、インベントリ風の並び方です。',
+  setupWizardHoverPreviewHint: '現在の hover 設定がどんな見え方になるかの簡易プレビューです。',
+  setupWizardHoverPreviewTitle: 'D32 鋼',
+  setupWizardHoverPreviewIdLine: 'ID: aef:d32_steel',
+  setupWizardHoverPreviewSourceLine: 'Source: aef-aggregated',
+  setupWizardHoverPreviewDescription: '高度な合成や育成で使う素材を例にしたプレビュー説明です。',
+  setupWizardHoverPreviewNamespace: 'namespace: aef',
+  setupWizardBack: '戻る',
+  setupWizardNext: '次へ',
+  setupWizardSkip: 'あとで',
+  setupWizardFinish: '適用して完了',
 
   // I18n panel
   filterAll: 'すべて',

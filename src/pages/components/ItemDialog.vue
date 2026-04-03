@@ -210,10 +210,17 @@ defineEmits<{
   display: flex;
   align-items: center;
   gap: 8px;
+  min-width: 0;
+}
+
+.jei-dialog__tabs :deep(.q-tabs) {
+  flex: 1 1 0;
+  min-width: 0;
 }
 
 .jei-dialog__hint {
   margin-left: auto;
+  flex: 0 0 auto;
   opacity: 0.75;
 }
 

@@ -1,3 +1,5 @@
+import { appPath } from 'src/utils/app-path';
+
 export type PuzzleCollectionEntry = {
   id: string;
   title: string;
@@ -30,17 +32,23 @@ function normalizeBasePath(path: string): string {
 }
 
 function normalizeAssetPath(path: string): string {
-  return path.replace(/\\/g, '/').replace(/^\.\/+/, '').trim();
+  return path
+    .replace(/\\/g, '/')
+    .replace(/^\.\/+/, '')
+    .trim();
 }
 
 export function resolveCollectionAssetPath(basePath: string, assetPath: string): string {
   const normalizedAsset = normalizeAssetPath(assetPath);
-  if (!normalizedAsset) return normalizeBasePath(basePath);
-  if (normalizedAsset.startsWith('/')) return normalizedAsset;
-  return `${normalizeBasePath(basePath)}/${normalizedAsset}`;
+  if (!normalizedAsset) return appPath(normalizeBasePath(basePath));
+  if (normalizedAsset.startsWith('/')) return appPath(normalizedAsset);
+  return appPath(`${normalizeBasePath(basePath)}/${normalizedAsset}`);
 }
 
-export function parseCollectionIndex(value: unknown): { index: PuzzleCollectionIndex | null; errors: string[] } {
+export function parseCollectionIndex(value: unknown): {
+  index: PuzzleCollectionIndex | null;
+  errors: string[];
+} {
   const errors: string[] = [];
   if (!value || typeof value !== 'object') {
     return { index: null, errors: ['Collection index must be an object'] };

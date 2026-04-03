@@ -161,6 +161,7 @@
 
     <!-- 底部栏 -->
     <bottom-bar
+      :is-mobile="isMobile"
       :active-pack-id="activePackId"
       @update:active-pack-id="activePackId = $event"
       :pack-options="packOptions"
@@ -226,6 +227,9 @@
       @update:favorites-open-stack="settingsStore.setFavoritesOpensNewStack($event)"
       :persist-history-records="settingsStore.persistHistoryRecords"
       @update:persist-history-records="settingsStore.setPersistHistoryRecords($event)"
+      :mobile-item-click-opens-detail="settingsStore.mobileItemClickOpensDetail"
+      @update:mobile-item-click-opens-detail="settingsStore.setMobileItemClickOpensDetail($event)"
+      @open:setup-wizard="openSetupWizardFromSettings"
       :hover-tooltip-allow-mouse-enter="settingsStore.hoverTooltipAllowMouseEnter"
       :hover-tooltip-display="settingsStore.hoverTooltipDisplay"
       @update:hover-tooltip-allow-mouse-enter="settingsStore.setHoverTooltipAllowMouseEnter($event)"
@@ -352,7 +356,8 @@ import { useQuasar } from 'quasar';
 import { useRoute, useRouter } from 'vue-router';
 import { useI18n } from 'vue-i18n';
 import type { ItemDef, ItemKey, PackData, Recipe } from 'src/jei/types';
-import { useDialogManager } from 'src/stores/dialogManager';
+import { SETUP_WIZARD_DIALOG_ID, useDialogManager } from 'src/stores/dialogManager';
+import { usePackOptionsStore } from 'src/stores/packOptions';
 import {
   clearPackRuntimeCache,
   getAggregateSourcePackIds,
@@ -421,6 +426,7 @@ import { itemKeyHash } from 'src/jei/indexing/key';
 import { autoPlanSelections } from 'src/jei/planner/planner';
 import { builtinPlugins } from 'src/jei/plugins/builtin';
 import { PluginManager } from 'src/jei/plugins/runtime';
+import { appPath, packBasePath } from 'src/utils/app-path';
 import type {
   HostApiHandler,
   PluginApiResult,
@@ -450,6 +456,7 @@ const settingsStore = useSettingsStore();
 const keyBindingsStore = useKeyBindingsStore();
 const packRoutingRuntimeStore = usePackRoutingRuntimeStore();
 const dialogManager = useDialogManager();
+const packOptionsStore = usePackOptionsStore();
 const { t, locale } = useI18n();
 const pluginManager = new PluginManager();
 for (const plugin of builtinPlugins) {
@@ -768,7 +775,12 @@ const navStack = ref<ItemKey[]>([]);
 watch(
   () => navStack.value.length,
   (len) => {
-    if (isMobile.value && len > 0 && settingsStore.recipeViewMode === 'panel') {
+    if (
+      isMobile.value &&
+      len > 0 &&
+      settingsStore.recipeViewMode === 'panel' &&
+      settingsStore.mobileItemClickOpensDetail
+    ) {
       mobileTab.value = 'panel';
     }
   },
@@ -1070,6 +1082,13 @@ function onPluginEnabledChange(pluginId: string, enabled: boolean) {
 
 function onPluginSettingChange(pluginId: string, key: string, value: PluginSettingValue) {
   settingsStore.setPluginSetting(pluginId, key, value);
+}
+
+function openSetupWizardFromSettings() {
+  settingsOpen.value = false;
+  settingsStore.requestSetupWizardOpen();
+  dialogManager.resetDialogStatus(SETUP_WIZARD_DIALOG_ID);
+  dialogManager.triggerProcess();
 }
 
 function onKeybindingChange(action: KeyAction, binding: KeyBinding) {
@@ -2872,13 +2891,14 @@ async function loadPacksIndex() {
   }));
 
   try {
-    const res = await fetch('/packs/index.json');
+    const res = await fetch(appPath('/packs/index.json'));
     if (!res.ok) {
       // 失败时，注册自定义源并返回
       const nextSources = registerCustomSources(reservedIds, knownSources);
       packRoutingRuntimeStore.setSources(nextSources);
       applyAllMirrorPreferences();
       packOptions.value = [...custom, ...packOptions.value, ...local];
+      packOptionsStore.setOptions(packOptions.value);
       return;
     }
     const data = (await res.json()) as {
@@ -2907,11 +2927,7 @@ async function loadPacksIndex() {
             ? p.aggregateDescriptor.trim()
             : undefined;
         const effectiveMirrors =
-          mirrors.length > 0
-            ? mirrors
-            : aggregateDescriptor
-              ? []
-              : [`/packs/${encodeURIComponent(p.packId)}`];
+          mirrors.length > 0 ? mirrors : aggregateDescriptor ? [] : [packBasePath(p.packId)];
         remoteSources[p.packId] = {
           label: p.label,
           mirrors: effectiveMirrors,
@@ -2933,6 +2949,7 @@ async function loadPacksIndex() {
       applyAllMirrorPreferences();
 
       packOptions.value = [...remote, ...effectiveCustom, ...local];
+      packOptionsStore.setOptions(packOptions.value);
 
       // 如果 store 中的 packId 不在新列表中，切换到第一个
       if (!packOptions.value.some((o) => o.value === settingsStore.selectedPack)) {
@@ -2947,6 +2964,7 @@ async function loadPacksIndex() {
     packRoutingRuntimeStore.setSources(nextSources);
     applyAllMirrorPreferences();
     packOptions.value = [...custom, ...packOptions.value, ...local];
+    packOptionsStore.setOptions(packOptions.value);
   }
 }
 
@@ -3353,6 +3371,16 @@ function ensurePlannerAutoForCurrentItem() {
   plannerInitialState.value = buildAutoPlannerInitialState(key);
 }
 
+function focusDetailPanelOnMobileItemOpen(): void {
+  if (
+    isMobile.value &&
+    settingsStore.recipeViewMode === 'panel' &&
+    settingsStore.mobileItemClickOpensDetail
+  ) {
+    mobileTab.value = 'panel';
+  }
+}
+
 function openDialogByKeyHash(
   keyHash: string,
   tab?: 'recipes' | 'uses' | 'wiki' | 'icon' | 'planner',
@@ -3373,6 +3401,7 @@ function openDialogByKeyHash(
     actualTab === 'planner' ? buildAutoPlannerInitialState(def.key) : null;
   if (actualTab !== 'planner') plannerTab.value = 'tree';
   dialogOpen.value = settingsStore.recipeViewMode === 'dialog';
+  focusDetailPanelOnMobileItemOpen();
   pushHistoryKeyHash(keyHash);
   void syncUrl('push');
 }
@@ -3391,6 +3420,7 @@ function openDialogByItemKey(key: ItemKey, tab?: 'recipes' | 'uses' | 'wiki' | '
     if (actualTab === 'planner' && !plannerInitialState.value) {
       plannerInitialState.value = buildAutoPlannerInitialState(key);
     }
+    focusDetailPanelOnMobileItemOpen();
     return;
   }
 
@@ -3398,6 +3428,7 @@ function openDialogByItemKey(key: ItemKey, tab?: 'recipes' | 'uses' | 'wiki' | '
   activeTab.value = actualTab;
   plannerInitialState.value = actualTab === 'planner' ? buildAutoPlannerInitialState(key) : null;
   if (actualTab !== 'planner') plannerTab.value = 'tree';
+  focusDetailPanelOnMobileItemOpen();
   pushHistoryKeyHash(itemKeyHash(key));
   void syncUrl('push');
 }

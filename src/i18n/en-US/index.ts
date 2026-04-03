@@ -82,6 +82,10 @@ export default {
   recipeSlotShowName: 'Show Item Names in Recipe Slots',
   favoritesOpenStack: 'Favorites open new navigation stack',
   persistHistoryRecords: 'Persist history records',
+  mobileItemClickOpensDetail: 'Auto switch to detail tab after tapping item on mobile',
+  openSetupWizard: 'Reopen first-use setup wizard',
+  setupWizardOpenHint:
+    'Adjust default open tab, mobile behavior, and common plugin switches again.',
   hoverTooltipAllowMouseEnter: 'Allow moving mouse into item hover tooltip',
   hoverTooltipTemporaryShortcutHint:
     'When disabled, hold {key} to temporarily make the hover interactive',
@@ -391,6 +395,74 @@ export default {
   sectionMirror: 'Mirror Routing',
   sectionProxy: 'Image Proxy',
   sectionI18n: 'Internationalization / i18n',
+  setupWizardTitle: 'First-Use Setup Wizard',
+  setupWizardWelcomeTitle: 'Set the default behavior once before you start',
+  setupWizardWelcomeBody:
+    'This wizard asks what you mainly use JEI Web for, then configures the default item page, favorites behavior, UI style, and common plugin switches.',
+  setupWizardIntentTitle: 'Primary goal',
+  setupWizardIntentBody:
+    'What do you mostly use JEI Web for? This mainly decides which page opens first after you click an item.',
+  setupWizardIntentWiki: 'Wiki / reference lookup',
+  setupWizardIntentRecipes: 'Recipe / usage lookup',
+  setupWizardIntentPlanner: 'Planning and progression',
+  setupWizardPluginsTitle: 'Common plugins',
+  setupWizardPluginsBody:
+    'Set up the plugins you expect to use most. You can always adjust them later in Settings.',
+  setupWizardBehaviorTitle: 'Default behavior',
+  setupWizardBehaviorBody: 'Confirm the options that most directly affect everyday navigation.',
+  setupWizardDefaultOpenTab: 'Default page after clicking an item',
+  setupWizardFavoritesCurrent: 'Favorites reuse the current detail stack',
+  setupWizardFavoritesNewStack: 'Favorites open a new detail stack each time',
+  setupWizardUiStyleLabel: 'UI style for item list and favorites',
+  setupWizardMobileBehavior: 'Auto switch to the detail tab after tapping an item on mobile',
+  setupWizardPluginExternalLinkDesc:
+    'Useful when you want to jump out to a search engine for extra context.',
+  setupWizardPluginProtocolTerminalDesc: 'Adds the standalone protocol terminal tool page.',
+  setupWizardPluginBilibiliWikiDesc: 'Open BilibiliWiki directly from the item detail view.',
+  setupWizardPluginEndfieldPlannerDesc:
+    'Enable essence planner and affix comparison tools in weapon and gear details.',
+  setupWizardPluginRecommended: 'Recommended',
+  setupWizardIntentPreviewWiki:
+    'Best for reference browsing. Item clicks will prefer the Wiki page.',
+  setupWizardIntentPreviewRecipes:
+    'Best for recipe lookup. Item clicks will prefer the Recipes page.',
+  setupWizardIntentPreviewPlanner:
+    'Best for planning. Item clicks will prefer the Planner, and favorites are better as separate stacks.',
+  setupWizardDataPackLabel: 'Default data pack',
+  setupWizardAutoSelectedPackHint:
+    'Default data pack auto-selected from the usage mode above: {pack}',
+  setupWizardDataSourceThanks:
+    'Thanks to all upstream data sources and tool authors. This wizard mainly helps you start with common sources like Warfarin Wiki, Skland Wiki, and the Endfield essence planner.',
+  setupWizardPackAefDesc:
+    'Best for production lines, recipes, and usages. This pack is the most direct choice when you mainly care about synthesis chains rather than full wiki text.',
+  setupWizardPackAggregatedDesc:
+    'Combines recipe-chain data with Skland reference data. A good default if you want both recipe lookup and quick wiki context.',
+  setupWizardPackAggregatedFullDesc:
+    'A preview-friendly aggregated build with more upstream sources mixed in. Good if you want to try the broader merged result first.',
+  setupWizardPackSklandDesc:
+    'More focused on Skland Wiki content, with broader reference coverage for items, recipes, and machines.',
+  setupWizardPackWarfarinDesc:
+    'More focused on Warfarin Wiki content, useful when you want a second wiki source for comparison.',
+  setupWizardPackLocalDesc:
+    'This is a locally imported or edited pack: {label}. Useful for testing, reviewing, or trying unpublished content early.',
+  setupWizardPackCustomDesc:
+    'This is an extra connected pack source: {label}. Choose it based on the content quality and purpose of that source.',
+  setupWizardBilibiliNote:
+    'BilibiliWiki is maintained less actively at the moment, so it works best as a secondary reference.',
+  setupWizardUiStyleModernDesc: 'Modern is simpler and easier to read in a typical web UI.',
+  setupWizardUiStyleClassicDesc:
+    'JEI Classic is closer to the inventory-style layout from the Minecraft JEI mod.',
+  setupWizardHoverPreviewHint: 'Approximate preview of the current hover configuration.',
+  setupWizardHoverPreviewTitle: 'D32 Steel',
+  setupWizardHoverPreviewIdLine: 'ID: aef:d32_steel',
+  setupWizardHoverPreviewSourceLine: 'Source: aef-aggregated',
+  setupWizardHoverPreviewDescription:
+    'Sample description used to preview how hover text will look in the app.',
+  setupWizardHoverPreviewNamespace: 'namespace: aef',
+  setupWizardBack: 'Back',
+  setupWizardNext: 'Next',
+  setupWizardSkip: 'Maybe later',
+  setupWizardFinish: 'Apply and finish',
 
   // I18n panel
   filterAll: 'All',

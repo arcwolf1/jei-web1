@@ -13,6 +13,7 @@ import type {
 import { stableJsonStringify } from 'src/jei/utils/stableJson';
 import { collectPackAssetUrls } from 'src/jei/pack/collectAssetUrls';
 import { storage } from 'src/utils/storage';
+import { packBasePath } from 'src/utils/app-path';
 
 export interface EditorAssetMeta {
   path: string;
@@ -160,8 +161,8 @@ export const useEditorStore = defineStore('editor', () => {
 
   // Initialize - async if using JEIStorage
   if (storage.isUsingJEIStorage()) {
-    tryRestorePersistedPack().catch(e => console.error('[Editor] Failed to restore pack:', e));
-    tryRestoreAssetsMeta().catch(e => console.error('[Editor] Failed to restore assets:', e));
+    tryRestorePersistedPack().catch((e) => console.error('[Editor] Failed to restore pack:', e));
+    tryRestoreAssetsMeta().catch((e) => console.error('[Editor] Failed to restore assets:', e));
   } else {
     // Synchronous initialization for localStorage
     (function tryRestoreSync() {
@@ -304,7 +305,12 @@ export const useEditorStore = defineStore('editor', () => {
       accepted: boolean;
     }[] = [];
 
-    const pushIfChanged = (key: ChangeKey, title: string, beforeVal: unknown, afterVal: unknown) => {
+    const pushIfChanged = (
+      key: ChangeKey,
+      title: string,
+      beforeVal: unknown,
+      afterVal: unknown,
+    ) => {
       const before = prettyStable(beforeVal);
       const after = prettyStable(afterVal);
       if (before !== after) {
@@ -314,7 +320,12 @@ export const useEditorStore = defineStore('editor', () => {
 
     pushIfChanged('manifest', 'manifest.json', base.manifest, manifest.value);
     pushIfChanged('items', base.manifest.files.items || 'items.json', base.items, items.value);
-    pushIfChanged('recipeTypes', base.manifest.files.recipeTypes, base.recipeTypes, recipeTypes.value);
+    pushIfChanged(
+      'recipeTypes',
+      base.manifest.files.recipeTypes,
+      base.recipeTypes,
+      recipeTypes.value,
+    );
     pushIfChanged('recipes', base.manifest.files.recipes, base.recipes, recipes.value);
     pushIfChanged('tags', base.manifest.files.tags || 'tags.json', base.tags ?? {}, tags.value);
     pushIfChanged('assets', 'assets', baselineAssets.value, assets.value);
@@ -349,7 +360,9 @@ export const useEditorStore = defineStore('editor', () => {
   }
 
   function undoAll() {
-    (['manifest', 'items', 'recipeTypes', 'recipes', 'tags', 'assets'] as ChangeKey[]).forEach((k) => undoBlock(k));
+    (['manifest', 'items', 'recipeTypes', 'recipes', 'tags', 'assets'] as ChangeKey[]).forEach(
+      (k) => undoBlock(k),
+    );
     accepted.value = {};
   }
 
@@ -368,7 +381,9 @@ export const useEditorStore = defineStore('editor', () => {
   }
 
   function getSaveSnapshot(): { pack: PackData; assets: EditorAssetMeta[] } {
-    return hasAcceptedChanges.value ? buildStagedPack() : { pack: exportPack(), assets: assets.value };
+    return hasAcceptedChanges.value
+      ? buildStagedPack()
+      : { pack: exportPack(), assets: assets.value };
   }
 
   function commitAcceptedToBaseline() {
@@ -390,7 +405,8 @@ export const useEditorStore = defineStore('editor', () => {
     const files = pack.manifest.files;
     if (files.items) folder.file(files.items, JSON.stringify(pack.items, null, 2));
     if (files.tags) folder.file(files.tags, JSON.stringify(pack.tags ?? {}, null, 2));
-    if (files.recipeTypes) folder.file(files.recipeTypes, JSON.stringify(pack.recipeTypes, null, 2));
+    if (files.recipeTypes)
+      folder.file(files.recipeTypes, JSON.stringify(pack.recipeTypes, null, 2));
     if (files.recipes) folder.file(files.recipes, JSON.stringify(pack.recipes, null, 2));
 
     for (const asset of staged.assets) {
@@ -406,7 +422,7 @@ export const useEditorStore = defineStore('editor', () => {
         recipeTypes: pack.recipeTypes,
         recipes: pack.recipes,
       });
-      const baseUrl = `/packs/${encodeURIComponent(packId)}/`;
+      const baseUrl = packBasePath(packId, true);
       const existing = new Set(staged.assets.map((a) => `${baseUrl}${a.path}`));
       for (const url of referenced) {
         if (existing.has(url)) continue;

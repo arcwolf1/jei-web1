@@ -1,4 +1,5 @@
 import type { ItemDef, Recipe, RecipeTypeDef } from 'src/jei/types';
+import { packBasePath } from 'src/utils/app-path';
 
 function collectFromItem(out: Set<string>, item: ItemDef) {
   if (item.icon) out.add(item.icon);
@@ -28,7 +29,7 @@ export function collectPackAssetUrls(args: {
   recipeTypes: RecipeTypeDef[];
   recipes: Recipe[];
 }): string[] {
-  const base = `/packs/${encodeURIComponent(args.packId)}/`;
+  const base = packBasePath(args.packId, true);
   const out = new Set<string>();
   args.items.forEach((it) => collectFromItem(out, it));
   args.recipeTypes.forEach((rt) => collectFromRecipeType(out, rt));
@@ -37,4 +38,3 @@ export function collectPackAssetUrls(args: {
     .filter((u) => typeof u === 'string' && u.startsWith(base))
     .sort((a, b) => a.localeCompare(b));
 }
-

@@ -29,6 +29,7 @@ const PRIORITY_ORDER: Record<DialogPriority, number> = {
 
 // 教程弹窗的特殊ID
 export const TUTORIAL_DIALOG_ID = '__tutorial__';
+export const SETUP_WIZARD_DIALOG_ID = '__setup_wizard__';
 
 export const useDialogManager = defineStore('dialogManager', () => {
   // 所有已注册的弹窗配置

@@ -209,6 +209,23 @@
       @close="handleQQGroupDialogClose"
     />
 
+    <SetupWizardDialog
+      v-model:visible="setupWizardVisible"
+      :plugins="setupWizardPlugins"
+      :packs="setupWizardPacks"
+      :initial-intent="setupWizardInitialIntent"
+      :initial-selected-pack="settingsStore.selectedPack"
+      :initial-item-click-default-tab="settingsStore.itemClickDefaultTab"
+      :initial-favorites-opens-new-stack="settingsStore.favoritesOpensNewStack"
+      :initial-ui-style="settingsStore.itemListIconDisplayMode"
+      :initial-mobile-item-click-opens-detail="settingsStore.mobileItemClickOpensDetail"
+      :initial-hover-tooltip-allow-mouse-enter="settingsStore.hoverTooltipAllowMouseEnter"
+      :initial-hover-tooltip-show-description="settingsStore.hoverTooltipDisplay.description"
+      :initial-hover-tooltip-show-source-line="settingsStore.hoverTooltipDisplay.sourceLine"
+      @finish="handleSetupWizardFinish"
+      @skip="handleSetupWizardSkip"
+    />
+
     <InteractiveTour
       v-model="tutorialManager.tutorialState.value.visible"
       :steps="tutorialManager.currentSteps.value"
@@ -232,13 +249,26 @@ import { useI18n } from 'vue-i18n';
 import { useRoute } from 'vue-router';
 import EssentialLink, { type EssentialLinkProps } from 'components/EssentialLink.vue';
 import QQGroupDialog from 'components/QQGroupDialog.vue';
+import SetupWizardDialog from 'components/SetupWizardDialog.vue';
 import InteractiveTour, { type TutorialProgress } from 'components/InteractiveTour.vue';
-import { useSettingsStore, type DarkMode, type Language } from 'src/stores/settings';
-import { useDialogManager, TUTORIAL_DIALOG_ID } from 'src/stores/dialogManager';
+import {
+  useSettingsStore,
+  type DarkMode,
+  type ItemClickDefaultTab,
+  type Language,
+} from 'src/stores/settings';
+import {
+  SETUP_WIZARD_DIALOG_ID,
+  TUTORIAL_DIALOG_ID,
+  useDialogManager,
+} from 'src/stores/dialogManager';
+import { usePackOptionsStore } from 'src/stores/packOptions';
 import { getTutorialManager } from 'src/composables/useTutorialManager';
+import { builtinPlugins } from 'src/jei/plugins/builtin';
 
 const settingsStore = useSettingsStore();
 const dialogManager = useDialogManager();
+const packOptionsStore = usePackOptionsStore();
 const tutorialManager = getTutorialManager();
 const $q = useQuasar();
 const { t, locale } = useI18n();
@@ -409,9 +439,85 @@ const linksList: EssentialLinkProps[] = [
 
 const leftDrawerOpen = ref(false);
 const qqGroupDialogVisible = ref(false);
+const setupWizardVisible = ref(false);
 const tutorialForceShow = ref(false);
 const qqGroupForceShow = ref(false);
 const QQ_GROUP_DIALOG_ID = 'qq-group-intro';
+
+type SetupWizardIntent = 'wiki' | 'recipes' | 'planner';
+
+const setupWizardPlugins = computed(() => {
+  const visiblePluginIds = [
+    'external-link',
+    'protocol-terminal',
+    'bilibili-wiki',
+    'endfield-planner',
+  ];
+  const descriptions: Record<string, string> = {
+    'external-link': t('setupWizardPluginExternalLinkDesc'),
+    'protocol-terminal': t('setupWizardPluginProtocolTerminalDesc'),
+    'bilibili-wiki': t('setupWizardPluginBilibiliWikiDesc'),
+    'endfield-planner': t('setupWizardPluginEndfieldPlannerDesc'),
+  };
+  const recommendedFor: Record<string, SetupWizardIntent[]> = {
+    'external-link': ['wiki'],
+    'protocol-terminal': ['recipes', 'planner'],
+    'bilibili-wiki': ['wiki', 'recipes'],
+    'endfield-planner': ['planner'],
+  };
+
+  return builtinPlugins
+    .filter((plugin) => visiblePluginIds.includes(plugin.id))
+    .map((plugin) => {
+      const configured = settingsStore.pluginEnabledById[plugin.id];
+      return {
+        id: plugin.id,
+        name: plugin.name,
+        enabled: typeof configured === 'boolean' ? configured : plugin.enabledByDefault !== false,
+        description: descriptions[plugin.id] ?? plugin.id,
+        recommendedFor: recommendedFor[plugin.id] ?? [],
+      };
+    });
+});
+
+function getPackRecommendedFor(packId: string): SetupWizardIntent[] {
+  if (packId === 'aef') return ['recipes', 'planner'];
+  if (packId === 'aef-aggregated') return ['wiki', 'recipes'];
+  if (packId === 'aef-aggregated-full') return ['wiki', 'recipes', 'planner'];
+  if (packId === 'aef-skland' || packId === 'warfarin-next') return ['wiki'];
+  return ['wiki', 'recipes', 'planner'];
+}
+
+function getPackDescription(packId: string, label: string): string {
+  if (packId === 'aef') return t('setupWizardPackAefDesc');
+  if (packId === 'aef-aggregated') return t('setupWizardPackAggregatedDesc');
+  if (packId === 'aef-aggregated-full') return t('setupWizardPackAggregatedFullDesc');
+  if (packId === 'aef-skland') return t('setupWizardPackSklandDesc');
+  if (packId === 'warfarin-next') return t('setupWizardPackWarfarinDesc');
+  if (packId.startsWith('local:')) return t('setupWizardPackLocalDesc', { label });
+  return t('setupWizardPackCustomDesc', { label });
+}
+
+const setupWizardPacks = computed(() => {
+  const sourceOptions = packOptionsStore.options.length
+    ? packOptionsStore.options
+    : settingsStore.selectedPack
+      ? [{ label: settingsStore.selectedPack, value: settingsStore.selectedPack }]
+      : [];
+
+  return sourceOptions.map((pack) => ({
+    value: pack.value,
+    label: pack.label,
+    description: getPackDescription(pack.value, pack.label),
+    recommendedFor: getPackRecommendedFor(pack.value),
+  }));
+});
+
+const setupWizardInitialIntent = computed<SetupWizardIntent>(() => {
+  if (settingsStore.itemClickDefaultTab === 'wiki') return 'wiki';
+  if (settingsStore.itemClickDefaultTab === 'planner') return 'planner';
+  return 'recipes';
+});
 
 // 检测是否是PC端
 function isDesktop(): boolean {
@@ -442,6 +548,47 @@ function showTutorial() {
   tutorialForceShow.value = true;
   dialogManager.resetDialogStatus(TUTORIAL_DIALOG_ID);
   dialogManager.triggerProcess();
+}
+
+function applySetupWizardPlugins(pluginEnabledById: Record<string, boolean>) {
+  Object.entries(pluginEnabledById).forEach(([pluginId, enabled]) => {
+    settingsStore.setPluginEnabled(pluginId, enabled);
+  });
+}
+
+function handleSetupWizardFinish(payload: {
+  intent: SetupWizardIntent;
+  selectedPack: string;
+  itemClickDefaultTab: ItemClickDefaultTab;
+  favoritesOpensNewStack: boolean;
+  uiStyle: 'modern' | 'jei_classic';
+  mobileItemClickOpensDetail: boolean;
+  hoverTooltipAllowMouseEnter: boolean;
+  hoverTooltipShowDescription: boolean;
+  hoverTooltipShowSourceLine: boolean;
+  pluginEnabledById: Record<string, boolean>;
+}) {
+  applySetupWizardPlugins(payload.pluginEnabledById);
+  if (payload.selectedPack) {
+    settingsStore.setSelectedPack(payload.selectedPack);
+  }
+  settingsStore.setItemClickDefaultTab(payload.itemClickDefaultTab);
+  settingsStore.setFavoritesOpensNewStack(payload.favoritesOpensNewStack);
+  settingsStore.setItemListIconDisplayMode(payload.uiStyle);
+  settingsStore.setFavoritesIconDisplayMode(payload.uiStyle);
+  settingsStore.setMobileItemClickOpensDetail(payload.mobileItemClickOpensDetail);
+  settingsStore.setHoverTooltipAllowMouseEnter(payload.hoverTooltipAllowMouseEnter);
+  settingsStore.setHoverTooltipDisplaySetting('description', payload.hoverTooltipShowDescription);
+  settingsStore.setHoverTooltipDisplaySetting('sourceLine', payload.hoverTooltipShowSourceLine);
+  settingsStore.setCompletedSetupWizard(true);
+  settingsStore.clearSetupWizardForceShow();
+  dialogManager.completeDialog();
+}
+
+function handleSetupWizardSkip() {
+  settingsStore.setCompletedSetupWizard(true);
+  settingsStore.clearSetupWizardForceShow();
+  dialogManager.skipDialog();
 }
 
 function handleTutorialFinish() {
@@ -484,6 +631,22 @@ dialogManager.registerDialog({
   onClose: () => {
     qqGroupDialogVisible.value = false;
     qqGroupForceShow.value = false;
+  },
+});
+
+dialogManager.registerDialog({
+  id: SETUP_WIZARD_DIALOG_ID,
+  priority: 'high',
+  title: '首次使用向导',
+  canShow: () => !settingsStore.completedSetupWizard || settingsStore.setupWizardForceShow,
+  onShow: () => {
+    setupWizardVisible.value = true;
+    leftDrawerOpen.value = false;
+  },
+  onClose: () => {
+    setupWizardVisible.value = false;
+    leftDrawerOpen.value = false;
+    settingsStore.clearSetupWizardForceShow();
   },
 });
 

@@ -320,6 +320,7 @@ import CircuitPuzzleShapeCanvas from './CircuitPuzzleShapeCanvas.vue';
 import { useSettingsStore } from 'src/stores/settings';
 import { useKeyBindingsStore, eventMatchesBinding } from 'src/stores/keybindings';
 import { storage } from 'src/utils/storage';
+import { appPath } from 'src/utils/app-path';
 import { solveLevel, verifySolution } from './auto-solver';
 import { cloneLevel } from './defaultLevel';
 
@@ -800,9 +801,12 @@ function persistFavoritePieces(next: FavoritePiece[]): void {
 }
 async function loadBuiltinType2FavoritePieces(): Promise<FavoritePiece[]> {
   try {
-    const listResp = await fetch('/circuit-puzzle-levels/file_type2/minigame_puzzle.json', {
-      headers: { Accept: 'application/json' },
-    });
+    const listResp = await fetch(
+      appPath('/circuit-puzzle-levels/file_type2/minigame_puzzle.json'),
+      {
+        headers: { Accept: 'application/json' },
+      },
+    );
     if (!listResp.ok) return [];
     const puzzleRaw = (await listResp.json()) as unknown;
     const blockIds = collectType2BlockIds(puzzleRaw).sort((a, b) => a.localeCompare(b));
@@ -812,7 +816,7 @@ async function loadBuiltinType2FavoritePieces(): Promise<FavoritePiece[]> {
       blockIds.map(async (blockId): Promise<FavoritePiece | null> => {
         try {
           const blockResp = await fetch(
-            `/circuit-puzzle-levels/file_type2/blocks/${encodeURIComponent(blockId)}.json`,
+            appPath(`/circuit-puzzle-levels/file_type2/blocks/${encodeURIComponent(blockId)}.json`),
             { headers: { Accept: 'application/json' } },
           );
           if (!blockResp.ok) return null;

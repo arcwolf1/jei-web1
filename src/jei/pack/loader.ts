@@ -34,6 +34,7 @@ import {
   ensurePackImageProxyTokens,
 } from './imageProxy';
 import JSZip from 'jszip';
+import { appPath, packBasePath } from 'src/utils/app-path';
 
 const packRefreshToken = new Map<string, string>();
 
@@ -461,8 +462,7 @@ export function getPackBaseUrls(packId: string): string[] {
       ) {
         return [];
       }
-      const safe = encodeURIComponent(packId);
-      return [`/packs/${safe}`];
+      return [packBasePath(packId)];
     }
     const mode = packMirrorMode.get(packId) ?? 'auto';
     const manual = packManualMirror.get(packId);
@@ -480,8 +480,7 @@ export function getPackBaseUrls(packId: string): string[] {
       .sort((a, b) => b.score - a.score || a.idx - b.idx)
       .map((it) => it.url);
   }
-  const safe = encodeURIComponent(packId);
-  return [`/packs/${safe}`];
+  return [packBasePath(packId)];
 }
 
 export function packBaseUrl(packId: string): string {
@@ -624,7 +623,7 @@ function resolveAggregateDescriptorUrl(raw: string): string {
   if (!descriptor) return descriptor;
   if (isAbsoluteLikeUrlOrPath(descriptor)) return descriptor;
   const clean = descriptor.replace(/^\.?\/+/, '');
-  return `/packs/${clean}`;
+  return appPath(`/packs/${clean}`);
 }
 
 function resolveAggregateResourceUrl(baseUrl: string, raw: string): string {
@@ -686,7 +685,10 @@ function parseAggregateDescriptor(raw: unknown, jsonPath: string): AggregatePack
       : undefined;
   const gameId =
     typeof raw.gameId === 'string' && raw.gameId.trim().length > 0 ? raw.gameId.trim() : undefined;
-  const aggregatorScript = parseOptionalString(raw.aggregatorScript, `${jsonPath}.aggregatorScript`);
+  const aggregatorScript = parseOptionalString(
+    raw.aggregatorScript,
+    `${jsonPath}.aggregatorScript`,
+  );
 
   const sourceRaw = raw.sources;
   if (!Array.isArray(sourceRaw) || sourceRaw.length === 0) {
@@ -774,7 +776,12 @@ async function loadAggregateDescriptor(
     return {
       ...parsed,
       ...(parsed.aggregatorScript
-        ? { aggregatorScriptUrl: resolveAggregateResourceUrl(descriptorUrl, parsed.aggregatorScript) }
+        ? {
+            aggregatorScriptUrl: resolveAggregateResourceUrl(
+              descriptorUrl,
+              parsed.aggregatorScript,
+            ),
+          }
         : {}),
     };
   })().catch((err: unknown) => {
@@ -994,9 +1001,7 @@ async function loadAggregateScriptHandler(
     const source = await fetchText(scriptUrl, packId);
     const blobUrl = URL.createObjectURL(new Blob([source], { type: 'text/javascript' }));
     try {
-      const module = (await import(
-        /* @vite-ignore */ blobUrl
-      )) as AggregateScriptModule;
+      const module = (await import(/* @vite-ignore */ blobUrl)) as AggregateScriptModule;
       const handler =
         typeof module.default === 'function'
           ? module.default
@@ -1043,7 +1048,10 @@ async function resolveAggregateItemAliases(
     },
   });
   const rawAliases = result?.itemAliases;
-  const normalized = normalizeAggregateScriptItemAliases(rawAliases, '$.aggregateScript.itemAliases');
+  const normalized = normalizeAggregateScriptItemAliases(
+    rawAliases,
+    '$.aggregateScript.itemAliases',
+  );
   return validateAggregateScriptItemAliases(loadedByPriority, normalized);
 }
 
@@ -1253,9 +1261,7 @@ function transformRecipeTypeForAggregate(
   return out;
 }
 
-function toRecipeTypeMachineArray(
-  machine: RecipeTypeDef['machine'],
-): RecipeTypeMachine[] {
+function toRecipeTypeMachineArray(machine: RecipeTypeDef['machine']): RecipeTypeMachine[] {
   if (!machine) return [];
   return Array.isArray(machine) ? [...machine] : [machine];
 }
@@ -1359,10 +1365,7 @@ function recipeTypeMachinesCompatible(
   return true;
 }
 
-function recipeTypeCompatibleForAggregate(
-  base: RecipeTypeDef,
-  incoming: RecipeTypeDef,
-): boolean {
+function recipeTypeCompatibleForAggregate(base: RecipeTypeDef, incoming: RecipeTypeDef): boolean {
   if (normalizeRecipeTypeText(base.displayName) !== normalizeRecipeTypeText(incoming.displayName)) {
     return false;
   }
@@ -1733,9 +1736,10 @@ function mergeItemDescriptionForAggregate(base: ItemDef, incoming: ItemDef): str
   return `${left}\n\n${right}`;
 }
 
-function extractAggregateHoverMeta(
-  item: ItemDef,
-): { meta?: Record<string, unknown>; wikiMeta?: Record<string, unknown> } {
+function extractAggregateHoverMeta(item: ItemDef): {
+  meta?: Record<string, unknown>;
+  wikiMeta?: Record<string, unknown>;
+} {
   const jeiweb = isRecordLike(item.extensions?.jeiweb) ? item.extensions.jeiweb : undefined;
   const jeiwebMeta = isRecordLike(jeiweb?.meta) ? { ...jeiweb.meta } : undefined;
   if (jeiwebMeta) {
@@ -1746,7 +1750,9 @@ function extractAggregateHoverMeta(
     delete jeiwebMeta.aggregateOriginalItemIds;
   }
   const wikiMeta =
-    isRecordLike(jeiweb?.wiki) && isRecordLike(jeiweb.wiki.meta) ? { ...jeiweb.wiki.meta } : undefined;
+    isRecordLike(jeiweb?.wiki) && isRecordLike(jeiweb.wiki.meta)
+      ? { ...jeiweb.wiki.meta }
+      : undefined;
   return {
     ...(jeiwebMeta && Object.keys(jeiwebMeta).length > 0 ? { meta: jeiwebMeta } : {}),
     ...(wikiMeta && Object.keys(wikiMeta).length > 0 ? { wikiMeta } : {}),
@@ -1783,31 +1789,35 @@ function collectAggregateHoverSources(item: ItemDef): Record<string, unknown>[] 
   const jeiweb = isRecordLike(item.extensions?.jeiweb) ? item.extensions.jeiweb : undefined;
   const meta = isRecordLike(jeiweb?.meta) ? jeiweb.meta : undefined;
   const existing = Array.isArray(meta?.aggregateHoverSources)
-    ? meta.aggregateHoverSources.filter((entry): entry is Record<string, unknown> => isRecordLike(entry))
+    ? meta.aggregateHoverSources.filter((entry): entry is Record<string, unknown> =>
+        isRecordLike(entry),
+      )
     : [];
   const snapshot = buildAggregateHoverSourceSnapshot(item);
   return [...existing.map((entry) => cloneAggregateValue(entry)), snapshot];
 }
 
-function mergeAggregateHoverSourcesForItem(base: ItemDef, incoming: ItemDef): Record<string, unknown>[] {
+function mergeAggregateHoverSourcesForItem(
+  base: ItemDef,
+  incoming: ItemDef,
+): Record<string, unknown>[] {
   const byKey = new Map<string, Record<string, unknown>>();
-  [...collectAggregateHoverSources(base), ...collectAggregateHoverSources(incoming)].forEach((entry) => {
-    const sourcePackId =
-      typeof entry.sourcePackId === 'string' && entry.sourcePackId.trim()
-        ? entry.sourcePackId.trim()
-        : 'unknown';
-    const id = typeof entry.id === 'string' && entry.id.trim() ? entry.id.trim() : 'unknown';
-    const key = `${sourcePackId}\u0000${id}`;
-    const existing = byKey.get(key);
-    if (!existing) {
-      byKey.set(key, cloneAggregateValue(entry));
-      return;
-    }
-    byKey.set(
-      key,
-      mergeAggregateValues(existing, entry) as Record<string, unknown>,
-    );
-  });
+  [...collectAggregateHoverSources(base), ...collectAggregateHoverSources(incoming)].forEach(
+    (entry) => {
+      const sourcePackId =
+        typeof entry.sourcePackId === 'string' && entry.sourcePackId.trim()
+          ? entry.sourcePackId.trim()
+          : 'unknown';
+      const id = typeof entry.id === 'string' && entry.id.trim() ? entry.id.trim() : 'unknown';
+      const key = `${sourcePackId}\u0000${id}`;
+      const existing = byKey.get(key);
+      if (!existing) {
+        byKey.set(key, cloneAggregateValue(entry));
+        return;
+      }
+      byKey.set(key, mergeAggregateValues(existing, entry) as Record<string, unknown>);
+    },
+  );
   return Array.from(byKey.values());
 }
 
@@ -2047,7 +2057,9 @@ function mergeRecipesBySignatureForAggregate(recipes: Recipe[]): Recipe[] {
   recipes.forEach((recipe) => {
     const signature = recipeSignatureForAggregate(recipe);
     const bucket = buckets.get(signature) ?? [];
-    const existingIndex = bucket.findIndex((existing) => recipesCompatibleForAggregate(existing, recipe));
+    const existingIndex = bucket.findIndex((existing) =>
+      recipesCompatibleForAggregate(existing, recipe),
+    );
     if (existingIndex >= 0) {
       bucket[existingIndex] = mergeRecipeForAggregate(bucket[existingIndex]!, recipe);
     } else {
@@ -2310,7 +2322,10 @@ async function loadAggregatePack(
           mergedRecipeTypesByKey.set(recipeType.key, recipeType);
           return;
         }
-        mergedRecipeTypesByKey.set(recipeType.key, mergeRecipeTypeForAggregate(existing, recipeType));
+        mergedRecipeTypesByKey.set(
+          recipeType.key,
+          mergeRecipeTypeForAggregate(existing, recipeType),
+        );
       });
       transformedRecipes.push(...recipes);
       mergedTags = mergePackTagsForAggregate(mergedTags, tags);
@@ -2683,7 +2698,7 @@ function resolveLocalPackAssetUrls(
   pack: PackData,
   assets: { path: string; blob: Blob }[],
 ): RuntimePackLoadResult {
-  const base = `/packs/${encodeURIComponent(pack.manifest.packId)}/`;
+  const base = packBasePath(pack.manifest.packId, true);
   const urlByAbsolute = new Map<string, string>();
   const created: string[] = [];
 
@@ -2742,7 +2757,7 @@ export async function loadRuntimePack(
 
     onProgress?.({ message: 'Parsing zip...', percent: 0.2 });
     const { pack, assets } = await zipToPackData(zipBlob);
-    const localBase = `/packs/${encodeURIComponent(pack.manifest.packId)}`;
+    const localBase = packBasePath(pack.manifest.packId);
     resolvePackAssetUrls(pack, localBase);
 
     onProgress?.({ message: 'Processing assets...', percent: 0.8 });

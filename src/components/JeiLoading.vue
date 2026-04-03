@@ -17,9 +17,13 @@
       :color="isDark ? 'white' : 'grey-8'"
       @click="$emit('open-settings')"
     />
-    <img src="/icons/icon.svg" :style="overlay ? 'width: 120px; height: 120px' : 'width: 80px; height: 80px'" class="q-mb-lg" />
+    <img
+      :src="appPath('/icons/icon.svg')"
+      :style="overlay ? 'width: 120px; height: 120px' : 'width: 80px; height: 80px'"
+      class="q-mb-lg"
+    />
     <div v-if="overlay" class="text-h5 text-weight-bold q-mb-md">{{ packLabel }}</div>
-    
+
     <template v-if="progress">
       <div class="text-subtitle1 q-mb-md text-primary">{{ progress.message }}</div>
       <q-linear-progress
@@ -46,6 +50,7 @@ import { useQuasar } from 'quasar';
 import { computed } from 'vue';
 import { useI18n } from 'vue-i18n';
 import type { LoadProgress } from 'src/jei/pack/loader';
+import { appPath } from 'src/utils/app-path';
 
 defineProps<{
   overlay?: boolean;

@@ -219,8 +219,9 @@ import {
 } from 'src/components/circuit-puzzle/url-format-v3';
 import type { GridCell, PuzzleLevelDefinition } from 'src/components/circuit-puzzle/types';
 import { useSettingsStore } from 'src/stores/settings';
+import { appPath } from 'src/utils/app-path';
 
-const INDEX_PATH = '/circuit-puzzle-levels/index.json';
+const INDEX_PATH = appPath('/circuit-puzzle-levels/index.json');
 const PREVIEW_HINT_FALLBACK = '#9ddb22';
 const type2BlockCache = new Map<string, GridCell[]>();
 

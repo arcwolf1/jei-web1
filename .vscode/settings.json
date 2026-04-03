@@ -22,5 +22,8 @@
     "lxml",
     "pydantic",
     "pypi"
-  ]
+  ],
+  "[typescript]": {
+    "editor.defaultFormatter": "esbenp.prettier-vscode"
+  }
 }

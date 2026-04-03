@@ -3,11 +3,14 @@
     v-show="!isMobile || mobileTab === 'fav'"
     flat
     bordered
-    :class="['jei-fav column no-wrap', { 'jei-fav--collapsed': collapsed }]"
+    :class="[
+      'jei-fav column no-wrap',
+      { 'jei-fav--mobile': isMobile, 'jei-fav--collapsed': effectiveCollapsed },
+    ]"
   >
     <!-- 折叠状态下的展开按钮 -->
     <div
-      v-if="collapsed"
+      v-if="effectiveCollapsed"
       class="jei-collapsed-trigger jei-collapsed-trigger--left"
       @click="$emit('update:collapsed', false)"
     >
@@ -15,7 +18,7 @@
     </div>
 
     <!-- 展开状态下的内容 -->
-    <template v-if="!collapsed">
+    <template v-if="!effectiveCollapsed">
       <div class="jei-list__head col-auto row items-center q-gutter-sm">
         <div class="text-subtitle2">{{ t('favorites') }}</div>
         <div class="jei-list__head-center text-caption text-grey-7">
@@ -24,6 +27,7 @@
         </div>
         <q-space />
         <q-btn
+          v-if="!isMobile"
           flat
           dense
           round
@@ -267,13 +271,17 @@ const measuredCellHeight = ref(84);
 const gridGap = 8;
 const CLASSIC_GRID_MIN_CELL_WIDTH = 52;
 const MODERN_GRID_COLUMNS = 2;
+const MOBILE_MODERN_GRID_COLUMNS = 2;
 
 const listScrollEl = ref<HTMLElement | null>(null);
 const savedPlansEl = ref<HTMLElement | null>(null);
 const listGridEl = ref<HTMLElement | null>(null);
 const sampleCellEl = ref<HTMLElement | null>(null);
+const effectiveCollapsed = computed(() => !props.isMobile && props.collapsed);
 const gridColumns = computed(() => {
-  if (props.iconDisplayMode !== 'jei_classic') return MODERN_GRID_COLUMNS;
+  if (props.iconDisplayMode !== 'jei_classic') {
+    return props.isMobile ? MOBILE_MODERN_GRID_COLUMNS : MODERN_GRID_COLUMNS;
+  }
   const gridWidth = listGridEl.value?.clientWidth ?? listScrollEl.value?.clientWidth ?? 0;
   if (!gridWidth) return 4;
   return Math.max(1, Math.floor((gridWidth + 6) / (CLASSIC_GRID_MIN_CELL_WIDTH + 6)));
@@ -410,7 +418,7 @@ watch(
 watch(
   () => [props.collapsed, props.mobileTab, props.isMobile] as const,
   () => {
-    if (!props.collapsed) scheduleRecomputeFavoritePageSize();
+    if (!effectiveCollapsed.value) scheduleRecomputeFavoritePageSize();
   },
 );
 
@@ -595,6 +603,12 @@ defineEmits<{
   transition: width 0.3s ease;
 }
 
+.jei-fav--mobile {
+  width: 100%;
+  min-width: 0;
+  flex: 1 1 auto;
+}
+
 .jei-fav--collapsed {
   width: 20px !important;
   min-width: 20px !important;
@@ -655,6 +669,36 @@ defineEmits<{
   padding: 10px;
   overflow: hidden;
   min-height: 0;
+}
+
+.jei-fav--mobile .jei-list__scroll {
+  overflow: auto;
+}
+
+.jei-fav--mobile .jei-grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.jei-fav--mobile .jei-grid__cell {
+  padding: 12px;
+}
+
+.jei-fav--mobile .jei-list__head {
+  padding: 10px 12px;
+  align-items: flex-start;
+  flex-wrap: wrap;
+}
+
+.jei-fav--mobile .jei-list__head-center {
+  width: 100%;
+  justify-content: flex-start;
+  gap: 10px;
+}
+
+.jei-fav--mobile .jei-list__scroll,
+.jei-fav--mobile .jei-list__pager {
+  padding-left: 12px;
+  padding-right: 12px;
 }
 
 .jei-list__pager {

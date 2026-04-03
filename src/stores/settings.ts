@@ -224,10 +224,12 @@ export const useSettingsStore = defineStore('settings', {
       language: detectBrowserLanguage(),
       debugPanelPos: { x: 10, y: 10 },
       acceptedStartupDialogs: [] as string[],
+      completedSetupWizard: false,
       completedTutorial: false,
+      setupWizardForceShow: false,
       favoritesOpensNewStack: false,
       persistHistoryRecords: true,
-      hoverTooltipAllowMouseEnter: true,
+      hoverTooltipAllowMouseEnter: false,
       hoverTooltipDisplay: { ...DEFAULT_HOVER_TOOLTIP_DISPLAY_SETTINGS },
       // Wiki 渲染器设置
       wikiImageUseProxy: false,
@@ -252,6 +254,7 @@ export const useSettingsStore = defineStore('settings', {
       } as CircuitEditorPiecePanelState,
       circuitEditorPiecePanelSplitRatio: 0.5,
       detectPcDisableMobile: true,
+      mobileItemClickOpensDetail: true,
       customPackSources: [] as Array<{ packId: string; label: string; mirrors: string[] }>,
       useDevPackMirrors: false,
       packMirrorSelectionModeByPack: {} as Record<string, 'auto' | 'manual'>,
@@ -360,10 +363,15 @@ export const useSettingsStore = defineStore('settings', {
         acceptedStartupDialogs: Array.isArray(parsed.acceptedStartupDialogs)
           ? parsed.acceptedStartupDialogs.filter((x): x is string => typeof x === 'string')
           : defaults.acceptedStartupDialogs,
+        completedSetupWizard:
+          typeof parsed.completedSetupWizard === 'boolean'
+            ? parsed.completedSetupWizard
+            : defaults.completedSetupWizard,
         completedTutorial:
           typeof parsed.completedTutorial === 'boolean'
             ? parsed.completedTutorial
             : defaults.completedTutorial,
+        setupWizardForceShow: defaults.setupWizardForceShow,
         favoritesOpensNewStack:
           typeof parsed.favoritesOpensNewStack === 'boolean'
             ? parsed.favoritesOpensNewStack
@@ -435,6 +443,10 @@ export const useSettingsStore = defineStore('settings', {
           typeof parsed.detectPcDisableMobile === 'boolean'
             ? parsed.detectPcDisableMobile
             : defaults.detectPcDisableMobile,
+        mobileItemClickOpensDetail:
+          typeof parsed.mobileItemClickOpensDetail === 'boolean'
+            ? parsed.mobileItemClickOpensDetail
+            : defaults.mobileItemClickOpensDetail,
         customPackSources: Array.isArray(parsed.customPackSources)
           ? parsed.customPackSources
               .map((x) => normalizeCustomPackSource(x))
@@ -704,6 +716,16 @@ export const useSettingsStore = defineStore('settings', {
       this.completedTutorial = value;
       void this.save();
     },
+    setCompletedSetupWizard(value: boolean) {
+      this.completedSetupWizard = value;
+      void this.save();
+    },
+    requestSetupWizardOpen() {
+      this.setupWizardForceShow = true;
+    },
+    clearSetupWizardForceShow() {
+      this.setupWizardForceShow = false;
+    },
     setCircuitCollectionPreviewShowPieces(value: boolean) {
       this.circuitCollectionPreviewShowPieces = value;
       void this.save();
@@ -725,6 +747,10 @@ export const useSettingsStore = defineStore('settings', {
     },
     setDetectPcDisableMobile(value: boolean) {
       this.detectPcDisableMobile = value;
+      void this.save();
+    },
+    setMobileItemClickOpensDetail(value: boolean) {
+      this.mobileItemClickOpensDetail = value;
       void this.save();
     },
     addCustomPackSource(source: { packId: string; label: string; mirrors: string[] }) {
@@ -854,6 +880,7 @@ export const useSettingsStore = defineStore('settings', {
         language: this.language,
         debugPanelPos: this.debugPanelPos,
         acceptedStartupDialogs: this.acceptedStartupDialogs,
+        completedSetupWizard: this.completedSetupWizard,
         completedTutorial: this.completedTutorial,
         favoritesOpensNewStack: this.favoritesOpensNewStack,
         persistHistoryRecords: this.persistHistoryRecords,
@@ -874,6 +901,7 @@ export const useSettingsStore = defineStore('settings', {
         circuitEditorPiecePanel: this.circuitEditorPiecePanel,
         circuitEditorPiecePanelSplitRatio: this.circuitEditorPiecePanelSplitRatio,
         detectPcDisableMobile: this.detectPcDisableMobile,
+        mobileItemClickOpensDetail: this.mobileItemClickOpensDetail,
         customPackSources: this.customPackSources,
         useDevPackMirrors: this.useDevPackMirrors,
         packMirrorSelectionModeByPack: this.packMirrorSelectionModeByPack,
@@ -956,6 +984,8 @@ export const useSettingsStore = defineStore('settings', {
         this.acceptedStartupDialogs = parsed.acceptedStartupDialogs.filter(
           (x): x is string => typeof x === 'string',
         );
+      if (typeof parsed.completedSetupWizard === 'boolean')
+        this.completedSetupWizard = parsed.completedSetupWizard;
       if (typeof parsed.completedTutorial === 'boolean')
         this.completedTutorial = parsed.completedTutorial;
       if (typeof parsed.favoritesOpensNewStack === 'boolean')
@@ -1053,6 +1083,8 @@ export const useSettingsStore = defineStore('settings', {
         this.circuitEditorPiecePanelSplitRatio = parsed.circuitEditorPiecePanelSplitRatio;
       if (typeof parsed.detectPcDisableMobile === 'boolean')
         this.detectPcDisableMobile = parsed.detectPcDisableMobile;
+      if (typeof parsed.mobileItemClickOpensDetail === 'boolean')
+        this.mobileItemClickOpensDetail = parsed.mobileItemClickOpensDetail;
       if (Array.isArray(parsed.customPackSources)) {
         this.customPackSources = parsed.customPackSources
           .map((x) => normalizeCustomPackSource(x))
