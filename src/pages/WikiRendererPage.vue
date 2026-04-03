@@ -367,6 +367,7 @@ import { useI18n } from 'vue-i18n';
 import WikiDocument from '../components/wiki/WikiDocument.vue';
 import WikiChapterGroup from '../components/wiki/layout/WikiChapterGroup.vue';
 import { useSettingsStore } from '../stores/settings';
+import { appPath } from '../utils/app-path';
 
 const { t } = useI18n();
 import type {
@@ -444,7 +445,7 @@ async function loadWikiFileList(dirPath: string) {
   loadingWikiFiles.value = true;
   try {
     // 构建完整的公共路径：info -> /temp/info/index.json
-    const fullPath = `/temp/${dirPath}/index.json`;
+    const fullPath = appPath(`/temp/${dirPath}/index.json`);
     console.log('Loading file list from:', fullPath);
 
     const response = await fetch(fullPath);
@@ -474,7 +475,7 @@ async function loadCatalogFileList(dirPath: string) {
   loadingCatalogFiles.value = true;
   try {
     // 构建完整的公共路径：catalog -> /temp/catalog/index.json
-    const fullPath = `/temp/${dirPath}/index.json`;
+    const fullPath = appPath(`/temp/${dirPath}/index.json`);
     console.log('Loading catalog file list from:', fullPath);
 
     const response = await fetch(fullPath);
@@ -503,7 +504,7 @@ async function loadCatalogFileList(dirPath: string) {
 async function loadWikiFileFromDir(filePath: string, fileName: string) {
   try {
     // 构建完整的公共路径：info + id7.json -> /temp/info/id7.json
-    const fullPath = `/temp/${wikiFileDir.value}/${filePath}`;
+    const fullPath = appPath(`/temp/${wikiFileDir.value}/${filePath}`);
     console.log('Loading wiki file from:', fullPath);
 
     const response = await fetch(fullPath);
@@ -532,7 +533,7 @@ async function loadWikiFileFromDir(filePath: string, fileName: string) {
 async function loadCatalogFileFromDir(filePath: string, fileName: string) {
   try {
     // 构建完整的公共路径：catalog + full.json -> /temp/catalog/full.json
-    const fullPath = `/temp/${catalogFileDir.value}/${filePath}`;
+    const fullPath = appPath(`/temp/${catalogFileDir.value}/${filePath}`);
     console.log('Loading catalog file from:', fullPath);
 
     const response = await fetch(fullPath);

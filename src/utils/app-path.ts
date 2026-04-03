@@ -5,7 +5,7 @@ export function appPath(path: string): string {
   if (!trimmed) return trimmed;
   if (/^(?:[a-z][a-z0-9+.-]*:|\/\/|data:|blob:)/i.test(trimmed)) return trimmed;
 
-  const base = (import.meta.env.BASE_URL || '/').trim();
+  const base = (import.meta.env.BASE_URL ?? '/').trim();
   const normalizedPath = trimmed.replace(/^\/+/, '');
   if (RELATIVE_BASES.has(base)) return normalizedPath;
 

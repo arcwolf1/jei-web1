@@ -1,18 +1,28 @@
 # About
 
 ## Build
-- Version: pages-build-2-g892363d-dirty
-- Commit: 892363d (892363dd3d34d967454e300805b3bdbb6b9b06c5)
-- Commit count: 160
-- Subject: feat: add first-use setup wizard and related settings
+- Version: pages-build-3-g579f1fe-dirty
+- Commit: 579f1fe (579f1fe2107ddff18fba6cc930360cf373027fff)
+- Commit count: 161
+- Subject: feat: enhance app path handling and improve static serving
 - Author: AndreaFrederica
-- Date: 2026-04-03T02:03:35+08:00
-- Generated at: 2026-04-03T08:59:13.250Z
+- Date: 2026-04-03T17:08:02+08:00
+- Generated at: 2026-04-03T09:39:03.089Z
 - Remote: https://github.com/AndreaFrederica/jei-web.git
 
 ## Version History
 
-### Unreleased (2026-04-03T02:03:35+08:00)
+### Unreleased (2026-04-03T17:08:02+08:00)
+- 579f1fe 2026-04-03T17:08:02+08:00
+  feat: enhance app path handling and improve static serving
+  
+  - Added `appPath` utility to normalize asset paths based on the base URL.
+  - Introduced `packBasePath` function for generating pack asset URLs.
+  - Updated various components and pages to utilize the new path utilities for fetching assets.
+  - Implemented a new static server script to serve files from a specified directory with CORS support.
+  - Modified build configuration to set public path for assets.
+  - Enhanced loading components to dynamically reference asset paths.
+  - Updated the about documentation with the latest build information and commit history.
 - 892363d 2026-04-03T02:03:35+08:00
   feat: add first-use setup wizard and related settings
   

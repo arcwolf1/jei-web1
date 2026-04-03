@@ -61,7 +61,6 @@ export default defineConfig((ctx) => {
 
       // rebuildCache: true, // rebuilds Vite/linter/etc cache on startup
 
-      publicPath: './',
       // analyze: true,
       // env: {},
       rawDefine: {
@@ -72,7 +71,9 @@ export default defineConfig((ctx) => {
       // polyfillModulePreload: true,
       // distDir
 
-      // extendViteConf (viteConf) {},
+      extendViteConf(viteConf) {
+        viteConf.base = './';
+      },
       // viteVuePluginOptions: {},
 
       vitePlugins: [
