@@ -18,14 +18,23 @@
 </template>
 
 <script setup lang="ts">
+import { computed, inject, provide, ref, type Ref } from 'vue';
 import type { ChapterGroup, WidgetCommon, Document } from '../../../types/wiki';
 import WikiWidget from './WikiWidget.vue';
 
-defineProps<{
+const props = defineProps<{
   group: ChapterGroup;
   widgetCommonMap: Record<string, WidgetCommon>;
   documentMap: Record<string, Document>;
+  sourcePackId?: string;
 }>();
+
+const inheritedSourcePackId = inject<Ref<string | undefined>>('wikiSourcePackId', ref(undefined));
+
+provide(
+  'wikiSourcePackId',
+  computed(() => props.sourcePackId ?? inheritedSourcePackId.value),
+);
 </script>
 
 <style scoped lang="scss">

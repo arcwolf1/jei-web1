@@ -10,14 +10,22 @@
 </template>
 
 <script setup lang="ts">
-import { computed } from 'vue';
+import { computed, inject, provide, ref, type Ref } from 'vue';
 import WikiBlock from './WikiBlock.vue';
 import type { Document, Block } from '../../types/wiki';
 
 const props = defineProps<{
   document: Document;
   hideLeadingHorizontalRule?: boolean;
+  sourcePackId?: string;
 }>();
+
+const inheritedSourcePackId = inject<Ref<string | undefined>>('wikiSourcePackId', ref(undefined));
+
+provide(
+  'wikiSourcePackId',
+  computed(() => props.sourcePackId ?? inheritedSourcePackId.value),
+);
 
 const topBlocks = computed(() => {
   let blockIds = props.document.blockIds;

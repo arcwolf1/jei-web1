@@ -53,6 +53,9 @@
         :model-value="centerTab"
         @update:model-value="$emit('update:center-tab', $event)"
         dense
+        :outside-arrows="!props.isMobile"
+        :mobile-arrows="props.isMobile"
+        :inline-label="!props.isMobile"
         class="q-px-sm"
       >
         <q-tab name="recipe" :label="t('recipeViewer')" />
@@ -101,9 +104,9 @@
                 :model-value="activeTab"
                 @update:model-value="$emit('update:active-tab', $event)"
                 dense
-                outside-arrows
-                mobile-arrows
-                inline-label
+                :outside-arrows="!props.isMobile"
+                :mobile-arrows="props.isMobile"
+                :inline-label="!props.isMobile"
                 class="q-px-sm q-pt-sm"
               >
                 <q-tab name="recipes" :label="recipesTabLabel" />
@@ -392,11 +395,21 @@ function labelWithShortcut(label: string, action: KeyAction) {
   return `${label} (${keyBindingToString(keyBindingsStore.getBinding(action))})`;
 }
 
-const recipesTabLabel = computed(() => labelWithShortcut(t('tabsRecipes'), 'viewRecipes'));
-const usesTabLabel = computed(() => labelWithShortcut(t('tabsUses'), 'viewUses'));
-const wikiTabLabel = computed(() => labelWithShortcut(t('tabsWiki'), 'viewWiki'));
-const iconTabLabel = computed(() => labelWithShortcut(t('tabsIcon'), 'viewIcon'));
-const plannerTabLabel = computed(() => labelWithShortcut(t('tabsPlanner'), 'viewPlanner'));
+const recipesTabLabel = computed(() =>
+  props.isMobile ? t('tabsRecipes') : labelWithShortcut(t('tabsRecipes'), 'viewRecipes'),
+);
+const usesTabLabel = computed(() =>
+  props.isMobile ? t('tabsUses') : labelWithShortcut(t('tabsUses'), 'viewUses'),
+);
+const wikiTabLabel = computed(() =>
+  props.isMobile ? t('tabsWiki') : labelWithShortcut(t('tabsWiki'), 'viewWiki'),
+);
+const iconTabLabel = computed(() =>
+  props.isMobile ? t('tabsIcon') : labelWithShortcut(t('tabsIcon'), 'viewIcon'),
+);
+const plannerTabLabel = computed(() =>
+  props.isMobile ? t('tabsPlanner') : labelWithShortcut(t('tabsPlanner'), 'viewPlanner'),
+);
 
 const addToAdvancedPlanner = (itemKey: ItemKey, itemName: string) => {
   advancedPlannerRef.value?.addTarget(itemKey, itemName);
@@ -463,6 +476,8 @@ defineExpose({
   display: flex;
   align-items: center;
   padding-bottom: 8px;
+  min-width: 0;
+  max-width: 100%;
 }
 
 .jei-panel__body {
@@ -485,6 +500,15 @@ defineExpose({
   flex: 1;
   min-height: 0;
   overflow: hidden;
+}
+
+.jei-panel :deep(.q-tabs),
+.jei-panel :deep(.q-tab-panels),
+.jei-panel :deep(.q-tab-panel),
+.jei-panel :deep(.q-tabs__content),
+.jei-panel :deep(.q-tab__content) {
+  min-width: 0;
+  max-width: 100%;
 }
 
 .jei-panel__panels {

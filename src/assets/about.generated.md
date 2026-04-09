@@ -1,18 +1,29 @@
 # About
 
 ## Build
-- Version: pages-build-3-g579f1fe-dirty
-- Commit: 579f1fe (579f1fe2107ddff18fba6cc930360cf373027fff)
-- Commit count: 161
-- Subject: feat: enhance app path handling and improve static serving
+- Version: pages-build-5-g5b64e25-dirty
+- Commit: 5b64e25 (5b64e257864c4f6b122e8a171d92226c110c7c6c)
+- Commit count: 163
+- Subject: feat: 添加基于域名的UI策略和移动端适配
 - Author: AndreaFrederica
-- Date: 2026-04-03T17:08:02+08:00
-- Generated at: 2026-04-03T09:39:03.089Z
+- Date: 2026-04-07T20:22:18+08:00
+- Generated at: 2026-04-07T18:44:42.554Z
 - Remote: https://github.com/AndreaFrederica/jei-web.git
 
 ## Version History
 
-### Unreleased (2026-04-03T17:08:02+08:00)
+### Unreleased (2026-04-07T20:22:18+08:00)
+- 5b64e25 2026-04-07T20:22:18+08:00
+  feat: 添加基于域名的UI策略和移动端适配
+  
+  - 根据访问域名动态调整QQ群相关UI显示（隐藏链接、过滤敏感文本）
+  - 为设置对话框添加移动端适配，支持全屏显示和响应式布局
+  - 增强QQ群弹窗的配置选项，支持自定义按钮文本和显示模式
+  - 修复静态资源服务脚本路径问题
+  - 更新关于页面版本信息
+  - 优化长字符串的代码格式以提高可读性
+- 2baa357 2026-04-03T17:47:37+08:00
+  feat: 增加相对路径服务脚本，优化静态资源加载
 - 579f1fe 2026-04-03T17:08:02+08:00
   feat: enhance app path handling and improve static serving
   

@@ -1,10 +1,38 @@
 <template>
   <div class="jei-bottombar" :class="{ 'jei-bottombar--mobile': isMobile }">
     <div class="jei-bottombar__controls">
-      <div class="jei-bottombar__pack-row">
+      <template v-if="isMobile">
+        <q-slide-transition>
+          <div
+            v-show="!mobilePackControlsCollapsible || mobilePackControlsExpanded"
+            class="jei-bottombar__pack-row"
+          >
+            <q-select
+              :model-value="activePackId"
+              @update:model-value="handleActivePackChange"
+              :options="packOptions"
+              dense
+              outlined
+              emit-value
+              map-options
+              :disable="loading"
+              class="jei-bottombar__pack"
+            />
+            <q-btn
+              flat
+              round
+              dense
+              icon="settings"
+              class="jei-bottombar__settings"
+              @click="$emit('open-settings')"
+            />
+          </div>
+        </q-slide-transition>
+      </template>
+      <div v-else class="jei-bottombar__pack-row">
         <q-select
           :model-value="activePackId"
-          @update:model-value="$emit('update:active-pack-id', $event)"
+          @update:model-value="handleActivePackChange"
           :options="packOptions"
           dense
           outlined
@@ -12,14 +40,6 @@
           map-options
           :disable="loading"
           class="jei-bottombar__pack"
-        />
-        <q-btn
-          v-if="isMobile"
-          flat
-          round
-          icon="settings"
-          class="jei-bottombar__settings"
-          @click="$emit('open-settings')"
         />
       </div>
       <div class="jei-bottombar__filter-row">
@@ -53,6 +73,16 @@
             />
           </template>
         </q-input>
+        <q-btn
+          v-if="isMobile && mobilePackControlsCollapsible"
+          flat
+          round
+          dense
+          class="jei-bottombar__collapse-toggle"
+          :icon="mobilePackControlsExpanded ? 'unfold_less' : 'unfold_more'"
+          color="grey-7"
+          @click="mobilePackControlsExpanded = !mobilePackControlsExpanded"
+        />
         <q-btn
           v-if="!isMobile"
           flat
@@ -279,7 +309,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed } from 'vue';
+import { ref, computed, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
 
 const { t } = useI18n();
@@ -301,6 +331,7 @@ const props = defineProps<{
   filterText: string;
   filterDisabled: boolean;
   loading: boolean;
+  mobilePackControlsCollapsible: boolean;
   availableItemIds: string[];
   availableGameIds: string[];
   availableTags: string[];
@@ -332,6 +363,22 @@ const filterForm = ref({
 const availableItemIdsFiltered = ref<string[]>([]);
 const availableGameIdsFiltered = ref<string[]>([]);
 const availableTagsFiltered = ref<string[]>([]);
+const mobilePackControlsExpanded = ref(false);
+
+watch(
+  () => [props.isMobile, props.mobilePackControlsCollapsible] as const,
+  ([isMobile, collapsible]) => {
+    mobilePackControlsExpanded.value = !isMobile || !collapsible;
+  },
+  { immediate: true },
+);
+
+function handleActivePackChange(value: string) {
+  emit('update:active-pack-id', value);
+  if (props.isMobile && props.mobilePackControlsCollapsible) {
+    mobilePackControlsExpanded.value = false;
+  }
+}
 
 const tagOptions = computed<TagOption[]>(() => {
   return props.availableTags.map((tag) => ({
@@ -624,6 +671,7 @@ function clearQuickTag() {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
   align-items: center;
+  gap: 8px;
   width: 100%;
 }
 
@@ -633,12 +681,21 @@ function clearQuickTag() {
 
 .jei-bottombar--mobile .jei-bottombar__filter-row {
   display: grid;
-  grid-template-columns: minmax(0, 1fr);
-  align-items: stretch;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 8px;
 }
 
 .jei-bottombar--mobile .jei-bottombar__settings {
   min-height: 40px;
   justify-self: end;
+}
+
+.jei-bottombar--mobile .jei-bottombar__filter {
+  width: 100%;
+}
+
+.jei-bottombar__collapse-toggle {
+  flex: 0 0 auto;
 }
 </style>

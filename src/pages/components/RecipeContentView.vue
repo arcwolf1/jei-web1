@@ -4,7 +4,7 @@
     <crafting-planner-view
       v-if="pack && index && currentItemKey"
       v-show="activeTab === 'planner'"
-      class="col overflow-auto q-pa-md"
+      class="col planner-tab-pane q-pa-md"
       :pack="pack"
       :index="index"
       :root-item-key="currentItemKey"
@@ -74,7 +74,10 @@
               <template v-if="renderer.type === 'structured-wiki' && renderer.structured">
                 <div v-if="renderer.structured.briefDescriptionDocument" class="wiki-brief">
                   <div class="text-subtitle2 q-mb-sm">{{ t('description') }}</div>
-                  <WikiDocument :document="renderer.structured.briefDescriptionDocument" />
+                  <WikiDocument
+                    :document="renderer.structured.briefDescriptionDocument"
+                    v-bind="renderer.sourcePackId ? { sourcePackId: renderer.sourcePackId } : {}"
+                  />
                 </div>
 
                 <div class="wiki-body">
@@ -85,6 +88,7 @@
                       :group="group"
                       :widget-common-map="renderer.structured.widgetCommonMap"
                       :document-map="renderer.structured.documentMap"
+                      v-bind="renderer.sourcePackId ? { sourcePackId: renderer.sourcePackId } : {}"
                     />
                   </template>
 
@@ -96,7 +100,12 @@
                         class="fallback-section q-mb-md"
                       >
                         <div class="text-subtitle2 q-mb-sm">{{ getDocumentTitle(doc, docId) }}</div>
-                        <WikiDocument :document="doc" />
+                        <WikiDocument
+                          :document="doc"
+                          v-bind="
+                            renderer.sourcePackId ? { sourcePackId: renderer.sourcePackId } : {}
+                          "
+                        />
                       </section>
                     </div>
                   </template>
@@ -169,7 +178,10 @@
               </div>
               <div v-if="renderer.structured.briefDescriptionDocument" class="wiki-brief">
                 <div class="text-subtitle2 q-mb-sm">{{ t('description') }}</div>
-                <WikiDocument :document="renderer.structured.briefDescriptionDocument" />
+                <WikiDocument
+                  :document="renderer.structured.briefDescriptionDocument"
+                  v-bind="renderer.sourcePackId ? { sourcePackId: renderer.sourcePackId } : {}"
+                />
               </div>
               <div class="wiki-body">
                 <template v-if="renderer.structured.chapterGroup.length">
@@ -179,6 +191,7 @@
                     :group="group"
                     :widget-common-map="renderer.structured.widgetCommonMap"
                     :document-map="renderer.structured.documentMap"
+                    v-bind="renderer.sourcePackId ? { sourcePackId: renderer.sourcePackId } : {}"
                   />
                 </template>
                 <template v-else>
@@ -189,7 +202,12 @@
                       class="fallback-section q-mb-md"
                     >
                       <div class="text-subtitle2 q-mb-sm">{{ getDocumentTitle(doc, docId) }}</div>
-                      <WikiDocument :document="doc" />
+                      <WikiDocument
+                        :document="doc"
+                        v-bind="
+                          renderer.sourcePackId ? { sourcePackId: renderer.sourcePackId } : {}
+                        "
+                      />
                     </section>
                   </div>
                 </template>
@@ -382,8 +400,11 @@
             :model-value="activeTypeKey"
             @update:model-value="$emit('update:active-type-key', $event)"
             dense
+            shrink
             outside-arrows
             mobile-arrows
+            align="left"
+            no-caps
             inline-label
             class="q-px-sm q-pt-sm"
           >
@@ -443,6 +464,26 @@
                         bordered
                         class="q-pa-md"
                       >
+                        <div
+                          v-if="
+                            settingsStore.recipeQueryShowDataSources &&
+                            recipeSourceLabelsById(rid).length
+                          "
+                          class="recipe-source-row"
+                        >
+                          <span class="text-caption text-grey-6">{{ t('recipeDataSources') }}</span>
+                          <q-chip
+                            v-for="sourceLabel in recipeSourceLabelsById(rid)"
+                            :key="`${rid}:${sourceLabel}`"
+                            dense
+                            square
+                            size="sm"
+                            color="grey-9"
+                            text-color="grey-3"
+                          >
+                            {{ sourceLabel }}
+                          </q-chip>
+                        </div>
                         <recipe-viewer
                           v-if="recipesById.get(rid)"
                           :recipe="recipesById.get(rid)"
@@ -465,6 +506,26 @@
               <template v-else>
                 <div class="column q-gutter-md">
                   <q-card v-for="rid in g.recipeIds" :key="rid" flat bordered class="q-pa-md">
+                    <div
+                      v-if="
+                        settingsStore.recipeQueryShowDataSources &&
+                        recipeSourceLabelsById(rid).length
+                      "
+                      class="recipe-source-row"
+                    >
+                      <span class="text-caption text-grey-6">{{ t('recipeDataSources') }}</span>
+                      <q-chip
+                        v-for="sourceLabel in recipeSourceLabelsById(rid)"
+                        :key="`${rid}:${sourceLabel}`"
+                        dense
+                        square
+                        size="sm"
+                        color="grey-9"
+                        text-color="grey-3"
+                      >
+                        {{ sourceLabel }}
+                      </q-chip>
+                    </div>
                     <recipe-viewer
                       v-if="recipesById.get(rid)"
                       :recipe="recipesById.get(rid)"
@@ -500,9 +561,10 @@ import type {
   ItemKey,
   ItemExtensions,
   JeiWebWikiRendererDef,
+  Recipe,
 } from 'src/jei/types';
 import type { JeiIndex } from 'src/jei/indexing/buildIndex';
-import { findItemDefByLookupId } from 'src/jei/indexing/itemLookup';
+import { findItemDefByLookupId, getItemLookupIds } from 'src/jei/indexing/itemLookup';
 import {
   getTagDisplayName as getTagDisplayNameFromDef,
   resolveTagDef,
@@ -510,6 +572,7 @@ import {
 import type { PlannerInitialState, PlannerLiveState } from 'src/jei/planner/plannerUi';
 import type { PluginApiResult, PluginItemContext, PluginTabRuntime } from 'src/jei/plugins/types';
 import { useSettingsStore } from 'src/stores/settings';
+import { usePackRoutingRuntimeStore } from 'src/stores/packRoutingRuntime';
 import StackView from 'src/jei/components/StackView.vue';
 import RecipeViewer from 'src/jei/components/RecipeViewer.vue';
 import CraftingPlannerView from 'src/jei/components/CraftingPlannerView.vue';
@@ -531,6 +594,7 @@ import type {
 
 const { t } = useI18n();
 const settingsStore = useSettingsStore();
+const packRoutingRuntimeStore = usePackRoutingRuntimeStore();
 
 function getTagDisplayName(tagId: string): string {
   const tagDef = resolveTagDef(
@@ -539,6 +603,93 @@ function getTagDisplayName(tagId: string): string {
     props.pack?.manifest.gameId ?? undefined,
   );
   return getTagDisplayNameFromDef(tagId, tagDef, settingsStore.language);
+}
+
+function recipeSourceLabelsById(recipeId: string): string[] {
+  const recipe = props.recipesById.get(recipeId) as Recipe | undefined;
+  if (!recipe) return [];
+
+  const sourcePackIds =
+    Array.isArray(recipe.sourcePackIds) && recipe.sourcePackIds.length > 0
+      ? recipe.sourcePackIds
+      : props.pack?.manifest.packId
+        ? [props.pack.manifest.packId]
+        : [];
+
+  return Array.from(
+    new Set(
+      sourcePackIds
+        .map((packId) => {
+          const runtimeLabel = packRoutingRuntimeStore.sourcesByPack[packId]?.label?.trim();
+          if (runtimeLabel) return runtimeLabel;
+          if (packId === props.pack?.manifest.packId) return props.pack.manifest.displayName;
+          return packId.trim();
+        })
+        .filter((label): label is string => label.length > 0),
+    ),
+  );
+}
+
+function getAggregateSourcePackIdsForItem(item: ItemDef | null | undefined): string[] {
+  if (!item) return [];
+  const refs = new Set<string>();
+  const meta = isRecordLike(item.extensions?.jeiweb?.meta)
+    ? item.extensions.jeiweb.meta
+    : undefined;
+  if (typeof meta?.aggregateSourcePackId === 'string' && meta.aggregateSourcePackId.trim()) {
+    refs.add(meta.aggregateSourcePackId.trim());
+  }
+  if (Array.isArray(meta?.aggregateHoverSources)) {
+    meta.aggregateHoverSources.forEach((entry) => {
+      if (!isRecordLike(entry)) return;
+      const sourcePackId = typeof entry.sourcePackId === 'string' ? entry.sourcePackId.trim() : '';
+      if (sourcePackId) refs.add(sourcePackId);
+    });
+  }
+  return Array.from(refs);
+}
+
+function itemMatchesLookupId(item: ItemDef, rawId: string, exactOnly = false): boolean {
+  const lookupIds = getItemLookupIds(item);
+  if (lookupIds.includes(rawId)) return true;
+  if (exactOnly) return false;
+  return lookupIds.some((candidate) => candidate.endsWith(rawId));
+}
+
+function findWikiReferencedItemDef(itemId: string, sourcePackId?: string): ItemDef | undefined {
+  const normalizedId = String(itemId || '').trim();
+  const normalizedSourcePackId = String(sourcePackId || '').trim();
+  if (!normalizedId) return undefined;
+
+  const allItems = Object.values(props.itemDefsByKeyHash || {});
+  if (normalizedSourcePackId) {
+    const exactSourceMatched = allItems.find(
+      (item) =>
+        getAggregateSourcePackIdsForItem(item).includes(normalizedSourcePackId) &&
+        itemMatchesLookupId(item, normalizedId, true),
+    );
+    if (exactSourceMatched) return exactSourceMatched;
+
+    const suffixSourceMatched = allItems.find(
+      (item) =>
+        getAggregateSourcePackIdsForItem(item).includes(normalizedSourcePackId) &&
+        itemMatchesLookupId(item, normalizedId),
+    );
+    if (suffixSourceMatched) return suffixSourceMatched;
+  }
+
+  const directDef = findItemDefByLookupId(normalizedId, props.itemDefsByKeyHash, {
+    allowSuffixMatch: false,
+  });
+  if (directDef) return directDef;
+
+  const firstKeyHash = props.index?.itemKeyHashesByItemId.get(normalizedId)?.[0];
+  if (firstKeyHash) {
+    const def = props.index?.itemsByKeyHash.get(firstKeyHash);
+    if (def) return def;
+  }
+
+  return findItemDefByLookupId(normalizedId, props.itemDefsByKeyHash);
 }
 
 interface RecipeGroup {
@@ -1317,30 +1468,10 @@ const emit = defineEmits<{
   'update:active-type-key': [typeKey: string];
 }>();
 
-function handleWikiEntryNavigate(itemId: string) {
-  const id = String(itemId || '').trim();
-  if (!id) return;
-
-  const directDef = findItemDefByLookupId(id, props.itemDefsByKeyHash, {
-    allowSuffixMatch: false,
-  });
-  if (directDef) {
-    emit('wiki-item-click', directDef.key);
-    return;
-  }
-
-  const firstKeyHash = props.index?.itemKeyHashesByItemId.get(id)?.[0];
-  if (firstKeyHash) {
-    const def = props.index?.itemsByKeyHash.get(firstKeyHash);
-    if (def) {
-      emit('wiki-item-click', def.key);
-      return;
-    }
-  }
-
-  const suffixDef = findItemDefByLookupId(id, props.itemDefsByKeyHash);
-  if (suffixDef) {
-    emit('wiki-item-click', suffixDef.key);
+function handleWikiEntryNavigate(itemId: string, sourcePackId?: string) {
+  const resolved = findWikiReferencedItemDef(itemId, sourcePackId);
+  if (resolved) {
+    emit('wiki-item-click', resolved.key);
   }
 }
 
@@ -1415,6 +1546,7 @@ onBeforeUnmount(() => {
 provide('wikiCatalogMap', wikiCatalogMap);
 provide('wikiImageUseProxy', imageUseProxy);
 provide('wikiImageProxyUrl', imageProxyUrl);
+provide('wikiResolveEntryItem', findWikiReferencedItemDef);
 provide('wikiEntryNavigate', handleWikiEntryNavigate);
 provide('wikiImageOpen', openViewer);
 </script>
@@ -1516,6 +1648,12 @@ provide('wikiImageOpen', openViewer);
   padding: 0;
 }
 
+.planner-tab-pane {
+  overflow-y: auto;
+  overflow-x: hidden;
+  min-width: 0;
+}
+
 .wiki-description :deep(a) {
   color: #1976d2;
   text-decoration: none;
@@ -1594,6 +1732,14 @@ provide('wikiImageOpen', openViewer);
   display: flex;
   flex-direction: column;
   min-height: 0;
+}
+
+.recipe-source-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 10px;
 }
 
 .icon-tab-viewer {

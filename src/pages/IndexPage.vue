@@ -173,12 +173,14 @@
       :available-game-ids="availableGameIds"
       :available-tags="availableTags"
       :get-tag-display-name="getTagDisplayName"
+      :mobile-pack-controls-collapsible="settingsStore.mobileBottomPackControlsCollapsible"
       @open-settings="settingsOpen = true"
     />
 
     <!-- 设置对话框 -->
     <settings-dialog
       :open="settingsOpen"
+      :is-mobile="isMobile"
       @update:open="settingsOpen = $event"
       :history-limit="settingsStore.historyLimit"
       @update:history-limit="settingsStore.setHistoryLimit($event)"
@@ -223,12 +225,18 @@
       @update:item-click-default-tab="settingsStore.setItemClickDefaultTab($event)"
       :recipe-slot-show-name="settingsStore.recipeSlotShowName"
       @update:recipe-slot-show-name="settingsStore.setRecipeSlotShowName($event)"
+      :recipe-query-show-data-sources="settingsStore.recipeQueryShowDataSources"
+      @update:recipe-query-show-data-sources="settingsStore.setRecipeQueryShowDataSources($event)"
       :favorites-opens-new-stack="settingsStore.favoritesOpensNewStack"
       @update:favorites-open-stack="settingsStore.setFavoritesOpensNewStack($event)"
       :persist-history-records="settingsStore.persistHistoryRecords"
       @update:persist-history-records="settingsStore.setPersistHistoryRecords($event)"
       :mobile-item-click-opens-detail="settingsStore.mobileItemClickOpensDetail"
       @update:mobile-item-click-opens-detail="settingsStore.setMobileItemClickOpensDetail($event)"
+      :mobile-bottom-pack-controls-collapsible="settingsStore.mobileBottomPackControlsCollapsible"
+      @update:mobile-bottom-pack-controls-collapsible="
+        settingsStore.setMobileBottomPackControlsCollapsible($event)
+      "
       @open:setup-wizard="openSetupWizardFromSettings"
       :hover-tooltip-allow-mouse-enter="settingsStore.hoverTooltipAllowMouseEnter"
       :hover-tooltip-display="settingsStore.hoverTooltipDisplay"

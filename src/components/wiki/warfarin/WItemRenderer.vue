@@ -92,31 +92,66 @@
       <h3 class="ww__title">{{ l(recipe.title) }}</h3>
       <div class="ww__stack">
         <div v-for="(formula, fi) in recipe.formulas" :key="fi" class="ww__panel">
-          <div class="ww__panel-title">{{ formula.name || formula.id || `${l('Formula')} ${fi + 1}` }}</div>
+          <div class="ww__panel-title">
+            {{ formula.displayName || formula.name || formula.id || `${l('Formula')} ${fi + 1}` }}
+          </div>
           <div v-if="formula.meta.length" class="ww__recipe-meta">
-            <span v-for="m in formula.meta" :key="m.label">{{ m.label }}: {{ m.value }} · </span>
+            <q-badge
+              v-for="m in formula.meta"
+              :key="`${formula.id || formula.name}-${m.label}`"
+              outline
+              color="grey-7"
+              class="ww__recipe-badge"
+            >
+              {{ m.label }}: {{ m.value }}
+            </q-badge>
           </div>
-          <div v-if="formula.ingredients.length" class="ww__recipe-items">
-            <strong>{{ l('Ingredients') }}: </strong>
-            <span v-for="(group, gi) in formula.ingredients" :key="gi">
-              <template v-if="gi > 0"> | {{ l('Option') }} {{ gi + 1 }}: </template>
-              {{
-                group
-                  .map((item) => formatCraftItem(item, localNameMap, liquidMap, itemDefsByKeyHash))
-                  .join(', ')
-              }}
-            </span>
-          </div>
-          <div v-if="formula.outcomes.length" class="ww__recipe-items">
-            <strong>{{ l('Outcomes') }}: </strong>
-            <span v-for="(group, gi) in formula.outcomes" :key="gi">
-              <template v-if="gi > 0"> | {{ l('Option') }} {{ gi + 1 }}: </template>
-              {{
-                group
-                  .map((item) => formatCraftItem(item, localNameMap, liquidMap, itemDefsByKeyHash))
-                  .join(', ')
-              }}
-            </span>
+          <div class="ww__recipe-table">
+            <div v-if="formula.machineLabel" class="ww__recipe-column">
+              <div class="ww__recipe-column-title">{{ l('Machine') }}</div>
+              <div class="ww__recipe-machine">{{ formula.machineLabel }}</div>
+            </div>
+            <div v-if="formula.ingredients.length" class="ww__recipe-column">
+              <div class="ww__recipe-column-title">{{ l('Ingredients') }}</div>
+              <div class="ww__recipe-groups">
+                <div
+                  v-for="(group, gi) in formula.ingredients"
+                  :key="`ingredients-${formula.id || formula.name}-${gi}`"
+                  class="ww__recipe-group"
+                >
+                  <div v-if="formula.ingredients.length > 1" class="ww__recipe-group-title">
+                    {{ l('Option') }} {{ gi + 1 }}
+                  </div>
+                  <WItemCostGrid
+                    :entries="group"
+                    :item-defs-by-key-hash="itemDefsByKeyHash"
+                    compact
+                  />
+                </div>
+              </div>
+            </div>
+            <div class="ww__recipe-arrow">
+              <q-icon name="east" size="22px" />
+            </div>
+            <div v-if="formula.outcomes.length" class="ww__recipe-column">
+              <div class="ww__recipe-column-title">{{ l('Outcomes') }}</div>
+              <div class="ww__recipe-groups">
+                <div
+                  v-for="(group, gi) in formula.outcomes"
+                  :key="`outcomes-${formula.id || formula.name}-${gi}`"
+                  class="ww__recipe-group"
+                >
+                  <div v-if="formula.outcomes.length > 1" class="ww__recipe-group-title">
+                    {{ l('Option') }} {{ gi + 1 }}
+                  </div>
+                  <WItemCostGrid
+                    :entries="group"
+                    :item-defs-by-key-hash="itemDefsByKeyHash"
+                    compact
+                  />
+                </div>
+              </div>
+            </div>
           </div>
         </div>
       </div>
@@ -130,7 +165,9 @@ import { useI18n } from 'vue-i18n';
 import type { ItemDef } from 'src/jei/types';
 import WInfoGrid from './shared/WInfoGrid.vue';
 import WDataTable from './shared/WDataTable.vue';
+import WItemCostGrid from './shared/WItemCostGrid.vue';
 import {
+  type MaterialCostEntry,
   type RecordLike,
   isRecordLike,
   toArray,
@@ -138,8 +175,8 @@ import {
   formatWikiHtml,
   formatScalar,
   formatLocalizedScalar,
-  formatCraftItem,
   normalizeItemGroups,
+  normalizeMaterialCosts,
   resolveLocalizedEntityName,
   buildInfoEntries,
   toText,
@@ -154,12 +191,28 @@ import {
 const props = defineProps<{
   detail: RecordLike;
   list: RecordLike;
+  refs?: RecordLike | undefined;
   localNameMap: RecordLike;
+  idToPackItemId?: RecordLike | undefined;
   itemDefsByKeyHash?: Record<string, ItemDef> | undefined;
 }>();
 
 const { locale } = useI18n();
 const l = (value: string) => localizeWarfarinIdentifier(value, locale.value);
+
+function resolveRecipeText(value: unknown): string {
+  const raw =
+    typeof value === 'string' ? value.trim() : typeof value === 'number' ? String(value) : '';
+  if (!raw) return '';
+  const localized = resolveLocalizedEntityName(
+    raw,
+    props.refs,
+    props.localNameMap,
+    props.itemDefsByKeyHash,
+  );
+  if (localized && localized !== raw) return localized;
+  return l(raw);
+}
 
 const itemTableData = computed<RecordLike>(() =>
   isRecordLike(props.detail.itemTable) ? props.detail.itemTable : {},
@@ -400,7 +453,11 @@ const equipItemEntries = computed(() => {
     { key: 'recoverTime', label: l('Recover Time') },
     { key: 'recoverUpperCount', label: l('Recover Upper Count') },
     { key: 'levelUpRecoverUpperCount', label: l('Level Up Recover Upper Count') },
-    { key: 'checkTarget', label: l('Check Target'), format: (v: unknown) => formatLocalizedScalar(v, locale.value) },
+    {
+      key: 'checkTarget',
+      label: l('Check Target'),
+      format: (v: unknown) => formatLocalizedScalar(v, locale.value),
+    },
     { key: 'condType', label: l('Condition Type') },
     { key: 'useTarget', label: l('Use Target') },
     {
@@ -454,14 +511,29 @@ const renderedEquipExtraDesc = computed(() =>
 interface RecipeFormula {
   name: string;
   id: string;
+  displayName: string;
   meta: Array<{ label: string; value: string }>;
-  ingredients: RecordLike[][];
-  outcomes: RecordLike[][];
+  machineLabel?: string | undefined;
+  ingredients: MaterialCostEntry[][];
+  outcomes: MaterialCostEntry[][];
 }
 
 interface RecipeSection {
   title: string;
   formulas: RecipeFormula[];
+}
+
+function normalizeRecipeMaterialGroups(value: unknown): MaterialCostEntry[][] {
+  return normalizeItemGroups(value)
+    .map((group) =>
+      normalizeMaterialCosts(
+        group,
+        props.localNameMap,
+        props.itemDefsByKeyHash,
+        props.idToPackItemId,
+      ),
+    )
+    .filter((group) => group.length > 0);
 }
 
 function parseMachineCraftTable(table: unknown, title: string): RecipeSection | null {
@@ -473,14 +545,28 @@ function parseMachineCraftTable(table: unknown, title: string): RecipeSection | 
     formulas: formulas.map((f) => ({
       name: typeof f.formulaDesc === 'string' ? f.formulaDesc : '',
       id: typeof f.id === 'string' ? f.id : '',
+      displayName: resolveRecipeText(f.formulaDesc ?? f.id),
       meta: [
-        ...(f.machineId ? [{ label: l('Machine'), value: formatScalar(f.machineId) }] : []),
-        ...(f.formulaGroupId ? [{ label: l('Group'), value: formatScalar(f.formulaGroupId) }] : []),
+        ...(f.machineId ? [{ label: l('Machine'), value: resolveRecipeText(f.machineId) }] : []),
+        ...(f.formulaGroupId
+          ? [{ label: l('Group'), value: resolveRecipeText(f.formulaGroupId) }]
+          : []),
         ...(f.progressRound ? [{ label: l('Rounds'), value: formatScalar(f.progressRound) }] : []),
-        ...(f.totalProgress ? [{ label: l('Progress'), value: formatScalar(f.totalProgress) }] : []),
+        ...(f.totalProgress
+          ? [{ label: l('Progress'), value: formatScalar(f.totalProgress) }]
+          : []),
       ],
-      ingredients: normalizeItemGroups(f.ingredients),
-      outcomes: normalizeItemGroups(f.outcomes),
+      machineLabel:
+        typeof f.machineId === 'string' || typeof f.machineId === 'number'
+          ? resolveLocalizedEntityName(
+              String(f.machineId),
+              props.refs,
+              props.localNameMap,
+              props.itemDefsByKeyHash,
+            )
+          : undefined,
+      ingredients: normalizeRecipeMaterialGroups(f.ingredients),
+      outcomes: normalizeRecipeMaterialGroups(f.outcomes),
     })),
   };
 }
@@ -497,14 +583,17 @@ function parseManualCraftTable(table: unknown, title: string): RecipeSection | n
       return {
         name: typeof entry.name === 'string' ? entry.name : key,
         id: typeof entry.id === 'string' ? entry.id : key,
+        displayName: resolveRecipeText(entry.name ?? entry.id ?? key),
         meta: [
-          ...(entry.domainId ? [{ label: l('Domain'), value: formatScalar(entry.domainId) }] : []),
+          ...(entry.domainId
+            ? [{ label: l('Domain'), value: resolveRecipeText(entry.domainId) }]
+            : []),
           ...(entry.rarity !== undefined
             ? [{ label: l('Rarity'), value: formatScalar(entry.rarity) }]
             : []),
         ],
-        ingredients: normalizeItemGroups(entry.ingredients),
-        outcomes: normalizeItemGroups(entry.outcomes),
+        ingredients: normalizeRecipeMaterialGroups(entry.ingredients),
+        outcomes: normalizeRecipeMaterialGroups(entry.outcomes),
       };
     }),
   };
@@ -526,20 +615,23 @@ function parseEquipFormulaTable(table: unknown, title: string): RecipeSection | 
       if (entry.costGoldNum && entry.costGoldId) {
         ingredientGroup.push({ id: entry.costGoldId, count: entry.costGoldNum });
       }
-      const ingredients: RecordLike[][] = ingredientGroup.length ? [ingredientGroup] : [];
-      const outcomes: RecordLike[][] = entry.outcomeEquipId
-        ? [[{ id: entry.outcomeEquipId, count: 1 }]]
+      const ingredients = ingredientGroup.length
+        ? normalizeRecipeMaterialGroups([ingredientGroup])
+        : [];
+      const outcomes = entry.outcomeEquipId
+        ? normalizeRecipeMaterialGroups([[{ id: entry.outcomeEquipId, count: 1 }]])
         : [];
       return {
         name: typeof entry.formulaId === 'string' ? entry.formulaId : '',
         id: typeof entry.formulaId === 'string' ? entry.formulaId : '',
+        displayName: resolveRecipeText(entry.formulaId),
         meta: [
-          ...(entry.packId ? [{ label: l('Pack'), value: formatScalar(entry.packId) }] : []),
+          ...(entry.packId ? [{ label: l('Pack'), value: resolveRecipeText(entry.packId) }] : []),
           ...(entry.unlockType !== undefined
             ? [
                 {
                   label: l('Unlock'),
-                  value: `${toText(entry.unlockType, '-')} : ${toText(entry.unlockKey)} = ${toText(entry.unlockValue)}`,
+                  value: `${resolveRecipeText(entry.unlockType)} : ${resolveRecipeText(entry.unlockKey)} = ${toText(entry.unlockValue)}`,
                 },
               ]
             : []),
@@ -563,6 +655,7 @@ function parseFactoryHubCraftTable(table: unknown, title: string): RecipeSection
       return {
         name: typeof entry.id === 'string' ? entry.id : key,
         id: typeof entry.id === 'string' ? entry.id : key,
+        displayName: resolveRecipeText(entry.name ?? entry.id ?? key),
         meta: [
           ...(entry.usableLevel !== undefined
             ? [{ label: l('Level'), value: formatScalar(entry.usableLevel) }]
@@ -571,8 +664,8 @@ function parseFactoryHubCraftTable(table: unknown, title: string): RecipeSection
             ? [{ label: l('Rarity'), value: formatScalar(entry.rarity) }]
             : []),
         ],
-        ingredients: normalizeItemGroups(entry.ingredients),
-        outcomes: normalizeItemGroups(entry.outcomes),
+        ingredients: normalizeRecipeMaterialGroups(entry.ingredients),
+        outcomes: normalizeRecipeMaterialGroups(entry.outcomes),
       };
     }),
   };
@@ -585,10 +678,12 @@ function parseManualFormulaUnlockTable(table: unknown, title: string): RecipeSec
   return {
     title,
     formulas: entries.map((entry) => {
-      const ingredients: RecordLike[][] = [];
-      const outcomes: RecordLike[][] = [];
+      const ingredients: MaterialCostEntry[][] = [];
+      const outcomes: MaterialCostEntry[][] = [];
       if (entry.itemId) {
-        outcomes.push([{ id: entry.itemId, count: entry.gainItemNum ?? 1 }]);
+        outcomes.push(
+          ...normalizeRecipeMaterialGroups([[{ id: entry.itemId, count: entry.gainItemNum ?? 1 }]]),
+        );
       }
       // Collect reward items (rewardItemId1..N / rewardItemCount1..N)
       const rewards: RecordLike[] = [];
@@ -597,10 +692,11 @@ function parseManualFormulaUnlockTable(table: unknown, title: string): RecipeSec
         const rcount = entry[`rewardItemCount${i}`];
         if (rid) rewards.push({ id: rid, count: rcount ?? 1 });
       }
-      if (rewards.length) outcomes.push(rewards);
+      if (rewards.length) outcomes.push(...normalizeRecipeMaterialGroups([rewards]));
       return {
         name: typeof entry.id === 'string' ? entry.id : '',
         id: typeof entry.id === 'string' ? entry.id : '',
+        displayName: resolveRecipeText(entry.name ?? entry.id),
         meta: [],
         ingredients,
         outcomes,
@@ -632,3 +728,92 @@ const recipeSections = computed<RecipeSection[]>(() => {
   return sections;
 });
 </script>
+
+<style scoped>
+.ww__recipe-meta {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 0.3rem 0.4rem;
+  margin-top: 0.35rem;
+}
+
+.ww__recipe-badge {
+  font-size: 0.7rem;
+}
+
+.ww__recipe-table {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: 0.75rem 0.9rem;
+  margin-top: 0.7rem;
+}
+
+.ww__recipe-column {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  width: fit-content;
+  max-width: min(100%, 360px);
+}
+
+.ww__recipe-column-title {
+  font-size: 0.78rem;
+  font-weight: 700;
+  color: var(--ww-muted);
+  margin-bottom: 0.35rem;
+  text-align: center;
+}
+
+.ww__recipe-machine {
+  min-height: 0;
+  padding: 0.55rem 0.75rem;
+  border: 1px solid var(--ww-border);
+  border-radius: 8px;
+  background: var(--ww-surface-soft);
+  color: var(--ww-text);
+  text-align: center;
+}
+
+.ww__recipe-groups {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.55rem;
+}
+
+.ww__recipe-group-title {
+  font-size: 0.76rem;
+  color: var(--ww-muted);
+  margin-bottom: 0.28rem;
+  text-align: center;
+}
+
+.ww__recipe-group {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.ww__recipe-arrow {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 0;
+  color: var(--ww-muted);
+}
+
+@media (max-width: 900px) {
+  .ww__recipe-table {
+    flex-direction: column;
+    gap: 0.75rem;
+  }
+
+  .ww__recipe-arrow {
+    transform: rotate(90deg);
+  }
+}
+</style>

@@ -18,9 +18,9 @@
           :model-value="activeTab"
           @update:model-value="$emit('update:active-tab', $event)"
           dense
-          outside-arrows
-          mobile-arrows
-          inline-label
+          :outside-arrows="!isMobile"
+          :mobile-arrows="isMobile"
+          :inline-label="!isMobile"
           class="q-px-sm q-pt-sm"
         >
           <q-tab name="recipes" :label="recipesTabLabel" />
@@ -35,7 +35,7 @@
             :label="tab.tabLabel"
           />
         </q-tabs>
-        <div class="jei-dialog__hint text-caption">{{ keyHint }}</div>
+        <div v-if="!isMobile" class="jei-dialog__hint text-caption">{{ keyHint }}</div>
       </div>
 
       <q-scroll-area class="jei-dialog__body">
@@ -101,26 +101,7 @@ function labelWithShortcut(label: string, action: KeyAction) {
   return `${label} (${keyBindingToString(keyBindingsStore.getBinding(action))})`;
 }
 
-const recipesTabLabel = computed(() => labelWithShortcut(t('tabsRecipes'), 'viewRecipes'));
-const usesTabLabel = computed(() => labelWithShortcut(t('tabsUses'), 'viewUses'));
-const wikiTabLabel = computed(() => labelWithShortcut(t('tabsWiki'), 'viewWiki'));
-const iconTabLabel = computed(() => labelWithShortcut(t('tabsIcon'), 'viewIcon'));
-const plannerTabLabel = computed(() => labelWithShortcut(t('tabsPlanner'), 'viewPlanner'));
-
-interface RecipeGroup {
-  typeKey: string;
-  label: string;
-  recipeIds: string[];
-  isAll?: boolean;
-  machines: Array<{ typeKey: string; machineItemId: string }>;
-}
-
-interface MachineIcon {
-  typeKey: string;
-  machineItemId: string;
-}
-
-defineProps<{
+const props = defineProps<{
   open: boolean;
   isMobile: boolean;
   currentItemTitle: string;
@@ -147,6 +128,34 @@ defineProps<{
     signal: AbortSignal,
   ) => Promise<PluginApiResult | null>;
 }>();
+
+const recipesTabLabel = computed(() =>
+  props.isMobile ? t('tabsRecipes') : labelWithShortcut(t('tabsRecipes'), 'viewRecipes'),
+);
+const usesTabLabel = computed(() =>
+  props.isMobile ? t('tabsUses') : labelWithShortcut(t('tabsUses'), 'viewUses'),
+);
+const wikiTabLabel = computed(() =>
+  props.isMobile ? t('tabsWiki') : labelWithShortcut(t('tabsWiki'), 'viewWiki'),
+);
+const iconTabLabel = computed(() =>
+  props.isMobile ? t('tabsIcon') : labelWithShortcut(t('tabsIcon'), 'viewIcon'),
+);
+const plannerTabLabel = computed(() =>
+  props.isMobile ? t('tabsPlanner') : labelWithShortcut(t('tabsPlanner'), 'viewPlanner'),
+);
+interface RecipeGroup {
+  typeKey: string;
+  label: string;
+  recipeIds: string[];
+  isAll?: boolean;
+  machines: Array<{ typeKey: string; machineItemId: string }>;
+}
+
+interface MachineIcon {
+  typeKey: string;
+  machineItemId: string;
+}
 
 defineEmits<{
   'update:open': [value: boolean];
@@ -211,11 +220,21 @@ defineEmits<{
   align-items: center;
   gap: 8px;
   min-width: 0;
+  max-width: 100%;
 }
 
 .jei-dialog__tabs :deep(.q-tabs) {
   flex: 1 1 0;
   min-width: 0;
+}
+
+.jei-dialog :deep(.q-tabs),
+.jei-dialog :deep(.q-tab-panels),
+.jei-dialog :deep(.q-tab-panel),
+.jei-dialog :deep(.q-tabs__content),
+.jei-dialog :deep(.q-tab__content) {
+  min-width: 0;
+  max-width: 100%;
 }
 
 .jei-dialog__hint {
@@ -226,5 +245,10 @@ defineEmits<{
 
 .jei-dialog__body {
   flex: 1 1 auto;
+  min-width: 0;
+}
+
+.jei-dialog--mobile .jei-dialog__tabs {
+  padding: 0 8px 8px;
 }
 </style>

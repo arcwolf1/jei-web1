@@ -152,6 +152,7 @@ export interface Recipe {
   inlineItems?: ItemDef[];
   detailPath?: string;
   detailLoaded?: boolean;
+  sourcePackIds?: string[];
 }
 
 export interface InlineRecipe {

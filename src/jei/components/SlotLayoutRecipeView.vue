@@ -11,8 +11,8 @@
           <div class="slot-layout__slot-head">
             <div class="slot-layout__slot-label">{{ s.label || s.slotId }}</div>
             <q-badge
-              v-if="s.io"
-              :color="s.io === 'output' ? 'positive' : s.io === 'catalyst' ? 'warning' : 'primary'"
+              v-if="s.io === 'catalyst'"
+              color="warning"
               class="slot-layout__slot-io"
             >
               {{ s.io }}

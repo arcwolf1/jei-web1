@@ -30,7 +30,7 @@
     "build": "quasar build",
     "build:cloudflare": "git fetch --unshallow 2>/dev/null || true && pnpm run build",
     "serve:spa": "node scripts/serve-static.mjs dist/spa --port=4179",
-    "serve:relative": "node scripts/serve-static.mjs dist --port=4179",
+    "serve:relative": "node scripts/serve-static.mjs dist/spa --port=4179",
     "test:static": "pnpm run build && pnpm run serve:spa",
     "test:static:relative": "pnpm run build && pnpm run serve:relative",
     "serve:dist": "node warfarin-wiki-scraper/scripts/serve-static.mjs .local-ci-artifacts/warfarin-pack-warfarin-next --port=4179",

@@ -29,6 +29,12 @@ export function getItemLookupIds(item: ItemDef): string[] {
   push(item.key.id);
   push(meta?.aggregateSourceItemId);
   collectStringValues(meta?.aggregateOriginalItemIds).forEach((id) => ids.add(id));
+  if (Array.isArray(meta?.aggregateHoverSources)) {
+    meta.aggregateHoverSources.forEach((entry) => {
+      if (!isRecordLike(entry)) return;
+      push(entry.id);
+    });
+  }
 
   return Array.from(ids);
 }

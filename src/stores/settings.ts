@@ -217,6 +217,7 @@ export const useSettingsStore = defineStore('settings', {
       debugNavPanel: false,
       recipeViewMode: 'panel' as 'dialog' | 'panel',
       recipeSlotShowName: true,
+      recipeQueryShowDataSources: false,
       selectedPack: 'aef',
       favoritesCollapsed: false,
       panelCollapsed: false,
@@ -255,6 +256,7 @@ export const useSettingsStore = defineStore('settings', {
       circuitEditorPiecePanelSplitRatio: 0.5,
       detectPcDisableMobile: true,
       mobileItemClickOpensDetail: true,
+      mobileBottomPackControlsCollapsible: true,
       customPackSources: [] as Array<{ packId: string; label: string; mirrors: string[] }>,
       useDevPackMirrors: false,
       packMirrorSelectionModeByPack: {} as Record<string, 'auto' | 'manual'>,
@@ -342,6 +344,10 @@ export const useSettingsStore = defineStore('settings', {
           typeof parsed.recipeSlotShowName === 'boolean'
             ? parsed.recipeSlotShowName
             : defaults.recipeSlotShowName,
+        recipeQueryShowDataSources:
+          typeof parsed.recipeQueryShowDataSources === 'boolean'
+            ? parsed.recipeQueryShowDataSources
+            : defaults.recipeQueryShowDataSources,
         selectedPack:
           typeof parsed.selectedPack === 'string' ? parsed.selectedPack : defaults.selectedPack,
         favoritesCollapsed:
@@ -447,6 +453,10 @@ export const useSettingsStore = defineStore('settings', {
           typeof parsed.mobileItemClickOpensDetail === 'boolean'
             ? parsed.mobileItemClickOpensDetail
             : defaults.mobileItemClickOpensDetail,
+        mobileBottomPackControlsCollapsible:
+          typeof parsed.mobileBottomPackControlsCollapsible === 'boolean'
+            ? parsed.mobileBottomPackControlsCollapsible
+            : defaults.mobileBottomPackControlsCollapsible,
         customPackSources: Array.isArray(parsed.customPackSources)
           ? parsed.customPackSources
               .map((x) => normalizeCustomPackSource(x))
@@ -612,6 +622,10 @@ export const useSettingsStore = defineStore('settings', {
       this.recipeSlotShowName = enabled;
       void this.save();
     },
+    setRecipeQueryShowDataSources(enabled: boolean) {
+      this.recipeQueryShowDataSources = enabled;
+      void this.save();
+    },
     setSelectedPack(packId: string) {
       this.selectedPack = packId;
       void this.save();
@@ -753,6 +767,10 @@ export const useSettingsStore = defineStore('settings', {
       this.mobileItemClickOpensDetail = value;
       void this.save();
     },
+    setMobileBottomPackControlsCollapsible(value: boolean) {
+      this.mobileBottomPackControlsCollapsible = value;
+      void this.save();
+    },
     addCustomPackSource(source: { packId: string; label: string; mirrors: string[] }) {
       const safeId = normalizeCustomPackId(source.packId);
       if (!safeId) return;
@@ -873,6 +891,7 @@ export const useSettingsStore = defineStore('settings', {
         debugNavPanel: this.debugNavPanel,
         recipeViewMode: this.recipeViewMode,
         recipeSlotShowName: this.recipeSlotShowName,
+        recipeQueryShowDataSources: this.recipeQueryShowDataSources,
         selectedPack: this.selectedPack,
         favoritesCollapsed: this.favoritesCollapsed,
         panelCollapsed: this.panelCollapsed,
@@ -902,6 +921,7 @@ export const useSettingsStore = defineStore('settings', {
         circuitEditorPiecePanelSplitRatio: this.circuitEditorPiecePanelSplitRatio,
         detectPcDisableMobile: this.detectPcDisableMobile,
         mobileItemClickOpensDetail: this.mobileItemClickOpensDetail,
+        mobileBottomPackControlsCollapsible: this.mobileBottomPackControlsCollapsible,
         customPackSources: this.customPackSources,
         useDevPackMirrors: this.useDevPackMirrors,
         packMirrorSelectionModeByPack: this.packMirrorSelectionModeByPack,
@@ -968,6 +988,8 @@ export const useSettingsStore = defineStore('settings', {
         this.recipeViewMode = parsed.recipeViewMode;
       if (typeof parsed.recipeSlotShowName === 'boolean')
         this.recipeSlotShowName = parsed.recipeSlotShowName;
+      if (typeof parsed.recipeQueryShowDataSources === 'boolean')
+        this.recipeQueryShowDataSources = parsed.recipeQueryShowDataSources;
       if (typeof parsed.selectedPack === 'string') this.selectedPack = parsed.selectedPack;
       if (typeof parsed.favoritesCollapsed === 'boolean')
         this.favoritesCollapsed = parsed.favoritesCollapsed;
@@ -1085,6 +1107,8 @@ export const useSettingsStore = defineStore('settings', {
         this.detectPcDisableMobile = parsed.detectPcDisableMobile;
       if (typeof parsed.mobileItemClickOpensDetail === 'boolean')
         this.mobileItemClickOpensDetail = parsed.mobileItemClickOpensDetail;
+      if (typeof parsed.mobileBottomPackControlsCollapsible === 'boolean')
+        this.mobileBottomPackControlsCollapsible = parsed.mobileBottomPackControlsCollapsible;
       if (Array.isArray(parsed.customPackSources)) {
         this.customPackSources = parsed.customPackSources
           .map((x) => normalizeCustomPackSource(x))

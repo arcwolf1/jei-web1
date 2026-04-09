@@ -128,7 +128,12 @@
                   </template>
                 </q-file>
                 <div class="text-caption text-grey-7 q-mt-xs">
-                  {{ t('currentCatalogStatus', { name: catalogFile?.name || t('notSelected'), status: catalogStatus }) }}
+                  {{
+                    t('currentCatalogStatus', {
+                      name: catalogFile?.name || t('notSelected'),
+                      status: catalogStatus,
+                    })
+                  }}
                 </div>
 
                 <!-- 显示上次使用的文件提示（如果当前未选择） -->
@@ -553,7 +558,9 @@ async function loadCatalogFileFromDir(filePath: string, fileName: string) {
     console.log('Catalog file loaded successfully:', fileName);
   } catch (error) {
     console.error('Failed to load catalog file from dir:', error);
-    alert(`${t('loadCatalogFileFailed')}: ${error instanceof Error ? error.message : t('unknownError')}`);
+    alert(
+      `${t('loadCatalogFileFailed')}: ${error instanceof Error ? error.message : t('unknownError')}`,
+    );
   }
 }
 

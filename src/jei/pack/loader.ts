@@ -1216,6 +1216,7 @@ function transformRecipeForAggregate(recipe: Recipe, runtime: AggregateSourceRun
     id: `${runtime.recipeIdPrefix}${recipe.id}`,
     type: remapRecipeTypeKeyByAlias(prefixedType, runtime.recipeTypeAlias),
     slotContents: remapSlotContentsForAggregate(recipe.slotContents, runtime.itemIdAlias),
+    sourcePackIds: [runtime.packId],
   };
   if (recipe.params !== undefined) out.params = { ...recipe.params };
   if (recipe.inlineItems !== undefined) {
@@ -1604,6 +1605,9 @@ function mergeRecipeForAggregate(base: Recipe, incoming: Recipe): Recipe {
     type: base.type,
     slotContents: { ...base.slotContents },
   };
+  const mergedSourcePackIds = mergeStringArrayStable(base.sourcePackIds, incoming.sourcePackIds);
+  if (mergedSourcePackIds !== undefined) out.sourcePackIds = mergedSourcePackIds;
+  else delete out.sourcePackIds;
   const detailPath = pickPreferLongerString(base.detailPath, incoming.detailPath);
   if (detailPath !== undefined) out.detailPath = detailPath;
   else delete out.detailPath;

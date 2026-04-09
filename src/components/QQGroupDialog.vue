@@ -6,11 +6,11 @@
       </q-card-section>
 
       <q-card-section>
-        <p>{{ t('qqGroupOfficial') }}</p>
-        <p>
+        <p v-if="showGroupContent">{{ t('qqGroupOfficial') }}</p>
+        <p v-if="showGroupContent">
           {{ t('qqGroupDescription') }}
         </p>
-        <p>
+        <p v-if="showMirrorLinks">
           中国大陆访问镜像由 Mic 提供，地址为https://jei.mic.run
           <br />
           或者您可以通过https://cnjeiweb.sirrus.cc来转跳访问，
@@ -42,13 +42,20 @@
       <q-card-actions align="right">
         <q-btn
           v-if="showDontShowAgain"
-          flat
-          :label="t('dontShowAgain')"
-          color="grey"
+          :flat="!highlightDontShowAgain"
+          :unelevated="highlightDontShowAgain"
+          :label="dontShowAgainLabel || t('dontShowAgain')"
+          :color="highlightDontShowAgain ? 'negative' : 'grey'"
           @click="handleDontShowAgain"
         />
-        <q-btn flat :label="t('close')" color="primary" @click="handleClose" />
-        <q-btn flat :label="t('joinGroup')" color="primary" @click="handleJoin" />
+        <q-btn flat :label="closeButtonLabel || t('close')" color="primary" @click="handleClose" />
+        <q-btn
+          v-if="showJoinButton"
+          flat
+          :label="joinButtonLabel || t('joinGroup')"
+          color="primary"
+          @click="handleJoin"
+        />
       </q-card-actions>
     </q-card>
   </q-dialog>
@@ -67,6 +74,13 @@ interface Props {
   title?: string;
   showDontShowAgain?: boolean;
   managed?: boolean;
+  showGroupContent?: boolean;
+  showMirrorLinks?: boolean;
+  showJoinButton?: boolean;
+  highlightDontShowAgain?: boolean;
+  closeButtonLabel?: string;
+  dontShowAgainLabel?: string;
+  joinButtonLabel?: string;
 }
 
 const props = withDefaults(defineProps<Props>(), {
@@ -74,6 +88,13 @@ const props = withDefaults(defineProps<Props>(), {
   title: 'JEI Web 官方 QQ 群',
   showDontShowAgain: false,
   managed: false,
+  showGroupContent: true,
+  showMirrorLinks: true,
+  showJoinButton: true,
+  highlightDontShowAgain: false,
+  closeButtonLabel: '',
+  dontShowAgainLabel: '',
+  joinButtonLabel: '',
 });
 
 const emit = defineEmits<{

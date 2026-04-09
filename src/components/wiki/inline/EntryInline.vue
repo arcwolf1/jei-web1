@@ -17,7 +17,11 @@
     <span v-if="showCount" class="entry-count">×{{ element.entry.count }}</span>
   </span>
 
-  <div v-else :class="['wiki-entry-card', { 'wiki-entry-card--dark': isDark }]" @click="handleClick">
+  <div
+    v-else
+    :class="['wiki-entry-card', { 'wiki-entry-card--dark': isDark }]"
+    @click="handleClick"
+  >
     <StackView
       class="entry-stack entry-stack--card"
       :content="stackContent"
@@ -44,9 +48,19 @@ const $q = useQuasar();
 const catalogMap = inject<Ref<CatalogItemMap>>('wikiCatalogMap', ref({} as CatalogItemMap));
 const useProxyRef = inject<Ref<boolean>>('wikiImageUseProxy', ref(false));
 const proxyUrlRef = inject<Ref<string>>('wikiImageProxyUrl', ref(''));
-const wikiEntryNavigate = inject<(itemId: string) => void>('wikiEntryNavigate', () => undefined);
+const wikiSourcePackIdRef = inject<Ref<string | undefined>>('wikiSourcePackId', ref(undefined));
+const wikiResolveEntryItem = inject<(itemId: string, sourcePackId?: string) => ItemDef | undefined>(
+  'wikiResolveEntryItem',
+  () => undefined,
+);
+const wikiEntryNavigate = inject<(itemId: string, sourcePackId?: string) => void>(
+  'wikiEntryNavigate',
+  () => undefined,
+);
 
 const entryId = computed(() => String(props.element.entry.id ?? '').trim());
+const sourcePackId = computed(() => String(wikiSourcePackIdRef.value || '').trim() || undefined);
+const resolvedItemDef = computed(() => wikiResolveEntryItem(entryId.value, sourcePackId.value));
 
 const catalogEntry = computed(() => {
   const direct = catalogMap.value[entryId.value];
@@ -56,14 +70,18 @@ const catalogEntry = computed(() => {
 });
 
 const displayName = computed(() => {
+  if (resolvedItemDef.value?.name) return resolvedItemDef.value.name;
   return catalogEntry.value?.name || String(props.element.entry.id || '');
 });
 
 const displayCover = computed(() => {
+  if (resolvedItemDef.value?.icon) return resolvedItemDef.value.icon;
+  if (resolvedItemDef.value?.iconSprite?.url) return resolvedItemDef.value.iconSprite.url;
   return catalogEntry.value?.cover || '';
 });
 
 const stackItemId = computed(() => {
+  if (resolvedItemDef.value?.key?.id) return resolvedItemDef.value.key.id;
   if (catalogEntry.value?.fullId) return catalogEntry.value.fullId;
   return String(props.element.entry.id || '').trim();
 });
@@ -79,6 +97,12 @@ const stackContent = computed<SlotContent>(() => {
 const stackItemDefsByKeyHash = computed<Record<string, ItemDef>>(() => {
   const id = stackItemId.value;
   if (!id) return {};
+
+  if (resolvedItemDef.value) {
+    return {
+      [itemKeyHash(resolvedItemDef.value.key)]: resolvedItemDef.value,
+    };
+  }
 
   const key = { id };
   const icon = resolveIconUrl(displayCover.value);
@@ -105,7 +129,7 @@ const proxyUrl = computed(() => proxyUrlRef.value);
 function handleClick() {
   const id = stackItemId.value;
   if (!id) return;
-  wikiEntryNavigate(id);
+  wikiEntryNavigate(id, sourcePackId.value);
 }
 
 function resolveIconUrl(url: string): string {

@@ -1,24 +1,38 @@
 <template>
   <div class="planner">
-    <q-card flat bordered class="q-pa-md">
-      <div class="row items-center q-gutter-sm">
-        <div class="text-subtitle2">{{ t('lineSelection') }}</div>
-        <q-btn dense outline icon="restart_alt" :label="t('redesign')" @click="resetPlanner" />
+    <q-card flat bordered class="planner__card q-pa-md">
+      <div :class="['planner__toolbar', 'planner__toolbar--header']">
+        <div class="text-subtitle2 planner__toolbar-title">{{ t('lineSelection') }}</div>
+        <q-btn
+          dense
+          outline
+          icon="restart_alt"
+          :label="isMobilePlanner ? undefined : t('redesign')"
+          class="planner__header-action"
+          @click="resetPlanner"
+        >
+          <q-tooltip v-if="isMobilePlanner">{{ t('redesign') }}</q-tooltip>
+        </q-btn>
         <q-btn
           dense
           outline
           icon="save"
-          :label="t('saveLine')"
+          :label="isMobilePlanner ? undefined : t('saveLine')"
           :disable="!!decisions.length"
+          class="planner__header-action"
           @click="openSaveDialog"
-        />
+        >
+          <q-tooltip v-if="isMobilePlanner">{{ t('saveLine') }}</q-tooltip>
+        </q-btn>
         <q-btn-dropdown
           dense
           outline
           icon="share"
-          :label="t('share')"
+          :label="isMobilePlanner ? undefined : t('share')"
           :disable="!!decisions.length"
+          class="planner__header-action"
         >
+          <q-tooltip v-if="isMobilePlanner">{{ t('share') }}</q-tooltip>
           <q-list dense style="min-width: 180px">
             <q-item clickable v-close-popup @click="shareAsUrl">
               <q-item-section avatar><q-icon name="link" /></q-item-section>
@@ -38,8 +52,13 @@
             </q-item>
           </q-list>
         </q-btn-dropdown>
-        <q-toggle v-model="useProductRecovery" dense :label="t('useProductRecovery')" />
-        <q-space />
+        <q-toggle
+          v-model="useProductRecovery"
+          dense
+          :label="t('useProductRecovery')"
+          class="planner__toolbar-toggle"
+        />
+        <q-space class="planner__toolbar-spacer" />
         <q-badge v-if="decisions.length" color="warning"
           >{{ t('pendingChoices') }}{{ decisions.length }}</q-badge
         >
@@ -154,7 +173,14 @@
       </div>
 
       <div v-else class="q-mt-md">
-        <q-tabs v-model="activeTab" dense outside-arrows mobile-arrows inline-label>
+        <q-tabs
+          v-model="activeTab"
+          dense
+          :outside-arrows="!isMobilePlanner"
+          :mobile-arrows="isMobilePlanner"
+          :inline-label="!isMobilePlanner"
+          class="planner__tabs"
+        >
           <q-tab name="tree" :label="treeTabLabel" />
           <q-tab name="graph" :label="graphTabLabel" />
           <q-tab name="line" :label="lineTabLabel" />
@@ -164,13 +190,14 @@
         <q-separator />
 
         <div v-if="activeTab === 'tree'" class="q-mt-md">
-          <div class="row items-center q-gutter-sm">
+          <div :class="['planner__toolbar', 'planner__toolbar--view']">
             <div class="text-caption text-grey-8">{{ t('targetOutput') }}</div>
             <q-input
               dense
               filled
               type="number"
               style="width: 120px"
+              class="planner__target-amount"
               :model-value="targetAmount"
               @update:model-value="(v) => (targetAmount = Number(v))"
             />
@@ -181,11 +208,12 @@
               map-options
               popup-content-class="planner__select-menu"
               style="min-width: 100px"
+              class="planner__target-unit"
               :options="unitOptions"
               :model-value="targetUnit"
               @update:model-value="(v) => (targetUnit = v as (typeof unitOptions)[number]['value'])"
             />
-            <q-btn-group outline>
+            <q-btn-group outline class="planner__preset-group">
               <q-btn
                 dense
                 no-caps
@@ -203,11 +231,12 @@
                 @click="applyTargetRatePreset('full')"
               />
             </q-btn-group>
-            <q-space />
+            <q-space class="planner__toolbar-spacer" />
             <q-btn-toggle
               v-model="treeDisplayMode"
               dense
               outline
+              class="planner__mode-toggle"
               toggle-color="primary"
               :options="[
                 { label: t('displayModeList'), value: 'list' },
@@ -505,13 +534,14 @@
 
         <div v-else-if="activeTab === 'graph'" class="q-mt-md">
           <div :class="['planner__pagefull', { 'planner__pagefull--active': graphPageFull }]">
-            <div class="row items-center q-gutter-sm">
+            <div :class="['planner__toolbar', 'planner__toolbar--view']">
               <div class="text-caption text-grey-8">{{ t('targetOutput') }}</div>
               <q-input
                 dense
                 filled
                 type="number"
                 style="width: 160px"
+                class="planner__target-amount"
                 :model-value="targetAmount"
                 @update:model-value="(v) => (targetAmount = Number(v))"
               />
@@ -522,13 +552,14 @@
                 map-options
                 popup-content-class="planner__select-menu"
                 style="min-width: 100px"
+                class="planner__target-unit"
                 :options="unitOptions"
                 :model-value="targetUnit"
                 @update:model-value="
                   (v) => (targetUnit = v as (typeof unitOptions)[number]['value'])
                 "
               />
-              <q-btn-group outline>
+              <q-btn-group outline class="planner__preset-group">
                 <q-btn
                   dense
                   no-caps
@@ -546,14 +577,25 @@
                   @click="applyTargetRatePreset('full')"
                 />
               </q-btn-group>
-              <q-toggle v-model="graphShowFluids" dense :label="t('showFluids')" />
-              <q-toggle v-model="graphMergeRawMaterials" dense :label="t('mergeRawMaterials')" />
-              <q-space />
+              <q-toggle
+                v-model="graphShowFluids"
+                dense
+                :label="t('showFluids')"
+                class="planner__toolbar-toggle"
+              />
+              <q-toggle
+                v-model="graphMergeRawMaterials"
+                dense
+                :label="t('mergeRawMaterials')"
+                class="planner__toolbar-toggle"
+              />
+              <q-space class="planner__toolbar-spacer" />
               <q-btn
                 flat
                 dense
                 round
                 :icon="graphPageFull ? 'close_fullscreen' : 'fit_screen'"
+                class="planner__view-action"
                 @click="graphPageFull = !graphPageFull"
               >
                 <q-tooltip>{{
@@ -565,6 +607,7 @@
                 dense
                 round
                 :icon="graphFullscreen ? 'fullscreen_exit' : 'fullscreen'"
+                class="planner__view-action"
                 @click="toggleGraphFullscreen"
               >
                 <q-tooltip>{{ graphFullscreen ? t('exitFullscreen') : t('fullscreen') }}</q-tooltip>
@@ -695,13 +738,14 @@
 
         <div v-else-if="activeTab === 'line'" class="q-mt-md">
           <div :class="['planner__pagefull', { 'planner__pagefull--active': linePageFull }]">
-            <div class="row items-center q-gutter-sm">
+            <div :class="['planner__toolbar', 'planner__toolbar--view']">
               <div class="text-caption text-grey-8">{{ t('targetOutput') }}</div>
               <q-input
                 dense
                 filled
                 type="number"
                 style="width: 160px"
+                class="planner__target-amount"
                 :model-value="targetAmount"
                 @update:model-value="(v) => (targetAmount = Number(v))"
               />
@@ -712,13 +756,14 @@
                 map-options
                 popup-content-class="planner__select-menu"
                 style="min-width: 100px"
+                class="planner__target-unit"
                 :options="unitOptions"
                 :model-value="targetUnit"
                 @update:model-value="
                   (v) => (targetUnit = v as (typeof unitOptions)[number]['value'])
                 "
               />
-              <q-btn-group outline>
+              <q-btn-group outline class="planner__preset-group">
                 <q-btn
                   dense
                   no-caps
@@ -736,12 +781,23 @@
                   @click="applyTargetRatePreset('full')"
                 />
               </q-btn-group>
-              <q-toggle v-model="lineCollapseIntermediate" dense :label="t('hideIntermediate')" />
-              <q-toggle v-model="lineWidthByRate" dense :label="t('lineWidthByRate')" />
+              <q-toggle
+                v-model="lineCollapseIntermediate"
+                dense
+                :label="t('hideIntermediate')"
+                class="planner__toolbar-toggle"
+              />
+              <q-toggle
+                v-model="lineWidthByRate"
+                dense
+                :label="t('lineWidthByRate')"
+                class="planner__toolbar-toggle"
+              />
               <q-toggle
                 :model-value="settingsStore.lineIntermediateColoring"
                 dense
                 :label="t('intermediateColoring')"
+                class="planner__toolbar-toggle"
                 @update:model-value="settingsStore.setLineIntermediateColoring(!!$event)"
               />
               <q-toggle
@@ -754,6 +810,7 @@
                 dense
                 color="warning"
                 :label="t('treatAsRawMaterial')"
+                class="planner__toolbar-toggle"
                 @update:model-value="(v) => setSelectedLineItemForcedRaw(!!v)"
               />
               <q-btn
@@ -763,12 +820,14 @@
                 no-caps
                 icon="tune"
                 :label="t('lineWidthEditCurve')"
+                class="planner__header-action"
                 @click="lineWidthCurveDialogOpen = true"
               />
               <q-btn-toggle
                 dense
                 outlined
                 no-caps
+                class="planner__renderer-toggle"
                 toggle-color="primary"
                 :model-value="settingsStore.productionLineRenderer"
                 :options="[
@@ -781,12 +840,13 @@
                   )
                 "
               />
-              <q-space />
+              <q-space class="planner__toolbar-spacer" />
               <q-btn
                 flat
                 dense
                 round
                 :icon="linePageFull ? 'close_fullscreen' : 'fit_screen'"
+                class="planner__view-action"
                 @click="linePageFull = !linePageFull"
               >
                 <q-tooltip>{{
@@ -798,6 +858,7 @@
                 dense
                 round
                 :icon="lineFullscreen ? 'fullscreen_exit' : 'fullscreen'"
+                class="planner__view-action"
                 @click="toggleLineFullscreen"
               >
                 <q-tooltip>{{ lineFullscreen ? t('exitFullscreen') : t('fullscreen') }}</q-tooltip>
@@ -830,13 +891,14 @@
 
         <div v-else-if="activeTab === 'quant'" class="q-mt-md">
           <div :class="['planner__pagefull', { 'planner__pagefull--active': quantPageFull }]">
-            <div class="row items-center q-gutter-sm">
+            <div :class="['planner__toolbar', 'planner__toolbar--view']">
               <div class="text-caption text-grey-8">{{ t('targetOutput') }}</div>
               <q-input
                 dense
                 filled
                 type="number"
                 style="width: 160px"
+                class="planner__target-amount"
                 :model-value="targetAmount"
                 @update:model-value="(v) => (targetAmount = Number(v))"
               />
@@ -847,13 +909,14 @@
                 map-options
                 popup-content-class="planner__select-menu"
                 style="min-width: 100px"
+                class="planner__target-unit"
                 :options="unitOptions"
                 :model-value="targetUnit"
                 @update:model-value="
                   (v) => (targetUnit = v as (typeof unitOptions)[number]['value'])
                 "
               />
-              <q-btn-group outline>
+              <q-btn-group outline class="planner__preset-group">
                 <q-btn
                   dense
                   no-caps
@@ -871,12 +934,23 @@
                   @click="applyTargetRatePreset('full')"
                 />
               </q-btn-group>
-              <q-toggle v-model="quantShowFluids" dense :label="t('showFluids')" />
-              <q-toggle v-model="quantWidthByRate" dense :label="t('lineWidthByRate')" />
+              <q-toggle
+                v-model="quantShowFluids"
+                dense
+                :label="t('showFluids')"
+                class="planner__toolbar-toggle"
+              />
+              <q-toggle
+                v-model="quantWidthByRate"
+                dense
+                :label="t('lineWidthByRate')"
+                class="planner__toolbar-toggle"
+              />
               <q-btn-toggle
                 dense
                 outlined
                 no-caps
+                class="planner__renderer-toggle"
                 toggle-color="primary"
                 :model-value="settingsStore.quantFlowRenderer"
                 :options="[
@@ -887,12 +961,13 @@
                   settingsStore.setQuantFlowRenderer(($event as 'nodes' | 'sankey') ?? 'nodes')
                 "
               />
-              <q-space />
+              <q-space class="planner__toolbar-spacer" />
               <q-btn
                 flat
                 dense
                 round
                 :icon="quantPageFull ? 'close_fullscreen' : 'fit_screen'"
+                class="planner__view-action"
                 @click="quantPageFull = !quantPageFull"
               >
                 <q-tooltip>{{
@@ -904,6 +979,7 @@
                 dense
                 round
                 :icon="quantFullscreen ? 'fullscreen_exit' : 'fullscreen'"
+                class="planner__view-action"
                 @click="toggleQuantFullscreen"
               >
                 <q-tooltip>{{ quantFullscreen ? t('exitFullscreen') : t('fullscreen') }}</q-tooltip>
@@ -939,13 +1015,14 @@
         </div>
 
         <div v-else class="q-mt-md">
-          <div class="row items-center q-gutter-sm">
+          <div :class="['planner__toolbar', 'planner__toolbar--view']">
             <div class="text-caption text-grey-8">{{ t('targetOutput') }}</div>
             <q-input
               dense
               filled
               type="number"
               style="width: 120px"
+              class="planner__target-amount"
               :model-value="targetAmount"
               @update:model-value="(v) => (targetAmount = Number(v))"
             />
@@ -956,11 +1033,12 @@
               map-options
               popup-content-class="planner__select-menu"
               style="min-width: 100px"
+              class="planner__target-unit"
               :options="unitOptions"
               :model-value="targetUnit"
               @update:model-value="(v) => (targetUnit = v as (typeof unitOptions)[number]['value'])"
             />
-            <q-btn-group outline>
+            <q-btn-group outline class="planner__preset-group">
               <q-btn
                 dense
                 no-caps
@@ -1332,11 +1410,27 @@ function labelWithShortcut(label: string, action: KeyAction) {
   return `${label} (${keyBindingToString(keyBindingsStore.getBinding(action))})`;
 }
 
-const treeTabLabel = computed(() => labelWithShortcut(t('treeStructure'), 'plannerTree'));
-const graphTabLabel = computed(() => labelWithShortcut(t('nodeGraph'), 'plannerGraph'));
-const lineTabLabel = computed(() => labelWithShortcut(t('productionLine'), 'plannerLine'));
-const calcTabLabel = computed(() => labelWithShortcut(t('calculator'), 'plannerCalc'));
-const quantTabLabel = computed(() => labelWithShortcut(t('quantificationView'), 'plannerQuant'));
+const $q = useQuasar();
+const isMobilePlanner = computed(() => $q.screen.lt.md);
+const treeTabLabel = computed(() =>
+  isMobilePlanner.value ? t('treeStructure') : labelWithShortcut(t('treeStructure'), 'plannerTree'),
+);
+const graphTabLabel = computed(() =>
+  isMobilePlanner.value ? t('nodeGraph') : labelWithShortcut(t('nodeGraph'), 'plannerGraph'),
+);
+const lineTabLabel = computed(() =>
+  isMobilePlanner.value
+    ? t('productionLine')
+    : labelWithShortcut(t('productionLine'), 'plannerLine'),
+);
+const calcTabLabel = computed(() =>
+  isMobilePlanner.value ? t('calculator') : labelWithShortcut(t('calculator'), 'plannerCalc'),
+);
+const quantTabLabel = computed(() =>
+  isMobilePlanner.value
+    ? t('quantificationView')
+    : labelWithShortcut(t('quantificationView'), 'plannerQuant'),
+);
 const VALID_TARGET_UNITS = new Set<PlannerTargetUnit>([
   'items',
   'per_second',
@@ -1376,8 +1470,6 @@ const lineNodePositions = ref(new Map<string, { x: number; y: number }>());
 const quantNodePositions = ref(new Map<string, { x: number; y: number }>());
 const quantShowFluids = ref(true);
 
-const $q = useQuasar();
-
 const graphFullscreen = ref(false);
 const lineFullscreen = ref(false);
 const quantFullscreen = ref(false);
@@ -1397,6 +1489,16 @@ const targetRatePresets = computed(() => {
 
 const canApplyHalfRatePreset = computed(() => targetRatePresets.value.halfPerMinute !== null);
 const canApplyFullRatePreset = computed(() => targetRatePresets.value.fullPerMinute !== null);
+
+watch(
+  isMobilePlanner,
+  (mobile) => {
+    if (mobile && treeDisplayMode.value === 'list') {
+      treeDisplayMode.value = 'compact';
+    }
+  },
+  { immediate: true },
+);
 
 function applyTargetRatePreset(kind: 'half' | 'full') {
   const targetValue =
@@ -3484,6 +3586,57 @@ const flowBackgroundPatternColor = computed(() =>
 <style scoped>
 .planner {
   width: 100%;
+  min-width: 0;
+  overflow-x: hidden;
+}
+
+.planner__card,
+.planner__tabs,
+.planner__pagefull {
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+}
+
+.planner__toolbar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  min-width: 0;
+}
+
+.planner__toolbar-title {
+  min-width: 0;
+}
+
+.planner__toolbar-spacer {
+  flex: 1 1 auto;
+}
+
+.planner__header-action,
+.planner__view-action {
+  flex: 0 0 auto;
+}
+
+.planner__toolbar > * {
+  min-width: 0;
+  max-width: 100%;
+}
+
+.planner__target-amount {
+  flex: 0 0 120px;
+}
+
+.planner__target-unit {
+  flex: 0 0 100px;
+}
+
+.planner__preset-group,
+.planner__mode-toggle,
+.planner__renderer-toggle {
+  flex: 0 0 auto;
+  max-width: 100%;
 }
 
 .planner__decision {
@@ -3902,5 +4055,95 @@ const flowBackgroundPatternColor = computed(() =>
 /* 修复全屏模式下 q-select 下拉菜单的 z-index 问题 */
 :deep(.q-menu.planner__select-menu) {
   z-index: 99999 !important;
+}
+
+@media (max-width: 768px) {
+  .planner :deep(.q-card.q-pa-md) {
+    padding: 12px !important;
+  }
+
+  .planner :deep(.q-card),
+  .planner :deep(.q-tabs),
+  .planner :deep(.q-tab-panels),
+  .planner :deep(.q-tab-panel),
+  .planner__pagefull {
+    min-width: 0;
+    max-width: 100%;
+  }
+
+  .planner__toolbar {
+    align-items: flex-start;
+    gap: 10px 8px;
+  }
+
+  .planner__toolbar-spacer {
+    display: none;
+  }
+
+  .planner__header-action,
+  .planner__view-action {
+    min-width: 40px;
+  }
+
+  .planner__toolbar-toggle {
+    flex: 1 1 100%;
+    max-width: 100%;
+  }
+
+  .planner__target-amount,
+  .planner__target-unit {
+    flex: 1 1 calc(50% - 4px);
+    min-width: 0;
+    max-width: calc(50% - 4px);
+  }
+
+  .planner__preset-group,
+  .planner__mode-toggle,
+  .planner__renderer-toggle {
+    flex: 1 1 100%;
+    min-width: 0;
+    width: 100%;
+  }
+
+  .planner__preset-group :deep(.q-btn),
+  .planner__mode-toggle :deep(.q-btn),
+  .planner__renderer-toggle :deep(.q-btn) {
+    flex: 1 1 0;
+    min-width: 0;
+  }
+
+  .planner__tree-table {
+    overflow-x: auto;
+  }
+
+  .planner__tree-table-header,
+  .planner__tree-table-row {
+    min-width: 720px;
+  }
+
+  .planner :deep(.q-tabs__content),
+  .planner :deep(.q-tab__content),
+  .planner :deep(.q-field__control),
+  .planner :deep(.q-field__native) {
+    min-width: 0;
+  }
+
+  .planner__tabs :deep(.q-tabs__content) {
+    max-width: 100%;
+  }
+
+  .planner__tabs :deep(.q-tab) {
+    min-width: 0;
+    padding-inline: 10px;
+  }
+
+  .planner__toolbar-toggle :deep(.q-toggle__label) {
+    min-width: 0;
+    white-space: normal;
+  }
+
+  .planner__flow {
+    height: 58vh;
+  }
 }
 </style>

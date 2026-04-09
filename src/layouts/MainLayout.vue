@@ -122,7 +122,18 @@
           <q-tooltip>{{ t('importShareLinkOrJson') }}</q-tooltip>
         </q-btn>
 
-        <div :class="$q.dark.isActive ? 'text-white' : 'text-grey-8'">v{{ appVersion }}</div>
+        <q-btn
+          flat
+          dense
+          :round="isMobileTopbar"
+          no-caps
+          :class="$q.dark.isActive ? 'text-white' : 'text-grey-8'"
+          @click="buildInfoDialogVisible = true"
+        >
+          <q-icon name="info" :class="topbarShowVersionButtonText ? 'q-mr-xs' : ''" />
+          <span v-if="topbarShowVersionButtonText">v{{ appVersion }}</span>
+          <q-tooltip>{{ t('buildInfo') }}</q-tooltip>
+        </q-btn>
 
         <q-btn
           flat
@@ -131,8 +142,11 @@
           :class="$q.dark.isActive ? 'text-white' : 'text-grey-8'"
           @click="showQQGroupDialog"
         >
-          <q-icon name="group" class="q-mr-xs" />
-          <span>官方QQ群：1080814651</span>
+          <q-icon
+            :name="topbarGroupButtonIcon"
+            :class="topbarShowGroupButtonText ? 'q-mr-xs' : ''"
+          />
+          <span v-if="topbarShowGroupButtonText">{{ topbarGroupButtonText }}</span>
         </q-btn>
       </q-toolbar>
     </q-header>
@@ -166,28 +180,42 @@
           </q-item-section>
         </q-item>
 
-        <q-separator />
+        <template v-if="!domainUiPolicy.hideQQGroupLinks">
+          <q-separator />
 
-        <q-item-label header> {{ t('officialQQGroupTitle') }} </q-item-label>
+          <q-item-label header> {{ t('officialQQGroupTitle') }} </q-item-label>
 
-        <q-item
-          clickable
-          tag="a"
-          target="_blank"
-          href="https://qm.qq.com/cgi-bin/qm/qr?_wv=1027&k=zqJY9RCCW3Hs2dH_745AoKSGkd6ME0qM&authKey=f5TTWw4D3XWrz%2B3y%2FB%2BDntQY4gRUOgNz9fsIQ5umYUzXZdAyg7rqIm2z%2B2tU39RB&noverify=0&group_code=1080814651"
-        >
-          <q-item-section avatar>
-            <q-icon name="group" />
-          </q-item-section>
-          <q-item-section>
-            <q-item-label>{{ t('officialQQGroupLabel', { groupId: '1080814651' }) }}</q-item-label>
-            <q-item-label caption>{{ t('officialQQGroupCaption') }}</q-item-label>
-          </q-item-section>
-        </q-item>
+          <q-item
+            clickable
+            tag="a"
+            target="_blank"
+            href="https://qm.qq.com/cgi-bin/qm/qr?_wv=1027&k=zqJY9RCCW3Hs2dH_745AoKSGkd6ME0qM&authKey=f5TTWw4D3XWrz%2B3y%2FB%2BDntQY4gRUOgNz9fsIQ5umYUzXZdAyg7rqIm2z%2B2tU39RB&noverify=0&group_code=1080814651"
+          >
+            <q-item-section avatar>
+              <q-icon name="group" />
+            </q-item-section>
+            <q-item-section>
+              <q-item-label>{{
+                t('officialQQGroupLabel', { groupId: '1080814651' })
+              }}</q-item-label>
+              <q-item-label caption>{{ t('officialQQGroupCaption') }}</q-item-label>
+            </q-item-section>
+          </q-item>
+        </template>
 
         <q-separator />
 
         <q-item-label header> {{ t('help') }} </q-item-label>
+
+        <q-item clickable @click="showQQGroupDialogFromSidebar">
+          <q-item-section avatar>
+            <q-icon name="group" />
+          </q-item-section>
+          <q-item-section>
+            <q-item-label>{{ t('officialQQGroupTitle') }}</q-item-label>
+            <q-item-label caption>{{ t('officialQQGroupCaption') }}</q-item-label>
+          </q-item-section>
+        </q-item>
 
         <q-item clickable @click="showTutorial">
           <q-item-section avatar>
@@ -203,8 +231,15 @@
 
     <QQGroupDialog
       v-model:visible="qqGroupDialogVisible"
-      title="欢迎来到 JEI Web"
+      :title="domainUiPolicy.welcomeDialogTitle"
       :show-dont-show-again="true"
+      :show-group-content="!shouldFilterPopupText"
+      :show-mirror-links="!shouldFilterPopupText"
+      :show-join-button="!shouldFilterPopupText"
+      :highlight-dont-show-again="shouldHighlightDontShowAgain"
+      :close-button-label="domainUiPolicy.closeButtonLabel"
+      :dont-show-again-label="domainUiPolicy.dontShowAgainLabel"
+      :join-button-label="domainUiPolicy.joinButtonLabel"
       :managed="true"
       @close="handleQQGroupDialogClose"
     />
@@ -224,6 +259,13 @@
       :initial-hover-tooltip-show-source-line="settingsStore.hoverTooltipDisplay.sourceLine"
       @finish="handleSetupWizardFinish"
       @skip="handleSetupWizardSkip"
+    />
+
+    <BuildInfoDialog
+      v-model:visible="buildInfoDialogVisible"
+      :title="t('buildInfo')"
+      :version-label="t('version')"
+      :app-version="appVersion"
     />
 
     <InteractiveTour
@@ -248,6 +290,7 @@ import { Dark, useQuasar } from 'quasar';
 import { useI18n } from 'vue-i18n';
 import { useRoute } from 'vue-router';
 import EssentialLink, { type EssentialLinkProps } from 'components/EssentialLink.vue';
+import BuildInfoDialog from 'components/BuildInfoDialog.vue';
 import QQGroupDialog from 'components/QQGroupDialog.vue';
 import SetupWizardDialog from 'components/SetupWizardDialog.vue';
 import InteractiveTour, { type TutorialProgress } from 'components/InteractiveTour.vue';
@@ -275,6 +318,235 @@ const { t, locale } = useI18n();
 const route = useRoute();
 // 开发环境使用 package.json 版本，生产环境使用 git commit hash
 const appVersion = import.meta.env.DEV ? '0.0.1-dev' : (__APP_VERSION__ ?? 'unknown');
+const env = import.meta.env as Record<string, string | boolean | undefined>;
+
+interface DomainUiPolicy {
+  hideQQGroupLinks: boolean;
+  autoPopupFilterSensitiveText: boolean;
+  welcomeDialogTitle: string;
+  triggerButtonText: string;
+  highlightDontShowAgain: boolean;
+  closeButtonLabel: string;
+  dontShowAgainLabel: string;
+  joinButtonLabel: string;
+}
+
+const defaultDomainUiPolicy: DomainUiPolicy = {
+  hideQQGroupLinks: false,
+  autoPopupFilterSensitiveText: false,
+  welcomeDialogTitle: '欢迎来到 JEI Web',
+  triggerButtonText: '官方QQ群：1080814651',
+  highlightDontShowAgain: false,
+  closeButtonLabel: '',
+  dontShowAgainLabel: '',
+  joinButtonLabel: '',
+};
+
+const restrictedDomainUiPolicy: Partial<DomainUiPolicy> = {
+  hideQQGroupLinks: true,
+  autoPopupFilterSensitiveText: true,
+  welcomeDialogTitle: '欢迎使用 JEI Web',
+  triggerButtonText: '欢迎说明',
+  highlightDontShowAgain: true,
+  dontShowAgainLabel: '不再提示',
+  closeButtonLabel: '关闭',
+  joinButtonLabel: '',
+};
+
+type DialogMode = 'auto' | 'manual';
+type BoolOverride = boolean | undefined;
+type DialogModeOverride = DialogMode | undefined;
+
+function detectPcUserAgent(): boolean {
+  if (typeof navigator === 'undefined') return false;
+  const ua = navigator.userAgent;
+  if (ua.includes('JEIBrowser')) return true;
+  return ['Windows', 'Macintosh', 'Linux x86_64', 'Linux i686', 'CrOS', 'X11'].some((pattern) =>
+    ua.includes(pattern),
+  );
+}
+
+function parseDomainList(value: string | undefined): Set<string> {
+  if (!value) return new Set();
+  return new Set(
+    value
+      .split(',')
+      .map((item) => item.trim().toLowerCase())
+      .filter(Boolean),
+  );
+}
+
+function registrableDomain(hostname: string): string {
+  const parts = hostname.split('.').filter(Boolean);
+  if (parts.length < 2) return hostname;
+  return `${parts[parts.length - 2]}.${parts[parts.length - 1]}`;
+}
+
+function mergeDomainSets(...sets: Set<string>[]): Set<string> {
+  return new Set(sets.flatMap((set) => Array.from(set.values())));
+}
+
+function getQueryParams(): URLSearchParams {
+  if (typeof window === 'undefined') return new URLSearchParams();
+  const merged = new URLSearchParams(window.location.search);
+  const hash = window.location.hash || '';
+  const hashBody = hash.startsWith('#') ? hash.slice(1) : hash;
+
+  if (!hashBody.includes('?') && hashBody.includes('=')) {
+    const candidate = hashBody.startsWith('/') ? hashBody.slice(1) : hashBody;
+    const pseudoQuery = candidate.replace(/\//g, '&');
+    const fromPseudoQuery = new URLSearchParams(pseudoQuery);
+    for (const [key, value] of fromPseudoQuery.entries()) {
+      if (!merged.has(key)) merged.set(key, value);
+    }
+  }
+
+  const queryIndex = hash.indexOf('?');
+  if (queryIndex >= 0) {
+    const hashQuery = hash.slice(queryIndex + 1);
+    const fromHash = new URLSearchParams(hashQuery);
+    for (const [key, value] of fromHash.entries()) {
+      if (!merged.has(key)) merged.set(key, value);
+    }
+  }
+  return merged;
+}
+
+function parseBooleanOverride(value: string | null): BoolOverride {
+  if (value === null) return undefined;
+  const normalized = value.trim().toLowerCase();
+  if (['1', 'true', 'yes', 'on'].includes(normalized)) return true;
+  if (['0', 'false', 'no', 'off'].includes(normalized)) return false;
+  return undefined;
+}
+
+function parseDialogModeOverride(value: string | null): DialogModeOverride {
+  if (value === null) return undefined;
+  const normalized = value.trim().toLowerCase();
+  if (normalized === 'auto' || normalized === 'manual') return normalized;
+  return undefined;
+}
+
+const queryParams = getQueryParams();
+const hideLinksOverride = parseBooleanOverride(queryParams.get('jei_test_hide_links'));
+const autoPopupFilterOverride =
+  parseBooleanOverride(queryParams.get('jei_test_auto_popup_filter')) ?? hideLinksOverride;
+const dialogModeOverride = parseDialogModeOverride(queryParams.get('jei_test_popup_mode'));
+
+const legacyDomains = parseDomainList(
+  typeof env.VITE_RESTRICTED_WELCOME_DOMAINS === 'string'
+    ? env.VITE_RESTRICTED_WELCOME_DOMAINS
+    : undefined,
+);
+
+const legacyExactHosts = parseDomainList(
+  typeof env.VITE_RESTRICTED_WELCOME_EXACT_HOSTS === 'string'
+    ? env.VITE_RESTRICTED_WELCOME_EXACT_HOSTS
+    : undefined,
+);
+
+const builtInRestrictedDomains = new Set(['tapimg.com', 'taptap.cn']);
+const builtInRestrictedExactHosts = new Set(['3rd-tool-h5-al.tapimg.com', 'www.taptap.cn']);
+
+const hideLinksDomains = mergeDomainSets(
+  builtInRestrictedDomains,
+  parseDomainList(
+    typeof env.VITE_QQ_LINK_HIDDEN_DOMAINS === 'string'
+      ? env.VITE_QQ_LINK_HIDDEN_DOMAINS
+      : undefined,
+  ),
+  legacyDomains,
+);
+
+const hideLinksExactHosts = mergeDomainSets(
+  builtInRestrictedExactHosts,
+  parseDomainList(
+    typeof env.VITE_QQ_LINK_HIDDEN_EXACT_HOSTS === 'string'
+      ? env.VITE_QQ_LINK_HIDDEN_EXACT_HOSTS
+      : undefined,
+  ),
+  legacyExactHosts,
+);
+
+const autoPopupFilterDomains = mergeDomainSets(
+  builtInRestrictedDomains,
+  parseDomainList(
+    typeof env.VITE_QQ_AUTO_POPUP_FILTER_DOMAINS === 'string'
+      ? env.VITE_QQ_AUTO_POPUP_FILTER_DOMAINS
+      : undefined,
+  ),
+  legacyDomains,
+);
+
+const autoPopupFilterExactHosts = mergeDomainSets(
+  builtInRestrictedExactHosts,
+  parseDomainList(
+    typeof env.VITE_QQ_AUTO_POPUP_FILTER_EXACT_HOSTS === 'string'
+      ? env.VITE_QQ_AUTO_POPUP_FILTER_EXACT_HOSTS
+      : undefined,
+  ),
+  legacyExactHosts,
+);
+
+function resolveDomainUiPolicy(hostname: string): DomainUiPolicy {
+  const normalized = hostname.toLowerCase();
+  const rootDomain = registrableDomain(normalized);
+  const matchedHideLinks = hideLinksExactHosts.has(normalized) || hideLinksDomains.has(rootDomain);
+  const matchedAutoPopupFilter =
+    autoPopupFilterExactHosts.has(normalized) || autoPopupFilterDomains.has(rootDomain);
+
+  const hideQQGroupLinks = hideLinksOverride ?? matchedHideLinks;
+  const autoPopupFilterSensitiveText = autoPopupFilterOverride ?? matchedAutoPopupFilter;
+  const useRestrictedCopy = hideQQGroupLinks || autoPopupFilterSensitiveText;
+
+  return {
+    ...defaultDomainUiPolicy,
+    ...(useRestrictedCopy ? restrictedDomainUiPolicy : null),
+    hideQQGroupLinks,
+    autoPopupFilterSensitiveText,
+    welcomeDialogTitle:
+      (typeof env.VITE_RESTRICTED_WELCOME_TITLE === 'string' &&
+        env.VITE_RESTRICTED_WELCOME_TITLE) ||
+      (useRestrictedCopy
+        ? restrictedDomainUiPolicy.welcomeDialogTitle
+        : defaultDomainUiPolicy.welcomeDialogTitle) ||
+      defaultDomainUiPolicy.welcomeDialogTitle,
+    triggerButtonText:
+      (typeof env.VITE_RESTRICTED_TRIGGER_BUTTON_TEXT === 'string' &&
+        env.VITE_RESTRICTED_TRIGGER_BUTTON_TEXT) ||
+      (useRestrictedCopy
+        ? restrictedDomainUiPolicy.triggerButtonText
+        : defaultDomainUiPolicy.triggerButtonText) ||
+      defaultDomainUiPolicy.triggerButtonText,
+  };
+}
+
+const hostname = typeof window === 'undefined' ? '' : window.location.hostname;
+const domainUiPolicy = resolveDomainUiPolicy(hostname);
+const shouldDisableMobileUi = computed(
+  () => settingsStore.detectPcDisableMobile && detectPcUserAgent(),
+);
+const isMobileTopbar = computed(() => !shouldDisableMobileUi.value && $q.screen.lt.md);
+const compactTopbarTriggerButtonText = computed(
+  () =>
+    (typeof env.VITE_RESTRICTED_TRIGGER_BUTTON_TEXT === 'string' &&
+      env.VITE_RESTRICTED_TRIGGER_BUTTON_TEXT) ||
+    restrictedDomainUiPolicy.triggerButtonText ||
+    defaultDomainUiPolicy.triggerButtonText,
+);
+const topbarUsesCompactGroupButton = computed(
+  () => domainUiPolicy.hideQQGroupLinks || isMobileTopbar.value,
+);
+const topbarShowGroupButtonText = computed(() => !isMobileTopbar.value);
+const topbarShowVersionButtonText = computed(() => !isMobileTopbar.value);
+const topbarGroupButtonText = computed(() =>
+  topbarUsesCompactGroupButton.value
+    ? compactTopbarTriggerButtonText.value
+    : domainUiPolicy.triggerButtonText,
+);
+const topbarGroupButtonIcon = computed(() =>
+  topbarUsesCompactGroupButton.value ? 'campaign' : 'group',
+);
 
 // 阶段名称映射
 const stageNames: Record<string, string> = {
@@ -439,10 +711,24 @@ const linksList: EssentialLinkProps[] = [
 
 const leftDrawerOpen = ref(false);
 const qqGroupDialogVisible = ref(false);
+const buildInfoDialogVisible = ref(false);
 const setupWizardVisible = ref(false);
 const tutorialForceShow = ref(false);
 const qqGroupForceShow = ref(false);
+const qqDialogMode = ref<DialogMode>('auto');
+const qqDialogForceFullContent = ref(false);
 const QQ_GROUP_DIALOG_ID = 'qq-group-intro';
+
+const shouldFilterPopupText = computed(
+  () =>
+    domainUiPolicy.autoPopupFilterSensitiveText &&
+    qqDialogMode.value === 'auto' &&
+    !qqDialogForceFullContent.value,
+);
+
+const shouldHighlightDontShowAgain = computed(
+  () => domainUiPolicy.highlightDontShowAgain && shouldFilterPopupText.value,
+);
 
 type SetupWizardIntent = 'wiki' | 'recipes' | 'planner';
 
@@ -529,7 +815,17 @@ function toggleLeftDrawer() {
 }
 
 function showQQGroupDialog() {
+  qqDialogForceFullContent.value = false;
   qqGroupForceShow.value = true;
+  qqDialogMode.value = dialogModeOverride ?? 'manual';
+  dialogManager.resetDialogStatus(QQ_GROUP_DIALOG_ID);
+  dialogManager.triggerProcess();
+}
+
+function showQQGroupDialogFromSidebar() {
+  qqDialogForceFullContent.value = true;
+  qqGroupForceShow.value = true;
+  qqDialogMode.value = 'manual';
   dialogManager.resetDialogStatus(QQ_GROUP_DIALOG_ID);
   dialogManager.triggerProcess();
 }
@@ -539,6 +835,7 @@ function handleQQGroupDialogClose(dontShowAgain: boolean) {
   if (dontShowAgain) {
     settingsStore.addAcceptedStartupDialog(QQ_GROUP_DIALOG_ID);
   }
+  qqDialogForceFullContent.value = false;
   // 通知弹窗管理器当前弹窗已完成
   dialogManager.completeDialog();
 }
@@ -625,12 +922,18 @@ dialogManager.registerDialog({
     );
   },
   onShow: () => {
+    if (qqDialogForceFullContent.value) {
+      qqDialogMode.value = 'manual';
+    } else {
+      qqDialogMode.value = dialogModeOverride ?? (qqGroupForceShow.value ? 'manual' : 'auto');
+    }
     qqGroupDialogVisible.value = true;
     qqGroupForceShow.value = false;
   },
   onClose: () => {
     qqGroupDialogVisible.value = false;
     qqGroupForceShow.value = false;
+    qqDialogForceFullContent.value = false;
   },
 });
 
