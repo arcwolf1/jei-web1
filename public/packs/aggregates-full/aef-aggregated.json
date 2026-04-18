@@ -25,7 +25,8 @@
       "packId": "warfarin-next",
       "label": "Warfarin Wiki (Next Gen)",
       "mirrors": [
-        "https://warfarin.api.jeiweb.sirrus.cc/"
+        "https://warfarin.api.jeiweb.sirrus.cc/",
+        "https://warfarin-data.api.jei.mic.run/"
       ],
       "devMirrors": [
         "http://127.0.0.1:4179/"
