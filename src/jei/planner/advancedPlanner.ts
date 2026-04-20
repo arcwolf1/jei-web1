@@ -163,8 +163,7 @@ export async function solveAdvanced(input: AdvancedPlannerInput): Promise<Planne
     const surplusVal = primaryOutput ? (solverResult.surpluses.get(itemHash) ?? 0) : 0;
 
     // Power / pollution for this step
-    const stepPower =
-      norm.defaultPower != null ? effectiveMachineCount * norm.defaultPower : 0;
+    const stepPower = norm.defaultPower != null ? effectiveMachineCount * norm.defaultPower : 0;
     const stepPollution =
       norm.defaultPollution != null ? effectiveMachineCount * norm.defaultPollution : 0;
 
@@ -274,8 +273,7 @@ function buildLpFlowData(
       if (ratePerSecond <= 1e-12) return null;
 
       const effectiveMachineCount = ratePerSecond * norm.time;
-      const machineCount =
-        solverResult.recipeMachineCounts.get(recipeId) ?? effectiveMachineCount;
+      const machineCount = solverResult.recipeMachineCounts.get(recipeId) ?? effectiveMachineCount;
       const power =
         norm.defaultPower != null ? effectiveMachineCount * norm.defaultPower : undefined;
       const pollution =

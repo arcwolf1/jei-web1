@@ -10,6 +10,8 @@ export type PlannerNodePosition = {
   y: number;
 };
 
+export type PlannerGraphRenderer = 'vue_flow' | 'g6';
+
 export type AdvancedPlannerTab = 'summary' | 'tree' | 'graph' | 'line' | 'quant' | 'calc';
 
 export type AdvancedPlannerViewState = {
@@ -20,6 +22,9 @@ export type AdvancedPlannerViewState = {
     includeCycleSeeds?: boolean;
     selectedNodeId?: string | null;
     nodePositions?: Record<string, PlannerNodePosition>;
+    nodePositionsByRenderer?: Partial<
+      Record<PlannerGraphRenderer, Record<string, PlannerNodePosition>>
+    >;
   };
   quant?: {
     displayUnit?: PlannerTargetUnit;

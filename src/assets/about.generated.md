@@ -1,18 +1,20 @@
 # About
 
 ## Build
-- Version: pages-build-8-g0766d0c-dirty
-- Commit: 0766d0c (0766d0c6ca3c497409c376233e8cc75494593644)
-- Commit count: 166
-- Subject: feat: 添加Warfarin Wiki的备用镜像链接
+- Version: pages-build-9-g8132061-dirty
+- Commit: 8132061 (81320616f18df9f454e7e8d3c1f072f68c694d7b)
+- Commit count: 167
+- Subject: fix: 修复LP规划器的大量逻辑bug 发现classic给规划器在新版本存在大量无法正常规划的bug
 - Author: AndreaFrederica
-- Date: 2026-04-18T01:10:33+08:00
-- Generated at: 2026-04-20T17:55:41.818Z
+- Date: 2026-04-21T04:18:57+08:00
+- Generated at: 2026-04-20T20:22:01.018Z
 - Remote: https://github.com/AndreaFrederica/jei-web.git
 
 ## Version History
 
-### Unreleased (2026-04-18T01:10:33+08:00)
+### Unreleased (2026-04-21T04:18:57+08:00)
+- 8132061 2026-04-21T04:18:57+08:00
+  fix: 修复LP规划器的大量逻辑bug 发现classic给规划器在新版本存在大量无法正常规划的bug
 - 0766d0c 2026-04-18T01:10:33+08:00
   feat: 添加Warfarin Wiki的备用镜像链接
 - 5b47dff 2026-04-08T04:10:11+08:00

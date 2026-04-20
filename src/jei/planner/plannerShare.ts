@@ -126,14 +126,14 @@ function normalizePlan(value: unknown): PlannerSavePayload {
       value.im === 0
         ? false
         : value.im === 1 ||
-            value.integerMachines === true ||
-            (value.im === undefined && value.integerMachines === undefined),
+          value.integerMachines === true ||
+          (value.im === undefined && value.integerMachines === undefined),
     discreteMachineRates:
       value.dr === 0
         ? false
         : value.dr === 1 ||
-            value.discreteMachineRates === true ||
-            (value.dr === undefined && value.discreteMachineRates === undefined),
+          value.discreteMachineRates === true ||
+          (value.dr === undefined && value.discreteMachineRates === undefined),
     selectedRecipeIdByItemKeyHash: normalizeStringRecord(
       value.sr ?? value.selectedRecipeIdByItemKeyHash,
     ),

@@ -980,7 +980,7 @@
               <quant-flow-view
                 :mode="settingsStore.quantFlowRenderer"
                 :model="quantModel"
-                :node-positions="nodePositionMapToRecord(quantNodePositions)"
+                :node-positions="quantNodePositionsRecord"
                 :item-defs-by-key-hash="itemDefsByKeyHash"
                 :display-unit="quantDisplayUnit"
                 :width-by-rate="quantWidthByRate"
@@ -1324,6 +1324,7 @@
 
 <script setup lang="ts">
 import { ref, computed, watch, onMounted, onUnmounted } from 'vue';
+import { forceCollide, forceLink, forceManyBody, forceSimulation, forceX, forceY } from 'd3';
 
 // The template has multiple root nodes (main div + q-dialog + line-width-curve-editor),
 // so class/style passed by the parent cannot be automatically inherited.
@@ -1370,6 +1371,7 @@ import {
 } from 'src/jei/planner/lineWidthCurve';
 import type {
   AdvancedPlannerTab,
+  PlannerGraphRenderer,
   AdvancedPlannerViewState,
   PlannerLiveState,
   PlannerNodePosition,
@@ -1502,9 +1504,12 @@ const useProductRecovery = ref(false);
 const integerMachines = ref(true);
 const discreteMachineRates = ref(true);
 const selectedLineNodeId = ref<string | null>(null);
-const lineNodePositions = ref(new Map<string, { x: number; y: number }>());
+const lineNodePositionsVueFlow = ref(new Map<string, { x: number; y: number }>());
+const lineNodePositionsG6 = ref(new Map<string, { x: number; y: number }>());
 const quantNodePositions = ref(new Map<string, { x: number; y: number }>());
 const calcDisplayUnit = ref<PlannerTargetUnit>('per_minute');
+const lineAutoLayoutCache = new Map<string, Record<string, PlannerNodePosition>>();
+const quantAutoLayoutCache = new Map<string, Record<string, PlannerNodePosition>>();
 
 const graphPageFull = ref(false);
 const linePageFull = ref(false);
@@ -1562,6 +1567,23 @@ function recordToNodePositionMap(
     out.set(id, { x, y });
   });
   return out;
+}
+
+function lineNodePositionsForRenderer(
+  renderer: PlannerGraphRenderer,
+): Map<string, PlannerNodePosition> {
+  return renderer === 'g6' ? lineNodePositionsG6.value : lineNodePositionsVueFlow.value;
+}
+
+function setLineNodePositionsForRenderer(
+  renderer: PlannerGraphRenderer,
+  value: Map<string, PlannerNodePosition>,
+): void {
+  if (renderer === 'g6') {
+    lineNodePositionsG6.value = value;
+    return;
+  }
+  lineNodePositionsVueFlow.value = value;
 }
 
 function isAdvancedPlannerTab(value: unknown): value is AdvancedPlannerTab {
@@ -1671,7 +1693,13 @@ function buildSavedViewState(): AdvancedPlannerViewState {
       collapseIntermediate: lineCollapseIntermediate.value,
       includeCycleSeeds: lineIncludeCycleSeeds.value,
       selectedNodeId: selectedLineNodeId.value,
-      nodePositions: nodePositionMapToRecord(lineNodePositions.value),
+      nodePositions: nodePositionMapToRecord(
+        lineNodePositionsForRenderer(settingsStore.productionLineRenderer),
+      ),
+      nodePositionsByRenderer: {
+        vue_flow: nodePositionMapToRecord(lineNodePositionsVueFlow.value),
+        g6: nodePositionMapToRecord(lineNodePositionsG6.value),
+      },
     },
     quant: {
       displayUnit: quantDisplayUnit.value,
@@ -1702,7 +1730,15 @@ function applySavedViewState(viewState: AdvancedPlannerViewState | undefined): v
   }
   selectedLineNodeId.value =
     typeof lineView?.selectedNodeId === 'string' ? lineView.selectedNodeId : null;
-  lineNodePositions.value = recordToNodePositionMap(lineView?.nodePositions);
+  const vueFlowPositions = lineView?.nodePositionsByRenderer?.vue_flow;
+  const g6Positions = lineView?.nodePositionsByRenderer?.g6;
+  const fallbackPositions = recordToNodePositionMap(lineView?.nodePositions);
+  lineNodePositionsVueFlow.value =
+    vueFlowPositions !== undefined
+      ? recordToNodePositionMap(vueFlowPositions)
+      : new Map(fallbackPositions);
+  lineNodePositionsG6.value =
+    g6Positions !== undefined ? recordToNodePositionMap(g6Positions) : fallbackPositions;
 
   const quantView = viewState?.quant;
   if (isPlannerTargetUnit(quantView?.displayUnit)) {
@@ -2021,7 +2057,10 @@ watch(forcedRawSignature, () => {
   recomputePlanningState();
   emitLiveState();
   if (
-    lpMode.value && planningStarted.value && !lpPendingAfterDecisions.value && allDecisions.value.length === 0
+    lpMode.value &&
+    planningStarted.value &&
+    !lpPendingAfterDecisions.value &&
+    allDecisions.value.length === 0
   ) {
     runLpSolve();
   }
@@ -2038,7 +2077,12 @@ watch(integerMachines, () => {
 });
 watch(discreteMachineRates, () => {
   emitLiveState();
-  if (lpMode.value && integerMachines.value && planningStarted.value && !lpPendingAfterDecisions.value) {
+  if (
+    lpMode.value &&
+    integerMachines.value &&
+    planningStarted.value &&
+    !lpPendingAfterDecisions.value
+  ) {
     runLpSolve();
   }
 });
@@ -2276,7 +2320,8 @@ const resetPlanning = () => {
   mergedRootItemKey.value = null;
   collapsed.value = new Set();
   selectedLineNodeId.value = null;
-  lineNodePositions.value = new Map();
+  lineNodePositionsVueFlow.value = new Map();
+  lineNodePositionsG6.value = new Map();
   quantNodePositions.value = new Map();
 };
 
@@ -2569,9 +2614,10 @@ function toggleQuantFullscreen() {
 }
 
 function onLineNodeDragStop(evt: { node: Node }) {
-  const next = new Map(lineNodePositions.value);
+  const renderer = settingsStore.productionLineRenderer;
+  const next = new Map(lineNodePositionsForRenderer(renderer));
   next.set(evt.node.id, { ...evt.node.position });
-  lineNodePositions.value = next;
+  setLineNodePositionsForRenderer(renderer, next);
 }
 
 function onQuantNodeDragStop(evt: { node: { id: string; position: { x: number; y: number } } }) {
@@ -3569,6 +3615,8 @@ const lineFlow = computed(() => {
   const model = lineModel.value;
   if (!model.nodes.length) return { nodes: [] as Node[], edges: [] as Edge[] };
 
+  const lineRenderer = settingsStore.productionLineRenderer;
+  const isG6Renderer = lineRenderer === 'g6';
   const titleById = new Map<string, string>();
   const unit = lineDisplayUnit.value;
   const unitText = unitSuffix(unit);
@@ -3730,350 +3778,518 @@ const lineFlow = computed(() => {
     (n.data as LineFlowItemData | LineFlowMachineData | LineFlowFluidData).outPorts = outPorts;
   });
 
-  const nodeW = 340;
-  const nodeH = 64;
-  const gapX = 90;
+  const approximateTextWidth = (text: string, fontSize: number) =>
+    Math.ceil(Array.from(text).length * fontSize * 0.58);
+  const g6MachineOutputLines = (data: LineFlowMachineData) => {
+    const details = data.outputDetails ?? [];
+    if (!details.length) return [] as string[];
+    return details.map((detail) => {
+      const surplus = detail.surplusText ? ` ${t('surplus')}${detail.surplusText}` : '';
+      return `${detail.outputName} ${t('total')}${detail.producedText} ${t('used')}${detail.usedText}${surplus}`;
+    });
+  };
+  const layoutSizeByNodeId = new Map<string, { width: number; height: number }>();
+  nodes.forEach((node) => {
+    if (!isG6Renderer) {
+      layoutSizeByNodeId.set(node.id, { width: 340, height: 64 });
+      return;
+    }
+    const data = (node.data ?? {}) as LineFlowItemData | LineFlowMachineData | LineFlowFluidData;
+    const title = `${data.title ?? ''}`;
+    const subtitle = `${data.subtitle ?? ''}`;
+    const detailLines =
+      node.type === 'lineMachineNode' ? g6MachineOutputLines(data as LineFlowMachineData) : [];
+    const lines = [title, subtitle, ...detailLines].filter((line) => line.trim().length > 0);
+    const labelWidth = Math.max(...lines.map((line) => approximateTextWidth(line, 14)), 0);
+    const width =
+      node.type === 'lineMachineNode'
+        ? Math.max(280, Math.min(540, labelWidth + 150))
+        : node.type === 'lineFluidNode'
+          ? Math.max(200, Math.min(320, labelWidth + 88))
+          : Math.max(220, Math.min(360, labelWidth + 110));
+    const height =
+      node.type === 'lineMachineNode'
+        ? Math.max(132, Math.min(300, 88 + lines.length * 20))
+        : Math.max(112, Math.min(220, 78 + lines.length * 18));
+    layoutSizeByNodeId.set(node.id, { width, height });
+  });
+
+  const nodeW = Math.max(...Array.from(layoutSizeByNodeId.values()).map((size) => size.width), 340);
+  const nodeH = Math.max(...Array.from(layoutSizeByNodeId.values()).map((size) => size.height), 64);
   const gapY = 48;
   const pad = 18;
-
-  const ids = nodes.map((n) => n.id);
-  const out = new Map<string, string[]>();
-  const inp = new Map<string, string[]>();
-  ids.forEach((id) => {
-    out.set(id, []);
-    inp.set(id, []);
-  });
-  edges.forEach((e) => {
-    (out.get(e.source) ?? []).push(e.target);
-    (inp.get(e.target) ?? []).push(e.source);
-  });
-
-  const tarjanIndex = new Map<string, number>();
-  const low = new Map<string, number>();
-  const onStack = new Set<string>();
-  const st: string[] = [];
-  let idx = 0;
-  const comps: string[][] = [];
-
-  const strongconnect = (v: string) => {
-    tarjanIndex.set(v, idx);
-    low.set(v, idx);
-    idx += 1;
-    st.push(v);
-    onStack.add(v);
-
-    (out.get(v) ?? []).forEach((w) => {
-      if (!tarjanIndex.has(w)) {
-        strongconnect(w);
-        low.set(v, Math.min(low.get(v) ?? 0, low.get(w) ?? 0));
-      } else if (onStack.has(w)) {
-        low.set(v, Math.min(low.get(v) ?? 0, tarjanIndex.get(w) ?? 0));
-      }
-    });
-
-    if ((low.get(v) ?? 0) === (tarjanIndex.get(v) ?? 0)) {
-      const comp: string[] = [];
-      while (st.length) {
-        const w = st.pop()!;
-        onStack.delete(w);
-        comp.push(w);
-        if (w === v) break;
-      }
-      comps.push(comp);
-    }
-  };
-
-  ids.forEach((id) => {
-    if (!tarjanIndex.has(id)) strongconnect(id);
-  });
-
-  const compById = new Map<string, number>();
-  comps.forEach((c, i) => c.forEach((id) => compById.set(id, i)));
-  const hasSelfLoop = new Set<number>();
-  edges.forEach((e) => {
-    const cs = compById.get(e.source);
-    const ct = compById.get(e.target);
-    if (cs !== undefined && ct !== undefined && cs === ct && e.source === e.target)
-      hasSelfLoop.add(cs);
-  });
-  const cycleCompIds = new Set<number>();
-  comps.forEach((c, i) => {
-    if (c.length > 1) cycleCompIds.add(i);
-    else if (hasSelfLoop.has(i)) cycleCompIds.add(i);
-  });
-  const cycleNodeIds = new Set<string>();
-  cycleCompIds.forEach((cid) => comps[cid]!.forEach((id) => cycleNodeIds.add(id)));
-
-  const mainIds = ids.filter((id) => !cycleNodeIds.has(id));
-
-  const mainOut = new Map<string, string[]>();
-  const mainInp = new Map<string, string[]>();
-  mainIds.forEach((id) => {
-    mainOut.set(id, []);
-    mainInp.set(id, []);
-  });
-  edges.forEach((e) => {
-    if (!mainOut.has(e.source) || !mainInp.has(e.target)) return;
-    (mainOut.get(e.source) ?? []).push(e.target);
-    (mainInp.get(e.target) ?? []).push(e.source);
-  });
-
-  const indeg = new Map<string, number>();
-  mainIds.forEach((id) => indeg.set(id, (mainInp.get(id) ?? []).length));
-  const queue = mainIds
-    .filter((id) => (indeg.get(id) ?? 0) === 0)
-    .sort((a, b) => (titleById.get(a) ?? a).localeCompare(titleById.get(b) ?? b));
-
-  const topo: string[] = [];
-  while (queue.length) {
-    const id = queue.shift()!;
-    topo.push(id);
-    (mainOut.get(id) ?? []).forEach((to) => {
-      indeg.set(to, (indeg.get(to) ?? 0) - 1);
-      if ((indeg.get(to) ?? 0) === 0) {
-        queue.push(to);
-        queue.sort((a, b) => (titleById.get(a) ?? a).localeCompare(titleById.get(b) ?? b));
-      }
-    });
-  }
-  const topoSet = new Set(topo);
-  mainIds.forEach((id) => {
-    if (!topoSet.has(id)) topo.push(id);
-  });
-
-  const layerById = new Map<string, number>();
-  topo.forEach((id) => layerById.set(id, 0));
-  topo.forEach((id) => {
-    const base = layerById.get(id) ?? 0;
-    (mainOut.get(id) ?? []).forEach((to) => {
-      const prev = layerById.get(to) ?? 0;
-      if (base + 1 > prev) layerById.set(to, base + 1);
-    });
-  });
-
-  const maxLayer = Math.max(0, ...mainIds.map((id) => layerById.get(id) ?? 0));
-  const idsByLayer = new Map<number, string[]>();
-  for (let l = 0; l <= maxLayer; l += 1) idsByLayer.set(l, []);
-  mainIds.forEach((id) => {
-    const l = layerById.get(id) ?? 0;
-    (idsByLayer.get(l) ?? []).push(id);
-  });
-
-  idsByLayer.forEach((list) =>
-    list.sort((a, b) => (titleById.get(a) ?? a).localeCompare(titleById.get(b) ?? b)),
-  );
-
-  const orderIndex = new Map<string, number>();
-  const refreshOrderIndex = () => {
-    idsByLayer.forEach((list) => list.forEach((id, idx) => orderIndex.set(id, idx)));
-  };
-  refreshOrderIndex();
-
-  const bary = (neighbors: string[]) => {
-    if (!neighbors.length) return Number.POSITIVE_INFINITY;
-    let sum = 0;
-    let cnt = 0;
-    neighbors.forEach((n) => {
-      const v = orderIndex.get(n);
-      if (v === undefined) return;
-      sum += v;
-      cnt += 1;
-    });
-    return cnt ? sum / cnt : Number.POSITIVE_INFINITY;
-  };
-
-  const stableSortBy = (list: string[], scoreFn: (id: string) => number) => {
-    const withScore = list.map((id, idx) => ({ id, idx, s: scoreFn(id) }));
-    withScore.sort((a, b) => a.s - b.s || a.idx - b.idx);
-    return withScore.map((v) => v.id);
-  };
-
-  for (let pass = 0; pass < 4; pass += 1) {
-    for (let l = 1; l <= maxLayer; l += 1) {
-      const list = idsByLayer.get(l) ?? [];
-      idsByLayer.set(
-        l,
-        stableSortBy(list, (id) => bary(mainInp.get(id) ?? [])),
-      );
-      refreshOrderIndex();
-    }
-    for (let l = maxLayer - 1; l >= 0; l -= 1) {
-      const list = idsByLayer.get(l) ?? [];
-      idsByLayer.set(
-        l,
-        stableSortBy(list, (id) => bary(mainOut.get(id) ?? [])),
-      );
-      refreshOrderIndex();
-    }
-  }
-
-  const xById = new Map<string, number>();
-  const X_GAP = 60;
-  const minX = pad;
-  ids.forEach((id) => xById.set(id, minX));
-  const predsForX = new Map<string, string[]>();
-  ids.forEach((id) => predsForX.set(id, []));
-  edges.forEach((e) => {
-    if (!mainIds.includes(e.source) || !mainIds.includes(e.target)) return;
-    const ls = layerById.get(e.source) ?? 0;
-    const lt = layerById.get(e.target) ?? 0;
-    if (ls < lt) (predsForX.get(e.target) ?? []).push(e.source);
-  });
-  const mainTopo = topo.filter((id) => !cycleNodeIds.has(id));
-  for (let iter = 0; iter < 2; iter += 1) {
-    mainTopo.forEach((id) => {
-      const preds = predsForX.get(id) ?? [];
-      if (!preds.length) return;
-      const maxPredX = Math.max(...preds.map((p) => xById.get(p) ?? minX));
-      const next = Math.max(minX, maxPredX + nodeW + X_GAP);
-      xById.set(id, next);
-    });
-  }
-
-  nodes.forEach((n) => {
-    if (cycleNodeIds.has(n.id)) return;
-    const l = layerById.get(n.id) ?? 0;
-    const list = idsByLayer.get(l) ?? [];
-    const idx = list.indexOf(n.id);
-    n.position = {
-      x: xById.get(n.id) ?? pad + l * (nodeW + gapX),
-      y: pad + idx * (nodeH + gapY),
-    };
-  });
-
-  const nodeById = new Map(nodes.map((n) => [n.id, n] as const));
-
-  const relaxYByLayer = (passes: number) => {
-    const minGap = nodeH + gapY;
-    for (let pass = 0; pass < passes; pass += 1) {
-      idsByLayer.forEach((list) => {
-        const desired = list.map((id) => {
-          const neighbors = [...(mainInp.get(id) ?? []), ...(mainOut.get(id) ?? [])].filter(
-            (nId) => !cycleNodeIds.has(nId),
-          );
-          const avgY = neighbors.length
-            ? neighbors.reduce((s, nId) => s + (nodeById.get(nId)?.position.y ?? 0), 0) /
-              neighbors.length
-            : (nodeById.get(id)?.position.y ?? pad);
-          return { id, desired: avgY };
-        });
-
-        desired.sort((a, b) => a.desired - b.desired);
-
-        let y = pad;
-        desired.forEach((d) => {
-          const n = nodeById.get(d.id);
-          if (!n) return;
-          y = Math.max(y, d.desired);
-          n.position.y = y;
-          y += minGap;
-        });
-      });
-    }
-  };
-
-  relaxYByLayer(2);
-
-  const cycleComponents = Array.from(cycleCompIds.values())
-    .map((cid) => comps[cid]!)
-    .filter((c) => c.length);
-
-  const outWithin = new Map<string, string[]>();
-  cycleNodeIds.forEach((id) => outWithin.set(id, []));
-  edges.forEach((e) => {
-    if (!cycleNodeIds.has(e.source) || !cycleNodeIds.has(e.target)) return;
-    (outWithin.get(e.source) ?? []).push(e.target);
-  });
-
-  const occupied: Array<{ x0: number; y0: number; x1: number; y1: number }> = [];
-
-  const intersects = (
-    a: { x0: number; y0: number; x1: number; y1: number },
-    b: { x0: number; y0: number; x1: number; y1: number },
-  ) => a.x0 < b.x1 && a.x1 > b.x0 && a.y0 < b.y1 && a.y1 > b.y0;
-
-  let fallbackY = pad;
-  const leftLaneX = pad - (nodeW + 140);
-  const cycleWithConsumerY = cycleComponents.map((comp) => {
-    const compSet = new Set(comp);
-    const consumerCenters: Array<{ x: number; y: number }> = [];
-    edges.forEach((e) => {
-      if (!compSet.has(e.source) || compSet.has(e.target)) return;
-      const t = nodeById.get(e.target);
-      if (!t) return;
-      if (cycleNodeIds.has(t.id)) return;
-      consumerCenters.push({
-        x: t.position.x + nodeW / 2,
-        y: t.position.y + nodeH / 2,
-      });
-    });
-    const avgY = consumerCenters.length
-      ? consumerCenters.reduce((s, p) => s + p.y, 0) / consumerCenters.length
-      : null;
-    return { comp, avgY };
-  });
-
-  cycleWithConsumerY
-    .sort((a, b) => {
-      if (a.avgY === null && b.avgY === null) return a.comp.length - b.comp.length;
-      if (a.avgY === null) return 1;
-      if (b.avgY === null) return -1;
-      return a.avgY - b.avgY;
+  const saved = lineNodePositionsForRenderer(lineRenderer);
+  const layoutSignature = `${lineRenderer}:${unit}:${nodes
+    .map((node) => {
+      const data = (node.data ?? {}) as {
+        title?: string;
+        subtitle?: string;
+        outputDetails?: Array<{
+          outputName?: string;
+          producedText?: string;
+          usedText?: string;
+          surplusText?: string;
+        }>;
+      };
+      const outputs = Array.isArray(data.outputDetails)
+        ? data.outputDetails
+            .map(
+              (detail) =>
+                `${detail.outputName ?? ''}:${detail.producedText ?? ''}:${detail.usedText ?? ''}:${detail.surplusText ?? ''}`,
+            )
+            .join('~')
+        : '';
+      return `${node.id}:${data.title ?? ''}:${data.subtitle ?? ''}:${outputs}`;
     })
-    .forEach(({ comp, avgY }) => {
-      const compSet = new Set(comp);
-      const start = comp
-        .slice()
-        .sort((a, b) => (titleById.get(a) ?? a).localeCompare(titleById.get(b) ?? b))[0]!;
-      const order: string[] = [];
-      const seen = new Set<string>();
-      let cur: string | null = start;
-      while (cur && !seen.has(cur) && order.length < comp.length) {
-        order.push(cur);
-        seen.add(cur);
-        const nexts: string[] = (outWithin.get(cur) ?? []).filter(
-          (t: string) => compSet.has(t) && !seen.has(t),
-        );
-        cur = nexts.length ? nexts[0]! : null;
-      }
-      comp.forEach((id) => {
-        if (!seen.has(id)) order.push(id);
-      });
+    .join('|')}::${edges.map((edge) => `${edge.source}>${edge.target}`).join('|')}`;
+  const cachedLayout = lineAutoLayoutCache.get(layoutSignature) ?? null;
 
-      const r = Math.max(160, order.length * 24);
+  const nodeCenterFromPosition = (nodeId: string, position: PlannerNodePosition) => {
+    if (isG6Renderer) return { x: position.x, y: position.y };
+    const size = layoutSizeByNodeId.get(nodeId) ?? { width: nodeW, height: nodeH };
+    return { x: position.x + size.width / 2, y: position.y + size.height / 2 };
+  };
 
-      const centerX = leftLaneX;
-      let centerY = avgY ?? fallbackY + r + nodeH / 2;
+  const nodePositionFromCenter = (
+    nodeId: string,
+    centerX: number,
+    centerY: number,
+  ): PlannerNodePosition => {
+    if (isG6Renderer) return { x: centerX, y: centerY };
+    const size = layoutSizeByNodeId.get(nodeId) ?? { width: nodeW, height: nodeH };
+    return { x: centerX - size.width / 2, y: centerY - size.height / 2 };
+  };
 
-      const ringBox = (cx: number, cy: number) => ({
-        x0: cx - r,
-        y0: cy - r,
-        x1: cx + r + nodeW,
-        y1: cy + r + nodeH,
-      });
-
-      let box = ringBox(centerX, centerY);
-      for (let tries = 0; tries < 80; tries += 1) {
-        const hit = occupied.find((b) => intersects(box, b));
-        if (!hit) break;
-        centerY = hit.y1 + 30 + r + nodeH / 2;
-        box = ringBox(centerX, centerY);
-      }
-      occupied.push(box);
-      order.forEach((id, i) => {
-        const n = nodeById.get(id);
-        if (!n) return;
-        const t = (i / order.length) * Math.PI * 2;
-        n.position = {
-          x: centerX + Math.cos(t) * r,
-          y: centerY + Math.sin(t) * r,
-        };
-      });
-
-      if (avgY === null) fallbackY = box.y1 + 90;
+  if (!cachedLayout) {
+    const ids = nodes.map((n) => n.id);
+    const out = new Map<string, string[]>();
+    const inp = new Map<string, string[]>();
+    ids.forEach((id) => {
+      out.set(id, []);
+      inp.set(id, []);
+    });
+    edges.forEach((e) => {
+      (out.get(e.source) ?? []).push(e.target);
+      (inp.get(e.target) ?? []).push(e.source);
     });
 
-  const saved = lineNodePositions.value;
+    const tarjanIndex = new Map<string, number>();
+    const low = new Map<string, number>();
+    const onStack = new Set<string>();
+    const st: string[] = [];
+    let idx = 0;
+    const comps: string[][] = [];
+
+    const strongconnect = (v: string) => {
+      tarjanIndex.set(v, idx);
+      low.set(v, idx);
+      idx += 1;
+      st.push(v);
+      onStack.add(v);
+
+      (out.get(v) ?? []).forEach((w) => {
+        if (!tarjanIndex.has(w)) {
+          strongconnect(w);
+          low.set(v, Math.min(low.get(v) ?? 0, low.get(w) ?? 0));
+        } else if (onStack.has(w)) {
+          low.set(v, Math.min(low.get(v) ?? 0, tarjanIndex.get(w) ?? 0));
+        }
+      });
+
+      if ((low.get(v) ?? 0) === (tarjanIndex.get(v) ?? 0)) {
+        const comp: string[] = [];
+        while (st.length) {
+          const w = st.pop()!;
+          onStack.delete(w);
+          comp.push(w);
+          if (w === v) break;
+        }
+        comps.push(comp);
+      }
+    };
+
+    ids.forEach((id) => {
+      if (!tarjanIndex.has(id)) strongconnect(id);
+    });
+
+    const compById = new Map<string, number>();
+    comps.forEach((c, i) => c.forEach((id) => compById.set(id, i)));
+
+    const compIds = comps.map((_comp, index) => index);
+    const compOut = new Map<number, number[]>();
+    const compInp = new Map<number, number[]>();
+    const compOutSeen = new Map<number, Set<number>>();
+    const compInpSeen = new Map<number, Set<number>>();
+    compIds.forEach((compId) => {
+      compOut.set(compId, []);
+      compInp.set(compId, []);
+      compOutSeen.set(compId, new Set());
+      compInpSeen.set(compId, new Set());
+    });
+
+    const compLabel = (compId: number) => {
+      return (
+        [...(comps[compId] ?? [])].sort((a, b) =>
+          (titleById.get(a) ?? a).localeCompare(titleById.get(b) ?? b),
+        )[0] ?? `comp:${compId}`
+      );
+    };
+
+    edges.forEach((e) => {
+      const sourceComp = compById.get(e.source);
+      const targetComp = compById.get(e.target);
+      if (sourceComp === undefined || targetComp === undefined || sourceComp === targetComp) return;
+      if (!compOutSeen.get(sourceComp)?.has(targetComp)) {
+        compOutSeen.get(sourceComp)?.add(targetComp);
+        (compOut.get(sourceComp) ?? []).push(targetComp);
+      }
+      if (!compInpSeen.get(targetComp)?.has(sourceComp)) {
+        compInpSeen.get(targetComp)?.add(sourceComp);
+        (compInp.get(targetComp) ?? []).push(sourceComp);
+      }
+    });
+
+    const compIndeg = new Map<number, number>();
+    compIds.forEach((compId) => compIndeg.set(compId, (compInp.get(compId) ?? []).length));
+    const compQueue = compIds
+      .filter((compId) => (compIndeg.get(compId) ?? 0) === 0)
+      .sort((a, b) => compLabel(a).localeCompare(compLabel(b)));
+
+    const compTopo: number[] = [];
+    while (compQueue.length) {
+      const compId = compQueue.shift()!;
+      compTopo.push(compId);
+      (compOut.get(compId) ?? []).forEach((nextCompId) => {
+        compIndeg.set(nextCompId, (compIndeg.get(nextCompId) ?? 0) - 1);
+        if ((compIndeg.get(nextCompId) ?? 0) === 0) {
+          compQueue.push(nextCompId);
+          compQueue.sort((a, b) => compLabel(a).localeCompare(compLabel(b)));
+        }
+      });
+    }
+    const topoCompSet = new Set(compTopo);
+    compIds.forEach((compId) => {
+      if (!topoCompSet.has(compId)) compTopo.push(compId);
+    });
+
+    const layerByComp = new Map<number, number>();
+    compTopo.forEach((compId) => layerByComp.set(compId, 0));
+    compTopo.forEach((compId) => {
+      const baseLayer = layerByComp.get(compId) ?? 0;
+      (compOut.get(compId) ?? []).forEach((nextCompId) => {
+        const prevLayer = layerByComp.get(nextCompId) ?? 0;
+        if (baseLayer + 1 > prevLayer) layerByComp.set(nextCompId, baseLayer + 1);
+      });
+    });
+
+    const maxLayer = Math.max(0, ...compIds.map((compId) => layerByComp.get(compId) ?? 0));
+    const compsByLayer = new Map<number, number[]>();
+    for (let layer = 0; layer <= maxLayer; layer += 1) compsByLayer.set(layer, []);
+    compIds.forEach((compId) => {
+      const layer = layerByComp.get(compId) ?? 0;
+      (compsByLayer.get(layer) ?? []).push(compId);
+    });
+
+    compsByLayer.forEach((compList) =>
+      compList.sort((a, b) => compLabel(a).localeCompare(compLabel(b))),
+    );
+
+    const compOrderIndex = new Map<number, number>();
+    const refreshCompOrderIndex = () => {
+      compsByLayer.forEach((compList) =>
+        compList.forEach((compId, index) => compOrderIndex.set(compId, index)),
+      );
+    };
+    refreshCompOrderIndex();
+
+    const baryComp = (neighborCompIds: number[]) => {
+      if (!neighborCompIds.length) return Number.POSITIVE_INFINITY;
+      let sum = 0;
+      let count = 0;
+      neighborCompIds.forEach((neighborCompId) => {
+        const order = compOrderIndex.get(neighborCompId);
+        if (order === undefined) return;
+        sum += order;
+        count += 1;
+      });
+      return count ? sum / count : Number.POSITIVE_INFINITY;
+    };
+
+    const stableSortComps = (compList: number[], scoreFn: (compId: number) => number) => {
+      const withScore = compList.map((compId, index) => ({
+        compId,
+        index,
+        score: scoreFn(compId),
+      }));
+      withScore.sort((a, b) => a.score - b.score || a.index - b.index);
+      return withScore.map((entry) => entry.compId);
+    };
+
+    for (let pass = 0; pass < 6; pass += 1) {
+      for (let layer = 1; layer <= maxLayer; layer += 1) {
+        const compList = compsByLayer.get(layer) ?? [];
+        compsByLayer.set(
+          layer,
+          stableSortComps(compList, (compId) => baryComp(compInp.get(compId) ?? [])),
+        );
+        refreshCompOrderIndex();
+      }
+      for (let layer = maxLayer - 1; layer >= 0; layer -= 1) {
+        const compList = compsByLayer.get(layer) ?? [];
+        compsByLayer.set(
+          layer,
+          stableSortComps(compList, (compId) => baryComp(compOut.get(compId) ?? [])),
+        );
+        refreshCompOrderIndex();
+      }
+    }
+
+    const compRadiusById = new Map<number, number>();
+    const compStackGapById = new Map<number, number>();
+    const compHalfHeightById = new Map<number, number>();
+    const compCenterById = new Map<number, { x: number; y: number }>();
+    const layerXGap = nodeW + (isG6Renderer ? 72 : 120);
+    compIds.forEach((compId) => {
+      const size = comps[compId]?.length ?? 0;
+      const stackGap = size > 1 ? nodeH + 28 : 0;
+      const compRadius = isG6Renderer && size > 1 ? Math.max(42, Math.sqrt(size) * 34) : 0;
+      compRadiusById.set(compId, compRadius);
+      compStackGapById.set(compId, stackGap);
+      compHalfHeightById.set(
+        compId,
+        isG6Renderer && size > 1
+          ? compRadius + nodeH / 2
+          : size > 1
+            ? ((size - 1) * stackGap) / 2 + nodeH / 2
+            : nodeH / 2,
+      );
+    });
+    compsByLayer.forEach((compList, layer) => {
+      let cursorY = pad;
+      compList.forEach((compId) => {
+        const halfHeight = compHalfHeightById.get(compId) ?? nodeH / 2;
+        const centerY = cursorY + halfHeight;
+        const centerX = pad + nodeW / 2 + layer * layerXGap;
+        compCenterById.set(compId, { x: centerX, y: centerY });
+        cursorY += halfHeight * 2 + gapY;
+      });
+    });
+
+    const nodeById = new Map(nodes.map((n) => [n.id, n] as const));
+    compIds.forEach((compId) => {
+      const center = compCenterById.get(compId);
+      if (!center) return;
+      const stackGap = compStackGapById.get(compId) ?? 0;
+      const orderedNodeIds = [...(comps[compId] ?? [])].sort((a, b) =>
+        (titleById.get(a) ?? a).localeCompare(titleById.get(b) ?? b),
+      );
+      if (orderedNodeIds.length <= 1) {
+        const node = nodeById.get(orderedNodeIds[0] ?? '');
+        if (node) {
+          node.position = nodePositionFromCenter(node.id, center.x, center.y);
+        }
+        return;
+      }
+      if (isG6Renderer) {
+        const compRadius = compRadiusById.get(compId) ?? 0;
+        const radiusX = Math.max(38, compRadius);
+        const radiusY = Math.max(26, Math.min(nodeH * 0.92, compRadius * 0.78));
+        orderedNodeIds.forEach((nodeId, index) => {
+          const node = nodeById.get(nodeId);
+          if (!node) return;
+          const angle = (index / orderedNodeIds.length) * Math.PI * 2;
+          node.position = nodePositionFromCenter(
+            node.id,
+            center.x + Math.cos(angle) * radiusX,
+            center.y + Math.sin(angle) * radiusY,
+          );
+        });
+        return;
+      }
+      orderedNodeIds.forEach((nodeId, index) => {
+        const node = nodeById.get(nodeId);
+        if (!node) return;
+        const offsetY = (index - (orderedNodeIds.length - 1) / 2) * stackGap;
+        node.position = nodePositionFromCenter(node.id, center.x, center.y + offsetY);
+      });
+    });
+
+    type SimNode = {
+      id: string;
+      x: number;
+      y: number;
+      vx?: number;
+      vy?: number;
+      targetX: number;
+      targetY: number;
+      compId: number;
+      radius: number;
+    };
+    type SimLink = {
+      source: string;
+      target: string;
+      sameComp: boolean;
+      layerGap: number;
+    };
+
+    const simNodes: SimNode[] = nodes.map((node) => {
+      const compId = compById.get(node.id) ?? 0;
+      const center = nodeCenterFromPosition(node.id, node.position);
+      const size = layoutSizeByNodeId.get(node.id) ?? { width: nodeW, height: nodeH };
+      return {
+        id: node.id,
+        x: center.x,
+        y: center.y,
+        targetX: center.x,
+        targetY: center.y,
+        compId,
+        radius: Math.max(size.width, size.height) / 2 + (isG6Renderer ? 8 : 0),
+      };
+    });
+    const simLinks: SimLink[] = edges.map((edge) => {
+      const sourceComp = compById.get(edge.source) ?? 0;
+      const targetComp = compById.get(edge.target) ?? 0;
+      return {
+        source: edge.source,
+        target: edge.target,
+        sameComp: sourceComp === targetComp,
+        layerGap: Math.max(
+          1,
+          Math.abs((layerByComp.get(targetComp) ?? 0) - (layerByComp.get(sourceComp) ?? 0)),
+        ),
+      };
+    });
+
+    const minCenterX = pad + nodeW / 2;
+    const minCenterY = pad + nodeH / 2;
+    const simulation = forceSimulation(simNodes)
+      .force('charge', forceManyBody<SimNode>().strength(-620))
+      .force(
+        'link',
+        forceLink<SimNode, SimLink>(simLinks)
+          .id((node) => node.id)
+          .distance((link) =>
+            link.sameComp
+              ? nodeH + 40
+              : Math.max(
+                  isG6Renderer ? 150 : 180,
+                  link.layerGap * (nodeW + (isG6Renderer ? 36 : 64)) * (isG6Renderer ? 0.58 : 0.72),
+                ),
+          )
+          .strength((link) => (link.sameComp ? (isG6Renderer ? 0.16 : 0.24) : 0.1)),
+      )
+      .force(
+        'x',
+        forceX<SimNode>((node) => node.targetX).strength((node) => {
+          const inCycle = (comps[node.compId]?.length ?? 0) > 1;
+          if (!inCycle) return 0.34;
+          return isG6Renderer ? 0.24 : 0.42;
+        }),
+      )
+      .force(
+        'y',
+        forceY<SimNode>((node) => node.targetY).strength((node) => {
+          const inCycle = (comps[node.compId]?.length ?? 0) > 1;
+          if (!inCycle) return 0.26;
+          return isG6Renderer ? 0.16 : 0.22;
+        }),
+      )
+      .force(
+        'collide',
+        forceCollide<SimNode>((node) => node.radius)
+          .iterations(2)
+          .strength(1),
+      )
+      .stop();
+
+    const tickCount = Math.max(20, Math.min(48, Math.ceil(nodes.length)));
+    for (let tick = 0; tick < tickCount; tick += 1) {
+      simulation.tick();
+      simNodes.forEach((node) => {
+        const compCenter = compCenterById.get(node.compId);
+        const compRadius = compRadiusById.get(node.compId) ?? 0;
+        const compHalfHeight = compHalfHeightById.get(node.compId) ?? nodeH / 2;
+        const xSlack = Math.max(nodeW * 0.22, compRadius + nodeW * 0.16);
+        const ySlack = Math.max(nodeH * 1.1, compHalfHeight + nodeH * 0.45);
+        if (compCenter) {
+          node.x = Math.max(compCenter.x - xSlack, Math.min(compCenter.x + xSlack, node.x));
+          node.y = Math.max(compCenter.y - ySlack, Math.min(compCenter.y + ySlack, node.y));
+        }
+        node.x = Math.max(minCenterX, node.x);
+        node.y = Math.max(minCenterY, node.y);
+      });
+    }
+
+    simNodes.forEach((simNode) => {
+      const node = nodeById.get(simNode.id);
+      if (!node) return;
+      node.position = nodePositionFromCenter(simNode.id, simNode.x, simNode.y);
+    });
+
+    const resolveNodeOverlaps = (passes: number) => {
+      const xThreshold = nodeW + 40;
+      const yThreshold = nodeH + 18;
+      for (let pass = 0; pass < passes; pass += 1) {
+        const orderedNodes = [...nodes].sort(
+          (a, b) => a.position.x - b.position.x || a.position.y - b.position.y,
+        );
+        for (let i = 0; i < orderedNodes.length; i += 1) {
+          const a = orderedNodes[i]!;
+          for (let j = i + 1; j < orderedNodes.length; j += 1) {
+            const b = orderedNodes[j]!;
+            if (b.position.x - a.position.x > xThreshold) break;
+            const aCenter = nodeCenterFromPosition(a.id, a.position);
+            const bCenter = nodeCenterFromPosition(b.id, b.position);
+            const ax = aCenter.x;
+            const ay = aCenter.y;
+            const bx = bCenter.x;
+            const by = bCenter.y;
+            const dx = bx - ax;
+            const dy = by - ay;
+            const overlapX = nodeW + 24 - Math.abs(dx);
+            const overlapY = yThreshold - Math.abs(dy);
+            if (overlapX <= 0 || overlapY <= 0) continue;
+            const sameComp = compById.get(a.id) === compById.get(b.id);
+            const preferVertical = sameComp || Math.abs(dx) < nodeW * 0.55;
+            if (preferVertical) {
+              const push = overlapY / 2 + 2;
+              const dir = dy >= 0 ? 1 : -1;
+              a.position = nodePositionFromCenter(a.id, ax, ay - push * dir);
+              b.position = nodePositionFromCenter(b.id, bx, by + push * dir);
+            } else {
+              const push = overlapX / 2 + 2;
+              const dir = dx >= 0 ? 1 : -1;
+              a.position = nodePositionFromCenter(a.id, ax - push * dir, ay);
+              b.position = nodePositionFromCenter(b.id, bx + push * dir, by);
+            }
+            a.position.x = Math.max(pad, a.position.x);
+            a.position.y = Math.max(pad, a.position.y);
+            b.position.x = Math.max(pad, b.position.x);
+            b.position.y = Math.max(pad, b.position.y);
+          }
+        }
+      }
+    };
+
+    resolveNodeOverlaps(3);
+
+    const cachedPositions = Object.fromEntries(
+      nodes.map((node) => [node.id, { x: node.position.x, y: node.position.y }]),
+    );
+    lineAutoLayoutCache.set(layoutSignature, cachedPositions);
+    if (lineAutoLayoutCache.size > 24) {
+      const oldestKey = lineAutoLayoutCache.keys().next().value;
+      if (typeof oldestKey === 'string') lineAutoLayoutCache.delete(oldestKey);
+    }
+  }
+
+  const baseLayout = lineAutoLayoutCache.get(layoutSignature) ?? cachedLayout;
+  if (baseLayout) {
+    nodes.forEach((n) => {
+      const pos = baseLayout[n.id];
+      if (pos) n.position = { ...pos };
+    });
+  }
   if (saved.size) {
     nodes.forEach((n) => {
       const pos = saved.get(n.id);
@@ -4485,6 +4701,356 @@ const quantModel = computed<ReturnType<typeof buildQuantFlowModel>>(() => {
   });
 
   return { nodes: Array.from(mergedNodeById.values()), edges: Array.from(mergedEdgeById.values()) };
+});
+
+const quantNodePositionsRecord = computed<Record<string, PlannerNodePosition>>(() => {
+  if (settingsStore.quantFlowRenderer !== 'nodes') {
+    return nodePositionMapToRecord(quantNodePositions.value);
+  }
+
+  const model = quantModel.value;
+  if (!model.nodes.length) return {};
+
+  const nodeW = 232;
+  const nodeH = 132;
+  const pad = 24;
+  const gapY = 54;
+  const nodeIdSet = new Set(model.nodes.map((node) => node.nodeId));
+  const signature = `${quantDisplayUnit.value}:${quantWidthByRate.value ? 1 : 0}:${model.nodes.map((node) => `${node.nodeId}:${node.kind}:${finiteOr(node.amount, 0)}:${node.kind === 'item' ? itemKeyHash(node.itemKey) : `${node.id}:${node.unit ?? ''}`}`).join('|')}::${model.edges.map((edge) => `${edge.source}>${edge.target}:${edge.kind}:${finiteOr(edge.amount, 0)}`).join('|')}`;
+  const cachedLayout = quantAutoLayoutCache.get(signature) ?? null;
+
+  if (!cachedLayout) {
+    const ids = model.nodes.map((node) => node.nodeId);
+    const out = new Map<string, string[]>();
+    const inp = new Map<string, string[]>();
+    ids.forEach((id) => {
+      out.set(id, []);
+      inp.set(id, []);
+    });
+    model.edges.forEach((edge) => {
+      (out.get(edge.source) ?? []).push(edge.target);
+      (inp.get(edge.target) ?? []).push(edge.source);
+    });
+
+    const tarjanIndex = new Map<string, number>();
+    const low = new Map<string, number>();
+    const onStack = new Set<string>();
+    const stack: string[] = [];
+    let index = 0;
+    const comps: string[][] = [];
+
+    const strongconnect = (nodeId: string) => {
+      tarjanIndex.set(nodeId, index);
+      low.set(nodeId, index);
+      index += 1;
+      stack.push(nodeId);
+      onStack.add(nodeId);
+
+      (out.get(nodeId) ?? []).forEach((nextId) => {
+        if (!tarjanIndex.has(nextId)) {
+          strongconnect(nextId);
+          low.set(nodeId, Math.min(low.get(nodeId) ?? 0, low.get(nextId) ?? 0));
+        } else if (onStack.has(nextId)) {
+          low.set(nodeId, Math.min(low.get(nodeId) ?? 0, tarjanIndex.get(nextId) ?? 0));
+        }
+      });
+
+      if ((low.get(nodeId) ?? 0) === (tarjanIndex.get(nodeId) ?? 0)) {
+        const comp: string[] = [];
+        while (stack.length) {
+          const value = stack.pop()!;
+          onStack.delete(value);
+          comp.push(value);
+          if (value === nodeId) break;
+        }
+        comps.push(comp);
+      }
+    };
+
+    ids.forEach((id) => {
+      if (!tarjanIndex.has(id)) strongconnect(id);
+    });
+
+    const nodeLabelById = new Map(
+      model.nodes.map(
+        (node) => [node.nodeId, node.kind === 'item' ? itemName(node.itemKey) : node.id] as const,
+      ),
+    );
+    const compById = new Map<string, number>();
+    comps.forEach((comp, compId) => comp.forEach((id) => compById.set(id, compId)));
+
+    const compIds = comps.map((_comp, compId) => compId);
+    const compOut = new Map<number, number[]>();
+    const compInp = new Map<number, number[]>();
+    const compOutSeen = new Map<number, Set<number>>();
+    const compInpSeen = new Map<number, Set<number>>();
+    compIds.forEach((compId) => {
+      compOut.set(compId, []);
+      compInp.set(compId, []);
+      compOutSeen.set(compId, new Set());
+      compInpSeen.set(compId, new Set());
+    });
+
+    model.edges.forEach((edge) => {
+      const sourceComp = compById.get(edge.source);
+      const targetComp = compById.get(edge.target);
+      if (sourceComp === undefined || targetComp === undefined || sourceComp === targetComp) return;
+      if (!compOutSeen.get(sourceComp)?.has(targetComp)) {
+        compOutSeen.get(sourceComp)?.add(targetComp);
+        (compOut.get(sourceComp) ?? []).push(targetComp);
+      }
+      if (!compInpSeen.get(targetComp)?.has(sourceComp)) {
+        compInpSeen.get(targetComp)?.add(sourceComp);
+        (compInp.get(targetComp) ?? []).push(sourceComp);
+      }
+    });
+
+    const compLabel = (compId: number) => {
+      return (
+        [...(comps[compId] ?? [])].sort((left, right) =>
+          (nodeLabelById.get(left) ?? left).localeCompare(nodeLabelById.get(right) ?? right),
+        )[0] ?? `comp:${compId}`
+      );
+    };
+
+    const compIndeg = new Map<number, number>();
+    compIds.forEach((compId) => compIndeg.set(compId, (compInp.get(compId) ?? []).length));
+    const compQueue = compIds
+      .filter((compId) => (compIndeg.get(compId) ?? 0) === 0)
+      .sort((left, right) => compLabel(left).localeCompare(compLabel(right)));
+    const compTopo: number[] = [];
+    while (compQueue.length) {
+      const compId = compQueue.shift()!;
+      compTopo.push(compId);
+      (compOut.get(compId) ?? []).forEach((nextCompId) => {
+        compIndeg.set(nextCompId, (compIndeg.get(nextCompId) ?? 0) - 1);
+        if ((compIndeg.get(nextCompId) ?? 0) === 0) {
+          compQueue.push(nextCompId);
+          compQueue.sort((left, right) => compLabel(left).localeCompare(compLabel(right)));
+        }
+      });
+    }
+    const topoSet = new Set(compTopo);
+    compIds.forEach((compId) => {
+      if (!topoSet.has(compId)) compTopo.push(compId);
+    });
+
+    const layerByComp = new Map<number, number>();
+    compTopo.forEach((compId) => layerByComp.set(compId, 0));
+    compTopo.forEach((compId) => {
+      const layer = layerByComp.get(compId) ?? 0;
+      (compOut.get(compId) ?? []).forEach((nextCompId) => {
+        layerByComp.set(nextCompId, Math.max(layerByComp.get(nextCompId) ?? 0, layer + 1));
+      });
+    });
+
+    const maxLayer = Math.max(0, ...compIds.map((compId) => layerByComp.get(compId) ?? 0));
+    const compsByLayer = new Map<number, number[]>();
+    for (let layer = 0; layer <= maxLayer; layer += 1) compsByLayer.set(layer, []);
+    compIds.forEach((compId) => {
+      (compsByLayer.get(layerByComp.get(compId) ?? 0) ?? []).push(compId);
+    });
+    compsByLayer.forEach((compList) =>
+      compList.sort((left, right) => compLabel(left).localeCompare(compLabel(right))),
+    );
+
+    const compOrderIndex = new Map<number, number>();
+    const refreshCompOrderIndex = () => {
+      compsByLayer.forEach((compList) =>
+        compList.forEach((compId, order) => compOrderIndex.set(compId, order)),
+      );
+    };
+    const baryComp = (neighborCompIds: number[]) => {
+      if (!neighborCompIds.length) return Number.POSITIVE_INFINITY;
+      let sum = 0;
+      let count = 0;
+      neighborCompIds.forEach((neighborCompId) => {
+        const order = compOrderIndex.get(neighborCompId);
+        if (order === undefined) return;
+        sum += order;
+        count += 1;
+      });
+      return count ? sum / count : Number.POSITIVE_INFINITY;
+    };
+    const stableSortComps = (compList: number[], scoreFn: (compId: number) => number) => {
+      const withScore = compList.map((compId, order) => ({
+        compId,
+        order,
+        score: scoreFn(compId),
+      }));
+      withScore.sort((left, right) => left.score - right.score || left.order - right.order);
+      return withScore.map((entry) => entry.compId);
+    };
+    refreshCompOrderIndex();
+    for (let pass = 0; pass < 5; pass += 1) {
+      for (let layer = 1; layer <= maxLayer; layer += 1) {
+        const compList = compsByLayer.get(layer) ?? [];
+        compsByLayer.set(
+          layer,
+          stableSortComps(compList, (compId) => baryComp(compInp.get(compId) ?? [])),
+        );
+        refreshCompOrderIndex();
+      }
+      for (let layer = maxLayer - 1; layer >= 0; layer -= 1) {
+        const compList = compsByLayer.get(layer) ?? [];
+        compsByLayer.set(
+          layer,
+          stableSortComps(compList, (compId) => baryComp(compOut.get(compId) ?? [])),
+        );
+        refreshCompOrderIndex();
+      }
+    }
+
+    const compHalfHeightById = new Map<number, number>();
+    const compCenterById = new Map<number, { x: number; y: number }>();
+    const compStackGapById = new Map<number, number>();
+    const layerXGap = nodeW + 76;
+    compIds.forEach((compId) => {
+      const size = comps[compId]?.length ?? 0;
+      const stackGap = size > 1 ? nodeH + 22 : 0;
+      compStackGapById.set(compId, stackGap);
+      compHalfHeightById.set(
+        compId,
+        size > 1 ? ((size - 1) * stackGap) / 2 + nodeH / 2 : nodeH / 2,
+      );
+    });
+    compsByLayer.forEach((compList, layer) => {
+      let cursorY = pad;
+      compList.forEach((compId) => {
+        const halfHeight = compHalfHeightById.get(compId) ?? nodeH / 2;
+        compCenterById.set(compId, {
+          x: pad + nodeW / 2 + layer * layerXGap,
+          y: cursorY + halfHeight,
+        });
+        cursorY += halfHeight * 2 + gapY;
+      });
+    });
+
+    type QuantSimNode = {
+      id: string;
+      x: number;
+      y: number;
+      vx?: number;
+      vy?: number;
+      targetX: number;
+      targetY: number;
+      compId: number;
+      radius: number;
+    };
+    type QuantSimLink = {
+      source: string;
+      target: string;
+      sameComp: boolean;
+      layerGap: number;
+      flowWeight: number;
+    };
+
+    const initialPositionById = new Map<string, PlannerNodePosition>();
+    compIds.forEach((compId) => {
+      const center = compCenterById.get(compId);
+      if (!center) return;
+      const stackGap = compStackGapById.get(compId) ?? 0;
+      const orderedNodeIds = [...(comps[compId] ?? [])].sort((left, right) =>
+        (nodeLabelById.get(left) ?? left).localeCompare(nodeLabelById.get(right) ?? right),
+      );
+      orderedNodeIds.forEach((nodeId, order) => {
+        const offsetY = (order - (orderedNodeIds.length - 1) / 2) * stackGap;
+        initialPositionById.set(nodeId, { x: center.x, y: center.y + offsetY });
+      });
+    });
+
+    const simNodes: QuantSimNode[] = model.nodes.map((node) => {
+      const position = initialPositionById.get(node.nodeId) ?? {
+        x: pad + nodeW / 2,
+        y: pad + nodeH / 2,
+      };
+      return {
+        id: node.nodeId,
+        x: position.x,
+        y: position.y,
+        targetX: position.x,
+        targetY: position.y,
+        compId: compById.get(node.nodeId) ?? 0,
+        radius: node.kind === 'fluid' ? 96 : 112,
+      };
+    });
+    const simLinks: QuantSimLink[] = model.edges.map((edge) => {
+      const sourceComp = compById.get(edge.source) ?? 0;
+      const targetComp = compById.get(edge.target) ?? 0;
+      return {
+        source: edge.source,
+        target: edge.target,
+        sameComp: sourceComp === targetComp,
+        layerGap: Math.max(
+          1,
+          Math.abs((layerByComp.get(targetComp) ?? 0) - (layerByComp.get(sourceComp) ?? 0)),
+        ),
+        flowWeight: Math.log1p(Math.max(0, Math.abs(finiteOr(edge.amount, 0)))),
+      };
+    });
+
+    const minCenterX = pad + nodeW / 2;
+    const minCenterY = pad + nodeH / 2;
+    const simulation = forceSimulation(simNodes)
+      .force('charge', forceManyBody<QuantSimNode>().strength(-520))
+      .force(
+        'link',
+        forceLink<QuantSimNode, QuantSimLink>(simLinks)
+          .id((node) => node.id)
+          .distance((link) => {
+            if (link.sameComp) return nodeH + 30;
+            const compactness = 0.58 - Math.min(0.16, link.flowWeight * 0.03);
+            return Math.max(138, link.layerGap * (nodeW + 28) * compactness);
+          })
+          .strength((link) =>
+            Math.min(0.34, link.sameComp ? 0.22 : 0.12 + link.flowWeight * 0.035),
+          ),
+      )
+      .force('x', forceX<QuantSimNode>((node) => node.targetX).strength(0.34))
+      .force('y', forceY<QuantSimNode>((node) => node.targetY).strength(0.24))
+      .force(
+        'collide',
+        forceCollide<QuantSimNode>((node) => node.radius)
+          .iterations(2)
+          .strength(1),
+      )
+      .stop();
+
+    const tickCount = Math.max(18, Math.min(42, Math.ceil(model.nodes.length * 0.9)));
+    for (let tick = 0; tick < tickCount; tick += 1) {
+      simulation.tick();
+      simNodes.forEach((node) => {
+        const compCenter = compCenterById.get(node.compId);
+        const compHalfHeight = compHalfHeightById.get(node.compId) ?? nodeH / 2;
+        const xSlack = nodeW * 0.34;
+        const ySlack = Math.max(nodeH * 0.95, compHalfHeight + 18);
+        if (compCenter) {
+          node.x = Math.max(compCenter.x - xSlack, Math.min(compCenter.x + xSlack, node.x));
+          node.y = Math.max(compCenter.y - ySlack, Math.min(compCenter.y + ySlack, node.y));
+        }
+        node.x = Math.max(minCenterX, node.x);
+        node.y = Math.max(minCenterY, node.y);
+      });
+    }
+
+    quantAutoLayoutCache.set(
+      signature,
+      Object.fromEntries(simNodes.map((node) => [node.id, { x: node.x, y: node.y }])),
+    );
+    if (quantAutoLayoutCache.size > 24) {
+      const oldestKey = quantAutoLayoutCache.keys().next().value;
+      if (typeof oldestKey === 'string') quantAutoLayoutCache.delete(oldestKey);
+    }
+  }
+
+  const mergedPositions: Record<string, PlannerNodePosition> = {
+    ...(quantAutoLayoutCache.get(signature) ?? cachedLayout ?? {}),
+  };
+  quantNodePositions.value.forEach((pos, id) => {
+    if (!nodeIdSet.has(id)) return;
+    mergedPositions[id] = { x: pos.x, y: pos.y };
+  });
+  return mergedPositions;
 });
 
 const calcTotals = computed(() => mergedTree.value?.totals ?? null);

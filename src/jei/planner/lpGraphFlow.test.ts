@@ -90,9 +90,9 @@ describe('buildLpGraphFlowModel', () => {
     expect(
       model.edges.find(
         (edge) =>
-          edge.kind === 'item'
-          && edge.source === `lgn:item:poly:${itemKeyHash({ id: 'item_by' })}`
-          && edge.target === `lgn:raw:${itemKeyHash({ id: 'item_raw' })}`,
+          edge.kind === 'item' &&
+          edge.source === `lgn:item:poly:${itemKeyHash({ id: 'item_by' })}` &&
+          edge.target === `lgn:raw:${itemKeyHash({ id: 'item_raw' })}`,
       ),
     ).toBeDefined();
   });
