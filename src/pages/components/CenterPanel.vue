@@ -113,7 +113,23 @@
                 <q-tab name="uses" :label="usesTabLabel" />
                 <q-tab name="wiki" :label="wikiTabLabel" />
                 <q-tab name="icon" :label="iconTabLabel" />
-                <q-tab name="planner" :label="plannerTabLabel" />
+                <q-tab name="planner">
+                  <div class="jei-panel__planner-tab">
+                    <span class="jei-panel__planner-tab-label">{{ plannerTabLabel }}</span>
+                    <q-btn
+                      dense
+                      flat
+                      round
+                      size="xs"
+                      icon="settings"
+                      class="jei-panel__planner-tab-settings"
+                      @mousedown.stop.prevent
+                      @click.stop.prevent="plannerSettingsOpen = true"
+                    >
+                      <q-tooltip>{{ t('settings') }}</q-tooltip>
+                    </q-btn>
+                  </div>
+                </q-tab>
                 <q-tab
                   v-for="tab in pluginTabs"
                   :key="tab.tabKey"
@@ -143,6 +159,7 @@
                 :recipe-types-by-key="recipeTypesByKey ?? new Map()"
                 :planner-initial-state="plannerInitialState ?? null"
                 :planner-tab="plannerTab ?? 'tree'"
+                :embedded-planner-mode="embeddedPlannerMode"
                 :plugin-context="pluginContext"
                 :plugin-tabs="pluginTabs"
                 :resolve-plugin-api="resolvePluginApi"
@@ -230,6 +247,29 @@
       <div class="text-caption">{{ t('middleAreaDesc') }}</div>
     </template>
   </q-card>
+
+  <q-dialog v-model="plannerSettingsOpen">
+    <q-card style="min-width: 320px">
+      <q-card-section class="row items-center q-gutter-sm">
+        <div class="text-subtitle2">{{ t('settings') }}</div>
+        <q-space />
+        <q-btn flat round icon="close" v-close-popup />
+      </q-card-section>
+      <q-separator />
+      <q-card-section class="column q-gutter-md">
+        <div class="text-caption text-grey-7">{{ t('plannerMode') }}</div>
+        <q-btn-toggle
+          dense
+          unelevated
+          no-caps
+          toggle-color="primary"
+          :model-value="embeddedPlannerMode"
+          :options="plannerModeOptions"
+          @update:model-value="embeddedPlannerMode = $event as EmbeddedPlannerMode"
+        />
+      </q-card-section>
+    </q-card>
+  </q-dialog>
 </template>
 
 <script setup lang="ts">
@@ -254,6 +294,14 @@ import AdvancedPlanner from './AdvancedPlanner.vue';
 
 const { t } = useI18n();
 const keyBindingsStore = useKeyBindingsStore();
+type EmbeddedPlannerMode = 'advanced' | 'classic';
+const EMBEDDED_PLANNER_MODE_STORAGE_KEY = 'jei.embeddedPlannerMode';
+
+function loadEmbeddedPlannerMode(): EmbeddedPlannerMode {
+  if (typeof window === 'undefined') return 'advanced';
+  const saved = window.localStorage.getItem(EMBEDDED_PLANNER_MODE_STORAGE_KEY);
+  return saved === 'classic' ? 'classic' : 'advanced';
+}
 
 interface RecipeGroup {
   typeKey: string;
@@ -330,8 +378,19 @@ defineEmits<{
 }>();
 
 const advancedPlannerRef = ref<InstanceType<typeof AdvancedPlanner>>();
+const embeddedPlannerMode = ref<EmbeddedPlannerMode>(loadEmbeddedPlannerMode());
+const plannerSettingsOpen = ref(false);
 const mountedCenterPluginTabs = ref<Record<string, boolean>>({});
 const loadingCenterPluginTabs = ref<Record<string, boolean>>({});
+const plannerModeOptions = computed(() => [
+  { label: t('advancedPlanner'), value: 'advanced' as const },
+  { label: t('classicPlanner'), value: 'classic' as const },
+]);
+
+watch(embeddedPlannerMode, (value) => {
+  if (typeof window === 'undefined') return;
+  window.localStorage.setItem(EMBEDDED_PLANNER_MODE_STORAGE_KEY, value);
+});
 
 watch(
   () => [props.centerTab, props.centerPluginTabs] as const,
@@ -478,6 +537,21 @@ defineExpose({
   padding-bottom: 8px;
   min-width: 0;
   max-width: 100%;
+}
+
+.jei-panel__planner-tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  min-width: 0;
+}
+
+.jei-panel__planner-tab-label {
+  min-width: 0;
+}
+
+.jei-panel__planner-tab-settings {
+  margin-left: -2px;
 }
 
 .jei-panel__body {

@@ -39,6 +39,9 @@
                       variant="slot"
                       :show-name="false"
                       :show-subtitle="false"
+                      @item-click="emit('item-click', $event)"
+                      @item-mouseenter="emit('item-mouseenter', $event)"
+                      @item-mouseleave="emit('item-mouseleave')"
                     />
                     <div
                       v-if="scope.opt.inputs.length > 8"
@@ -63,6 +66,9 @@
                       :recipe="scope.opt.recipe"
                       :recipe-type="scope.opt.recipeType"
                       :item-defs-by-key-hash="itemDefsByKeyHash"
+                      @item-click="emit('item-click', $event)"
+                      @item-mouseenter="emit('item-mouseenter', $event)"
+                      @item-mouseleave="emit('item-mouseleave')"
                     />
                   </q-card>
                   <div v-else class="text-caption">{{ t('noRecipeDetails') }}</div>
@@ -128,6 +134,9 @@ defineProps<{
 const emit = defineEmits<{
   'set-recipe-choice': [payload: { itemKeyHash: string; recipeId: string }];
   'set-tag-choice': [payload: { tagId: string; itemId: string }];
+  'item-click': [itemKey: ItemKey];
+  'item-mouseenter': [keyHash: string];
+  'item-mouseleave': [];
 }>();
 
 const { t } = useI18n();

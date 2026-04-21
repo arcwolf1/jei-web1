@@ -191,6 +191,8 @@ export default {
   machineName: 'マシン名',
 
   // Planner
+  plannerMode: 'プランナーモード',
+  classicPlanner: '従来プランナー',
   plannerTabTree: 'ツリー (T)',
   plannerTabGraph: 'グラフ (G)',
   plannerTabLine: 'ライン (L)',

@@ -10,6 +10,9 @@
             <stack-view
               :content="{ kind: 'item', id: itemId, amount }"
               :item-defs-by-key-hash="itemDefsByKeyHash"
+              @item-click="emit('item-click', $event)"
+              @item-mouseenter="emit('item-mouseenter', $event)"
+              @item-mouseleave="emit('item-mouseleave')"
             />
           </q-item-section>
           <q-item-section>
@@ -32,6 +35,7 @@
             <stack-view
               :content="{ kind: 'fluid', id: fluidId, amount }"
               :item-defs-by-key-hash="itemDefsByKeyHash"
+              @item-mouseleave="emit('item-mouseleave')"
             />
           </q-item-section>
           <q-item-section>
@@ -54,6 +58,9 @@
             <stack-view
               :content="{ kind: 'item', id: itemId, amount }"
               :item-defs-by-key-hash="itemDefsByKeyHash"
+              @item-click="emit('item-click', $event)"
+              @item-mouseenter="emit('item-mouseenter', $event)"
+              @item-mouseleave="emit('item-mouseleave')"
             />
           </q-item-section>
           <q-item-section>
@@ -76,6 +83,9 @@
             <stack-view
               :content="{ kind: 'item', id: seed.itemKey.id, amount: seed.seedAmount }"
               :item-defs-by-key-hash="itemDefsByKeyHash"
+              @item-click="emit('item-click', $event)"
+              @item-mouseenter="emit('item-mouseenter', $event)"
+              @item-mouseleave="emit('item-mouseleave')"
             />
           </q-item-section>
           <q-item-section>
@@ -115,6 +125,11 @@ const props = defineProps<{
   itemName: (itemKey: ItemKey) => string;
   formatSummaryAmount: (amount: number) => string;
   formatAmount: (amount: number) => string | number;
+}>();
+const emit = defineEmits<{
+  'item-click': [itemKey: ItemKey];
+  'item-mouseenter': [keyHash: string];
+  'item-mouseleave': [];
 }>();
 
 const { t } = useI18n();

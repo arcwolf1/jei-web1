@@ -1,7 +1,7 @@
 <template>
   <q-card flat bordered class="q-pa-md">
     <div class="row items-center q-gutter-sm q-mb-md">
-      <div class="text-subtitle2">{{ t('targetProducts') }}</div>
+      <div class="text-subtitle2">{{ embedded ? t('lineSelection') : t('targetProducts') }}</div>
       <q-toggle
         :model-value="useProductRecovery"
         dense
@@ -10,6 +10,15 @@
       />
       <q-space />
       <q-btn
+        v-if="allowManualAddTarget"
+        dense
+        outline
+        icon="add"
+        :label="t('addProduct')"
+        @click="emit('open-add-target-picker')"
+      />
+      <q-btn
+        v-if="!embedded"
         dense
         outline
         icon="delete_sweep"
@@ -32,6 +41,13 @@
               ...(target.itemKey.nbt !== undefined ? { nbt: target.itemKey.nbt } : {}),
             }"
             :item-defs-by-key-hash="itemDefsByKeyHash"
+            variant="slot"
+            :show-name="false"
+            :show-subtitle="false"
+            :show-amount="false"
+            @item-click="emit('item-click', $event)"
+            @item-mouseenter="emit('item-mouseenter', $event)"
+            @item-mouseleave="emit('item-mouseleave')"
           />
         </q-item-section>
         <q-item-section>
@@ -39,7 +55,7 @@
           <q-item-label caption>
             <div class="row items-center q-gutter-sm q-mt-xs">
               <q-btn-toggle
-                v-if="lpMode"
+                v-if="lpMode && !embedded"
                 dense
                 unelevated
                 toggle-color="deep-purple"
@@ -81,6 +97,7 @@
         </q-item-section>
         <q-item-section side>
           <q-btn
+            v-if="!embedded"
             flat
             round
             dense
@@ -183,6 +200,7 @@ type Target = {
 defineProps<{
   targets: Target[];
   itemDefsByKeyHash: Record<string, ItemDef>;
+  allowManualAddTarget?: boolean;
   useProductRecovery: boolean;
   lpMode: boolean;
   integerMachines: boolean;
@@ -191,6 +209,7 @@ defineProps<{
   lpSolving: boolean;
   targetUnitOptions: Array<{ label: string; value: string }>;
   objectiveTypeOptions: Array<{ label: string; value: ObjectiveType }>;
+  embedded?: boolean;
 }>();
 
 const emit = defineEmits<{
@@ -203,9 +222,13 @@ const emit = defineEmits<{
   'update-target-unit': [payload: { index: number; unit: PlannerTargetUnit }];
   'update-target-type': [payload: { index: number; type: ObjectiveType }];
   'remove-target': [index: number];
+  'open-add-target-picker': [];
   'clear-targets': [];
   'start-planning': [];
   'auto-optimize': [];
+  'item-click': [itemKey: ItemKey];
+  'item-mouseenter': [keyHash: string];
+  'item-mouseleave': [];
 }>();
 
 const { t } = useI18n();

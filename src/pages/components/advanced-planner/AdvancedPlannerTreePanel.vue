@@ -80,6 +80,9 @@
                   variant="slot"
                   :show-name="false"
                   :show-subtitle="false"
+                  @item-click="emit('item-click', $event)"
+                  @item-mouseenter="emit('item-mouseenter', $event)"
+                  @item-mouseleave="emit('item-mouseleave')"
                 />
                 <stack-view
                   v-else
@@ -92,6 +95,7 @@
                   variant="slot"
                   :show-name="false"
                   :show-subtitle="false"
+                  @item-mouseleave="emit('item-mouseleave')"
                 />
               </div>
               <div class="planner__tree-name">
@@ -159,6 +163,9 @@
                   variant="slot"
                   :show-name="false"
                   :show-subtitle="false"
+                  @item-click="emit('item-click', $event)"
+                  @item-mouseenter="emit('item-mouseenter', $event)"
+                  @item-mouseleave="emit('item-mouseleave')"
                 />
                 <div class="planner__machines-text monospace">
                   {{ nodeMachinesText(row.node) }}
@@ -193,6 +200,9 @@
                 amount: nodeDisplayRate(row.node),
               }"
               :item-defs-by-key-hash="itemDefsByKeyHash"
+              @item-click="emit('item-click', $event)"
+              @item-mouseenter="emit('item-mouseenter', $event)"
+              @item-mouseleave="emit('item-mouseleave')"
             />
             <stack-view
               v-else
@@ -207,6 +217,7 @@
                   : { kind: 'fluid', id: row.node.id, amount: nodeDisplayRate(row.node) }
               "
               :item-defs-by-key-hash="itemDefsByKeyHash"
+              @item-mouseleave="emit('item-mouseleave')"
             />
             <q-badge
               v-if="row.node.kind === 'item' && row.node.recovery"
@@ -276,6 +287,9 @@ const emit = defineEmits<{
   'update:tree-display-unit': [value: PlannerTargetUnit];
   'update:tree-display-mode': [value: 'list' | 'compact'];
   'toggle-collapsed': [nodeId: string];
+  'item-click': [itemKey: ItemKey];
+  'item-mouseenter': [keyHash: string];
+  'item-mouseleave': [];
 }>();
 
 const { t } = useI18n();

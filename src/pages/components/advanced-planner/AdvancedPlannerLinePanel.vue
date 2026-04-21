@@ -94,6 +94,9 @@
         :line-width-scale="productionLineG6Scale"
         @update:selected-node-id="emit('update:selected-line-node-id', $event)"
         @node-drag-stop="emit('node-drag-stop', $event)"
+        @item-click="emit('item-click', $event)"
+        @item-mouseenter="emit('item-mouseenter', $event)"
+        @item-mouseleave="emit('item-mouseleave')"
       />
     </div>
     <div v-else class="text-center text-grey q-pa-lg">{{ t('noNodes') }}</div>
@@ -107,7 +110,7 @@ import { useI18n } from 'vue-i18n';
 import LineFlowView from 'src/jei/components/LineFlowView.vue';
 import AdvancedPlannerViewportToolbar from 'src/pages/components/advanced-planner/AdvancedPlannerViewportToolbar.vue';
 import type { PlannerGraphRenderer, PlannerTargetUnit } from 'src/jei/planner/plannerUi';
-import type { ItemDef } from 'src/jei/types';
+import type { ItemDef, ItemKey } from 'src/jei/types';
 
 type SelectedLineItemData = {
   isRoot: boolean;
@@ -147,6 +150,9 @@ const emit = defineEmits<{
   'update:production-line-renderer': [value: PlannerGraphRenderer];
   'update:selected-line-node-id': [value: string | null];
   'node-drag-stop': [event: { node: Node }];
+  'item-click': [itemKey: ItemKey];
+  'item-mouseenter': [keyHash: string];
+  'item-mouseleave': [];
 }>();
 
 const { t } = useI18n();

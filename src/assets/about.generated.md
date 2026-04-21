@@ -1,18 +1,26 @@
 # About
 
 ## Build
-- Version: pages-build-10-ge918ef7-dirty
-- Commit: e918ef7 (e918ef7c0948b4823f824f8b265bebdfd4ae95ab)
-- Commit count: 168
-- Subject: Refactor code structure for improved readability and maintainability
+- Version: pages-build-11-g3ec72c6-dirty
+- Commit: 3ec72c6 (3ec72c630fb337c364b0bea6bd8a406306b2a798)
+- Commit count: 169
+- Subject: feat(planner): add advanced planner views and state management
 - Author: AndreaFrederica
-- Date: 2026-04-21T05:03:11+08:00
-- Generated at: 2026-04-21T18:54:11.460Z
+- Date: 2026-04-22T03:59:03+08:00
+- Generated at: 2026-04-21T20:44:06.551Z
 - Remote: https://github.com/AndreaFrederica/jei-web.git
 
 ## Version History
 
-### Unreleased (2026-04-21T05:03:11+08:00)
+### Unreleased (2026-04-22T03:59:03+08:00)
+- 3ec72c6 2026-04-22T03:59:03+08:00
+  feat(planner): add advanced planner views and state management
+  
+  - Implemented `useAdvancedPlannerQuantView` for quantitative flow modeling.
+  - Created `useAdvancedPlannerSummaryView` to summarize item and fluid totals.
+  - Developed `useAdvancedPlannerTreeView` for hierarchical tree representation of planner nodes.
+  - Added `useAdvancedPlannerViewState` for managing view state across different planner components.
+  - Enhanced utility functions for handling node positions and formatting amounts.
 - e918ef7 2026-04-21T05:03:11+08:00
   Refactor code structure for improved readability and maintainability
 - 8132061 2026-04-21T04:18:57+08:00

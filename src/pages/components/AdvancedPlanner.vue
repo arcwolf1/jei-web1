@@ -1,8 +1,37 @@
 <template>
-  <div v-bind="$attrs" class="advanced-planner column no-wrap">
+  <div
+    v-bind="$attrs"
+    :class="['advanced-planner', 'column', 'no-wrap', { 'advanced-planner--embedded': embeddedMode }]"
+  >
+    <q-card
+      v-if="embeddedMode && embeddedHeaderCollapsed"
+      flat
+      bordered
+      class="q-pa-md advanced-planner__embedded-toggle-card"
+    >
+      <div class="row items-center q-gutter-sm">
+        <div class="text-subtitle2">{{ t('lineSelection') }}</div>
+        <q-space />
+        <q-btn
+          dense
+          flat
+          no-caps
+          color="primary"
+          icon="tune"
+          :label="t('expand')"
+          @click="embeddedHeaderCollapsed = false"
+        />
+      </div>
+      <div class="text-body2 q-mt-sm advanced-planner__embedded-summary">
+        {{ embeddedHeaderSummary }}
+      </div>
+    </q-card>
+
     <advanced-planner-targets-card
+      v-if="!embeddedMode || !embeddedHeaderCollapsed"
       :targets="targets"
       :item-defs-by-key-hash="itemDefsByKeyHash"
+      :allow-manual-add-target="Object.keys(itemDefsByKeyHash).length > 0"
       :use-product-recovery="useProductRecovery"
       :lp-mode="lpMode"
       :integer-machines="integerMachines"
@@ -11,6 +40,10 @@
       :lp-solving="lpSolving"
       :target-unit-options="targetUnitOptions"
       :objective-type-options="objectiveTypeOptions"
+      :embedded="embeddedMode"
+      @item-click="emit('item-click', $event)"
+      @item-mouseenter="emit('item-mouseenter', $event)"
+      @item-mouseleave="emit('item-mouseleave')"
       @update:use-product-recovery="useProductRecovery = $event"
       @update:lp-mode="lpMode = $event"
       @update:integer-machines="integerMachines = $event"
@@ -20,9 +53,18 @@
       @update-target-unit="updateTargetUnit($event.index, $event.unit)"
       @update-target-type="updateTargetType($event.index, $event.type)"
       @remove-target="removeTarget"
+      @open-add-target-picker="addTargetDialogOpen = true"
       @clear-targets="clearTargets"
       @start-planning="startPlanning"
       @auto-optimize="autoOptimize"
+    />
+
+    <advanced-planner-add-target-dialog
+      :open="addTargetDialogOpen"
+      :item-defs-by-key-hash="itemDefsByKeyHash"
+      :existing-target-hashes="targetRootHashesList"
+      @update:open="addTargetDialogOpen = $event"
+      @select-item="addTarget($event.itemKey, $event.itemName)"
     />
 
     <!-- 决策区域：LP 手动模式下仍需手动选配方；LP 自动优化跳过此步 -->
@@ -36,6 +78,9 @@
       :get-selected-recipe="getSelectedRecipe"
       :get-selected-tag="getSelectedTag"
       :tag-item-options="tagItemOptions"
+      @item-click="emit('item-click', $event)"
+      @item-mouseenter="emit('item-mouseenter', $event)"
+      @item-mouseleave="emit('item-mouseleave')"
       @set-recipe-choice="setRecipeChoice($event.itemKeyHash, $event.recipeId)"
       @set-tag-choice="setTagChoice($event.tagId, $event.itemId)"
     />
@@ -50,11 +95,17 @@
       :lp-mode="lpMode"
       :has-lp-result="Boolean(lpResult)"
       :get-rate-unit-label="getRateUnitLabel"
+      :embedded="embeddedMode"
+      :details-collapsed="embeddedMode && embeddedHeaderCollapsed"
+      @item-click="emit('item-click', $event)"
+      @item-mouseenter="emit('item-mouseenter', $event)"
+      @item-mouseleave="emit('item-mouseleave')"
       @open-save="openSaveDialog"
       @share-url="shareAsUrl"
       @copy-json="copyShareJson"
       @share-json-url="shareByJsonUrl"
       @import-json="importShareJson"
+      @toggle-details="embeddedHeaderCollapsed = !embeddedHeaderCollapsed"
       @update:active-tab="activeTab = $event"
     >
       <q-tab-panels v-model="activeTab" animated keep-alive class="advanced-planner-panels">
@@ -70,6 +121,9 @@
             :item-name="itemName"
             :format-summary-amount="formatSummaryAmount"
             :format-amount="formatAmount"
+            @item-click="emit('item-click', $event)"
+            @item-mouseenter="emit('item-mouseenter', $event)"
+            @item-mouseleave="emit('item-mouseleave')"
           />
         </q-tab-panel>
 
@@ -94,6 +148,9 @@
             :node-power-text="nodePowerText"
             :recovery-source-text="recoverySourceText"
             :recovery-produced-text="recoveryProducedText"
+            @item-click="emit('item-click', $event)"
+            @item-mouseenter="emit('item-mouseenter', $event)"
+            @item-mouseleave="emit('item-mouseleave')"
             @update:tree-display-unit="treeDisplayUnit = $event"
             @update:tree-display-mode="treeDisplayMode = $event"
             @toggle-collapsed="toggleCollapsed"
@@ -115,6 +172,9 @@
             :graph-flow-nodes-styled="graphFlowNodesStyled"
             :graph-flow-edges-styled="graphFlowEdgesStyled"
             :selected-graph-node-id="selectedGraphNodeId"
+            @item-click="emit('item-click', $event)"
+            @item-mouseenter="emit('item-mouseenter', $event)"
+            @item-mouseleave="emit('item-mouseleave')"
             @update:graph-page-full="graphPageFull = $event"
             @toggle-fullscreen="toggleGraphFullscreen"
             @update:graph-display-unit="graphDisplayUnit = $event"
@@ -146,6 +206,9 @@
             :selected-line-node-id="selectedLineNodeId"
             :flow-background-pattern-color="flowBackgroundPatternColor"
             :production-line-g6-scale="settingsStore.productionLineG6Scale"
+            @item-click="emit('item-click', $event)"
+            @item-mouseenter="emit('item-mouseenter', $event)"
+            @item-mouseleave="emit('item-mouseleave')"
             @update:line-page-full="linePageFull = $event"
             @toggle-fullscreen="toggleLineFullscreen"
             @update:line-display-unit="lineDisplayUnit = $event"
@@ -179,6 +242,9 @@
             :line-width-curve-config="lineWidthCurveConfig"
             :quant-line-width-scale="settingsStore.quantLineWidthScale"
             :machine-count-decimals="settingsStore.machineCountDecimals"
+            @item-click="emit('item-click', $event)"
+            @item-mouseenter="emit('item-mouseenter', $event)"
+            @item-mouseleave="emit('item-mouseleave')"
             @update:quant-page-full="quantPageFull = $event"
             @toggle-fullscreen="toggleQuantFullscreen"
             @update:quant-display-unit="quantDisplayUnit = $event"
@@ -209,6 +275,9 @@
             :format-amount="formatAmount"
             :get-recipe-options-for-item-id="calcRecipeOptionsForItemId"
             :get-selected-recipe-id-for-item-id="getSelectedRecipeForItemId"
+            @item-click="emit('item-click', $event)"
+            @item-mouseenter="emit('item-mouseenter', $event)"
+            @item-mouseleave="emit('item-mouseleave')"
             @update:calc-display-unit="calcDisplayUnit = $event"
             @toggle-forced-raw-item="setCalcForcedRawForItemId($event.itemId, $event.forced)"
             @clear-forced-raw-key="clearCalcForcedRawByKeyHash($event)"
@@ -223,6 +292,9 @@
             :item-defs-by-key-hash="itemDefsByKeyHash"
             :lp-raw-rows="lpRawRows"
             :lp-raw-columns="lpRawColumns"
+            @item-click="emit('item-click', $event)"
+            @item-mouseenter="emit('item-mouseenter', $event)"
+            @item-mouseleave="emit('item-mouseleave')"
           />
         </q-tab-panel>
       </q-tab-panels>
@@ -300,9 +372,10 @@ import {
   buildEnhancedRequirementTree,
   sortRecipeOptionsForItem,
 } from 'src/jei/planner/planner';
-import { ObjectiveType } from 'src/jei/planner/types';
-import type { ObjectiveUnit, PlannerResult } from 'src/jei/planner/types';
+import { ObjectiveType, ObjectiveUnit } from 'src/jei/planner/types';
+import type { PlannerResult } from 'src/jei/planner/types';
 import AdvancedPlannerDecisionCard from 'src/pages/components/advanced-planner/AdvancedPlannerDecisionCard.vue';
+import AdvancedPlannerAddTargetDialog from 'src/pages/components/advanced-planner/AdvancedPlannerAddTargetDialog.vue';
 import AdvancedPlannerCalcPanel from 'src/pages/components/advanced-planner/AdvancedPlannerCalcPanel.vue';
 import AdvancedPlannerLpRawPanel from 'src/pages/components/advanced-planner/AdvancedPlannerLpRawPanel.vue';
 import AdvancedPlannerGraphPanel from 'src/pages/components/advanced-planner/AdvancedPlannerGraphPanel.vue';
@@ -351,6 +424,7 @@ import {
 } from 'src/jei/planner/lineWidthCurve';
 import type {
   AdvancedPlannerTab,
+  PlannerInitialState,
   PlannerLiveState,
   PlannerNodePosition,
   PlannerSavePayload,
@@ -375,12 +449,20 @@ interface Props {
   pack?: PackData | null;
   index?: JeiIndex | null;
   itemDefsByKeyHash?: Record<string, ItemDef>;
+  embedded?: boolean;
+  rootItemKey?: ItemKey | null;
+  initialState?: PlannerInitialState | null;
+  initialTab?: 'tree' | 'graph' | 'line' | 'calc' | 'quant' | null;
 }
 
 const props = withDefaults(defineProps<Props>(), {
   pack: null,
   index: null,
   itemDefsByKeyHash: () => ({}),
+  embedded: false,
+  rootItemKey: null,
+  initialState: null,
+  initialTab: null,
 });
 
 function getTagDisplayName(tagId: string): string {
@@ -408,9 +490,13 @@ const emit = defineEmits<{
   'share-plan': [payload: PlannerSavePayload];
   'share-plan-json-url': [payload: PlannerSavePayload];
   'state-change': [state: PlannerLiveState];
+  'item-click': [itemKey: ItemKey];
+  'item-mouseenter': [keyHash: string];
+  'item-mouseleave': [];
 }>();
 
 const $q = useQuasar();
+const embeddedMode = computed(() => props.embedded === true);
 
 const targets = ref<Target[]>([]);
 /** LP 优化模式开关：开启后调用 solveAdvanced() 代替树形递归 */
@@ -420,7 +506,7 @@ const lpPendingAfterDecisions = ref(false);
 /** LP 求解结果（仅在 lpMode 下有效） */
 const lpResult = ref<PlannerResult | null>(null);
 const lpSolving = ref(false);
-const activeTab = ref<'summary' | 'tree' | 'graph' | 'line' | 'quant' | 'calc'>('summary');
+const activeTab = ref<AdvancedPlannerTab>('summary');
 const allDecisions = ref<PlannerDecision[]>([]);
 const selectedRecipeIdByItemKeyHash = ref<Map<string, string>>(new Map());
 const selectedItemIdByTagId = ref<Map<string, ItemId>>(new Map());
@@ -481,6 +567,7 @@ const lineAutoLayoutCache = new Map<string, Record<string, PlannerNodePosition>>
 const quantAutoLayoutCache = new Map<string, Record<string, PlannerNodePosition>>();
 const calcPlanDirty = ref(false);
 let skipNextForcedRawAutoRecompute = 0;
+let lpSolveRequestId = 0;
 
 const graphPageFull = ref(false);
 const linePageFull = ref(false);
@@ -494,6 +581,8 @@ const quantPanelRef = ref<{ getFlowWrapEl: () => HTMLElement | null } | null>(nu
 
 const saveDialogOpen = ref(false);
 const saveName = ref('');
+const embeddedHeaderCollapsed = ref(true);
+const addTargetDialogOpen = ref(false);
 
 const VALID_ADVANCED_PLANNER_TABS = new Set<AdvancedPlannerTab>([
   'summary',
@@ -502,6 +591,7 @@ const VALID_ADVANCED_PLANNER_TABS = new Set<AdvancedPlannerTab>([
   'line',
   'quant',
   'calc',
+  'lp_raw',
 ]);
 
 const VALID_TARGET_UNITS = new Set<PlannerTargetUnit>([
@@ -510,11 +600,13 @@ const VALID_TARGET_UNITS = new Set<PlannerTargetUnit>([
   'per_minute',
   'per_hour',
 ]);
+const VALID_EMBEDDED_TABS = new Set(['tree', 'graph', 'line', 'calc', 'quant'] as const);
 
 const pendingDecisions = computed(() => allDecisions.value);
 const targetRootHashes = computed(
   () => new Set(targets.value.map((target) => itemKeyHash(target.itemKey))),
 );
+const targetRootHashesList = computed(() => Array.from(targetRootHashes.value));
 
 function isAdvancedPlannerTab(value: unknown): value is AdvancedPlannerTab {
   return typeof value === 'string' && VALID_ADVANCED_PLANNER_TABS.has(value as AdvancedPlannerTab);
@@ -524,12 +616,68 @@ function isPlannerTargetUnit(value: unknown): value is PlannerTargetUnit {
   return typeof value === 'string' && VALID_TARGET_UNITS.has(value as PlannerTargetUnit);
 }
 
+function isEmbeddedTab(value: unknown): value is NonNullable<Props['initialTab']> {
+  return (
+    typeof value === 'string' && VALID_EMBEDDED_TABS.has(value as NonNullable<Props['initialTab']>)
+  );
+}
+
 async function copyText(text: string): Promise<void> {
   if (typeof navigator !== 'undefined' && navigator.clipboard?.writeText) {
     await navigator.clipboard.writeText(text);
     return;
   }
   window.prompt(t('copyPrompt'), text);
+}
+
+function buildEmbeddedPlanPayload(): PlannerSavePayload | null {
+  if (!props.rootItemKey) return null;
+
+  const initialState = props.initialState;
+  const initialTab = isEmbeddedTab(props.initialTab) ? props.initialTab : 'tree';
+  const savedActiveTab = isAdvancedPlannerTab(initialState?.viewState?.activeTab)
+    ? initialState.viewState.activeTab
+    : initialTab;
+  const targetAmount = Number(initialState?.targetAmount) || 1;
+  const targetUnit = isPlannerTargetUnit(initialState?.targetUnit)
+    ? initialState.targetUnit
+    : 'per_minute';
+  const objectiveUnit =
+    targetUnit === 'items'
+      ? ObjectiveUnit.Items
+      : targetUnit === 'per_second'
+        ? ObjectiveUnit.PerSecond
+        : targetUnit === 'per_hour'
+          ? ObjectiveUnit.PerHour
+          : ObjectiveUnit.PerMinute;
+
+  return {
+    name: `${itemName(props.rootItemKey)} ${t('savedLines')}`,
+    rootItemKey: props.rootItemKey,
+    targetAmount,
+    targetUnit,
+    useProductRecovery: initialState?.useProductRecovery === true,
+    integerMachines: initialState?.integerMachines !== false,
+    discreteMachineRates: initialState?.discreteMachineRates !== false,
+    preferSingleRecipeChain: initialState?.preferSingleRecipeChain !== false,
+    selectedRecipeIdByItemKeyHash: initialState?.selectedRecipeIdByItemKeyHash ?? {},
+    selectedItemIdByTagId: initialState?.selectedItemIdByTagId ?? {},
+    kind: 'advanced',
+    forcedRawItemKeyHashes: initialState?.forcedRawItemKeyHashes ?? [],
+    viewState: {
+      ...(initialState?.viewState ?? {}),
+      activeTab: savedActiveTab,
+    },
+    targets: [
+      {
+        itemKey: props.rootItemKey,
+        itemName: itemName(props.rootItemKey),
+        value: targetAmount,
+        unit: objectiveUnit,
+        type: ObjectiveType.Output,
+      },
+    ],
+  };
 }
 
 const productionLineRenderer = computed(() => settingsStore.productionLineRenderer);
@@ -734,6 +882,14 @@ watch(preferSingleRecipeChain, () => {
     runLpSolve();
   }
 });
+watch(
+  () => [lpSolving.value, lpResult.value] as const,
+  ([solving, result]) => {
+    if (lpMode.value && !solving && result) {
+      calcPlanDirty.value = false;
+    }
+  },
+);
 
 const buildMergedTree = () => {
   if (!props.pack || !props.index || targets.value.length === 0) return;
@@ -930,6 +1086,15 @@ const loadSavedPlan = (payload: PlannerSavePayload) => {
   recomputePlanningState();
 };
 
+function applyEmbeddedPlan(): void {
+  const payload = buildEmbeddedPlanPayload();
+  if (!payload) {
+    clearTargets();
+    return;
+  }
+  loadSavedPlan(payload);
+}
+
 const removeTarget = (index: number) => {
   targets.value.splice(index, 1);
   // 如果没有目标了，重置规划状态
@@ -990,6 +1155,7 @@ const invalidatePlanningIfNeeded = () => {
 /** 提取 LP 求解逻辑，供多处复用 */
 const runLpSolve = () => {
   if (!props.index || !props.pack) return;
+  const requestId = ++lpSolveRequestId;
   lpResult.value = null;
   lpSolving.value = true;
   solveAdvancedPlannerLp({
@@ -1004,6 +1170,7 @@ const runLpSolve = () => {
     preferSingleRecipeChain: preferSingleRecipeChain.value,
   })
     .then(({ result, mergedRecipeSelections }) => {
+      if (requestId !== lpSolveRequestId) return;
       lpResult.value = result;
       lpSolving.value = false;
       selectedRecipeIdByItemKeyHash.value = mergedRecipeSelections;
@@ -1015,6 +1182,7 @@ const runLpSolve = () => {
       calcPlanDirty.value = false;
     })
     .catch((e) => {
+      if (requestId !== lpSolveRequestId) return;
       console.error('[LP] solve failed', e);
       lpResult.value = null;
       lpSolving.value = false;
@@ -1085,6 +1253,26 @@ const itemName = (itemKey: ItemKey): string => {
   const keyHash = itemKeyHash(itemKey);
   return props.itemDefsByKeyHash?.[keyHash]?.name ?? itemKey.id;
 };
+
+watch(
+  () =>
+    [
+      props.rootItemKey ? itemKeyHash(props.rootItemKey) : '',
+      props.initialState?.loadKey ?? '',
+    ] as const,
+  () => {
+    embeddedHeaderCollapsed.value = true;
+    applyEmbeddedPlan();
+  },
+  { immediate: true },
+);
+watch(
+  () => props.initialTab,
+  (value) => {
+    if (!isEmbeddedTab(value)) return;
+    activeTab.value = value;
+  },
+);
 
 function itemColorOfDef(def?: ItemDef): string | null {
   const fromDef = (def as { color?: string } | undefined)?.color?.trim();
@@ -1552,6 +1740,14 @@ const { lpRawRows, lpRawColumns } = useAdvancedPlannerLpRawView({
   getItemName,
 });
 
+const embeddedHeaderSummary = computed(() => {
+  const firstTarget = targets.value[0];
+  if (!firstTarget) return t('lineSelection');
+  const targetSummary = `${firstTarget.itemName} ${formatAmount(firstTarget.rate)} ${getRateUnitLabel(firstTarget.unit)}`;
+  if (targets.value.length === 1) return targetSummary;
+  return `${targetSummary} · ${targets.value.length} ${t('targetCount')}`;
+});
+
 const flowBackgroundPatternColor = computed(() =>
   Dark.isActive ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.12)',
 );
@@ -1567,6 +1763,7 @@ defineExpose({
   display: flex;
   flex-direction: column;
   min-height: 0;
+  min-width: 0;
 }
 
 .advanced-planner-panels {
@@ -1578,6 +1775,36 @@ defineExpose({
   /* 让标签面板高度自适应内容，外层容器提供滚动 */
   height: auto;
   overflow: visible;
+}
+
+.advanced-planner--embedded {
+  overflow-y: auto;
+  overflow-x: hidden;
+}
+
+.advanced-planner__embedded-toggle-card {
+  margin-bottom: 16px;
+}
+
+.advanced-planner__embedded-summary {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.advanced-planner--embedded .advanced-planner-panels {
+  flex: 0 0 auto;
+  min-height: auto;
+}
+
+.advanced-planner--embedded :deep(.q-tab-panels) {
+  height: auto;
+  overflow: visible;
+}
+
+.advanced-planner--embedded :deep(.q-tab-panel) {
+  min-height: auto;
 }
 
 .monospace {

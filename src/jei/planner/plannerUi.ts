@@ -12,7 +12,14 @@ export type PlannerNodePosition = {
 
 export type PlannerGraphRenderer = 'vue_flow' | 'g6';
 
-export type AdvancedPlannerTab = 'summary' | 'tree' | 'graph' | 'line' | 'quant' | 'calc';
+export type AdvancedPlannerTab =
+  | 'summary'
+  | 'tree'
+  | 'graph'
+  | 'line'
+  | 'quant'
+  | 'calc'
+  | 'lp_raw';
 
 export type AdvancedPlannerViewState = {
   activeTab?: AdvancedPlannerTab;

@@ -78,6 +78,9 @@
                 variant="slot"
                 :show-name="false"
                 :show-subtitle="false"
+                @item-click="emit('item-click', $event)"
+                @item-mouseenter="emit('item-mouseenter', $event)"
+                @item-mouseleave="emit('item-mouseleave')"
               />
               <span>{{ scope.row.name }}</span>
             </div>
@@ -110,6 +113,9 @@
                 variant="slot"
                 :show-name="false"
                 :show-subtitle="false"
+                @item-click="emit('item-click', $event)"
+                @item-mouseenter="emit('item-mouseenter', $event)"
+                @item-mouseleave="emit('item-mouseleave')"
               />
               <span>{{ scope.row.name }}</span>
             </div>
@@ -224,6 +230,9 @@
                 variant="slot"
                 :show-name="false"
                 :show-subtitle="false"
+                @item-click="emit('item-click', $event)"
+                @item-mouseenter="emit('item-mouseenter', $event)"
+                @item-mouseleave="emit('item-mouseleave')"
               />
               <span>{{ scope.row.name }}</span>
             </div>
@@ -327,6 +336,9 @@
                 variant="slot"
                 :show-name="false"
                 :show-subtitle="false"
+                @item-click="emit('item-click', $event)"
+                @item-mouseenter="emit('item-mouseenter', $event)"
+                @item-mouseleave="emit('item-mouseleave')"
               />
               <span>{{ scope.row.name }}</span>
             </div>
@@ -401,7 +413,7 @@ import type { QTableColumn } from 'quasar';
 import { useI18n } from 'vue-i18n';
 import StackView from 'src/jei/components/StackView.vue';
 import type { PlannerTargetUnit } from 'src/jei/planner/plannerUi';
-import type { ItemDef } from 'src/jei/types';
+import type { ItemDef, ItemKey } from 'src/jei/types';
 import type {
   CalcRecipeOption,
   CalcForcedRawRow,
@@ -437,6 +449,9 @@ const emit = defineEmits<{
   'clear-forced-raw-key': [keyHash: string];
   'set-recipe-choice': [payload: { itemId: string; recipeId: string }];
   'recompute-requested': [];
+  'item-click': [itemKey: ItemKey];
+  'item-mouseenter': [keyHash: string];
+  'item-mouseleave': [];
 }>();
 
 const { t } = useI18n();

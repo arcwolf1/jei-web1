@@ -1,7 +1,16 @@
 <template>
-  <q-card flat bordered class="q-pa-md q-mt-md advanced-planner__results">
+  <q-card
+    flat
+    bordered
+    :class="[
+      'q-pa-md',
+      'q-mt-md',
+      'advanced-planner__results',
+      { 'advanced-planner__results--details-collapsed': detailsCollapsed },
+    ]"
+  >
     <div class="row items-center q-mb-md">
-      <div class="text-subtitle2">{{ t('multiTargetPlanning') }}</div>
+      <div class="text-subtitle2">{{ embedded ? t('lineSelection') : t('multiTargetPlanning') }}</div>
       <q-space />
       <q-btn
         dense
@@ -40,9 +49,19 @@
       <q-chip dense color="primary" text-color="white">
         {{ targets.length }} {{ t('targetCount') }}
       </q-chip>
+      <q-btn
+        v-if="embedded"
+        dense
+        flat
+        no-caps
+        class="q-ml-sm"
+        :icon="detailsCollapsed ? 'expand_more' : 'expand_less'"
+        :label="detailsCollapsed ? t('expand') : t('collapse')"
+        @click="emit('toggle-details')"
+      />
     </div>
 
-    <q-list dense bordered class="rounded-borders q-mb-md">
+    <q-list v-if="!detailsCollapsed" dense bordered class="rounded-borders q-mb-md">
       <q-item-label header>{{ t('targetOverview') }}</q-item-label>
       <q-item v-for="(target, index) in targets" :key="index">
         <q-item-section avatar>
@@ -56,6 +75,13 @@
               ...(target.itemKey.nbt !== undefined ? { nbt: target.itemKey.nbt } : {}),
             }"
             :item-defs-by-key-hash="itemDefsByKeyHash"
+            variant="slot"
+            :show-name="false"
+            :show-subtitle="false"
+            :show-amount="false"
+            @item-click="emit('item-click', $event)"
+            @item-mouseenter="emit('item-mouseenter', $event)"
+            @item-mouseleave="emit('item-mouseleave')"
           />
         </q-item-section>
         <q-item-section>
@@ -111,6 +137,8 @@ defineProps<{
   lpMode: boolean;
   hasLpResult: boolean;
   getRateUnitLabel: (unit: PlannerTargetUnit) => string;
+  embedded?: boolean;
+  detailsCollapsed?: boolean;
 }>();
 
 const emit = defineEmits<{
@@ -119,7 +147,11 @@ const emit = defineEmits<{
   'copy-json': [];
   'share-json-url': [];
   'import-json': [];
+  'toggle-details': [];
   'update:active-tab': [value: AdvancedPlannerTab];
+  'item-click': [itemKey: ItemKey];
+  'item-mouseenter': [keyHash: string];
+  'item-mouseleave': [];
 }>();
 
 const { t } = useI18n();

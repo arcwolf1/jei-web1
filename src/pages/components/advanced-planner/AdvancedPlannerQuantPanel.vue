@@ -64,6 +64,9 @@
         :line-width-scale="quantLineWidthScale"
         :machine-count-decimals="machineCountDecimals"
         @node-drag-stop="emit('node-drag-stop', $event)"
+        @item-click="emit('item-click', $event)"
+        @item-mouseenter="emit('item-mouseenter', $event)"
+        @item-mouseleave="emit('item-mouseleave')"
       />
     </div>
     <div v-else class="text-center text-grey q-pa-lg">{{ t('noNodes') }}</div>
@@ -78,7 +81,7 @@ import AdvancedPlannerViewportToolbar from 'src/pages/components/advanced-planne
 import type { LineWidthCurveConfig } from 'src/jei/planner/lineWidthCurve';
 import type { QuantFlowEdge, QuantFlowNode } from 'src/jei/planner/quantFlow';
 import type { PlannerTargetUnit } from 'src/jei/planner/plannerUi';
-import type { ItemDef } from 'src/jei/types';
+import type { ItemDef, ItemKey } from 'src/jei/types';
 
 defineProps<{
   itemDefsByKeyHash: Record<string, ItemDef>;
@@ -106,6 +109,9 @@ const emit = defineEmits<{
   'update:quant-width-by-rate': [value: boolean];
   'update:quant-flow-renderer': [value: 'nodes' | 'sankey'];
   'node-drag-stop': [event: { node: { id: string; position: { x: number; y: number } } }];
+  'item-click': [itemKey: ItemKey];
+  'item-mouseenter': [keyHash: string];
+  'item-mouseleave': [];
 }>();
 
 const { t } = useI18n();

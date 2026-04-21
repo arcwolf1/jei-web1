@@ -25,6 +25,9 @@
                 variant="slot"
                 :show-name="false"
                 :show-subtitle="false"
+                @item-click="emit('item-click', $event)"
+                @item-mouseenter="emit('item-mouseenter', $event)"
+                @item-mouseleave="emit('item-mouseleave')"
               />
               <div class="column">
                 <span>{{ scope.row.name }}</span>
@@ -59,7 +62,7 @@ import { computed } from 'vue';
 import type { QTableColumn } from 'quasar';
 import { useI18n } from 'vue-i18n';
 import StackView from 'src/jei/components/StackView.vue';
-import type { ItemDef } from 'src/jei/types';
+import type { ItemDef, ItemKey } from 'src/jei/types';
 import type {
   LpRawRow,
   PlannerTableColumn,
@@ -69,6 +72,11 @@ const props = defineProps<{
   itemDefsByKeyHash: Record<string, ItemDef>;
   lpRawRows: LpRawRow[];
   lpRawColumns: PlannerTableColumn<LpRawRow>[];
+}>();
+const emit = defineEmits<{
+  'item-click': [itemKey: ItemKey];
+  'item-mouseenter': [keyHash: string];
+  'item-mouseleave': [];
 }>();
 
 const { t } = useI18n();

@@ -81,6 +81,9 @@
                 variant="slot"
                 :show-name="false"
                 :show-subtitle="false"
+                @item-click="emit('item-click', $event)"
+                @item-mouseenter="emit('item-mouseenter', $event)"
+                @item-mouseleave="emit('item-mouseleave')"
               />
             </div>
             <div class="planner__flow-node-text">
@@ -112,6 +115,9 @@
                 variant="slot"
                 :show-name="false"
                 :show-subtitle="false"
+                @item-click="emit('item-click', $event)"
+                @item-mouseenter="emit('item-mouseenter', $event)"
+                @item-mouseleave="emit('item-mouseleave')"
               />
             </div>
           </div>
@@ -143,7 +149,7 @@ import { useI18n } from 'vue-i18n';
 import StackView from 'src/jei/components/StackView.vue';
 import AdvancedPlannerViewportToolbar from 'src/pages/components/advanced-planner/AdvancedPlannerViewportToolbar.vue';
 import type { PlannerTargetUnit } from 'src/jei/planner/plannerUi';
-import type { ItemDef } from 'src/jei/types';
+import type { ItemDef, ItemKey } from 'src/jei/types';
 import type { GraphNodeData } from 'src/pages/components/advanced-planner/advancedPlanner.types';
 
 defineProps<{
@@ -168,6 +174,9 @@ const emit = defineEmits<{
   'update:graph-merge-raw-materials': [value: boolean];
   'update:selected-graph-node-id': [value: string | null];
   'node-drag-stop': [event: { node: Node }];
+  'item-click': [itemKey: ItemKey];
+  'item-mouseenter': [keyHash: string];
+  'item-mouseleave': [];
 }>();
 
 const { t } = useI18n();

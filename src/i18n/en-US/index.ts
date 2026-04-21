@@ -193,6 +193,8 @@ export default {
   machineName: 'Machine Name',
 
   // Planner
+  plannerMode: 'Planner Mode',
+  classicPlanner: 'Classic Planner',
   plannerTabTree: 'Tree (T)',
   plannerTabGraph: 'Graph (G)',
   plannerTabLine: 'Line (L)',

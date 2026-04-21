@@ -190,6 +190,8 @@ export default {
   machineName: '机器名称',
 
   // Planner
+  plannerMode: '规划器模式',
+  classicPlanner: '传统规划器',
   plannerTabTree: '树结构 (T)',
   plannerTabGraph: '节点图 (G)',
   plannerTabLine: '生产线 (L)',

@@ -159,6 +159,29 @@
 
         <q-separator />
 
+        <q-item-label header> 资料链接 </q-item-label>
+
+        <q-item clickable tag="a" target="_blank" href="https://warfarin.wiki">
+          <q-item-section avatar>
+            <q-icon name="link" />
+          </q-item-section>
+          <q-item-section>
+            <q-item-label>Warfarin Wiki</q-item-label>
+            <q-item-label caption>第三方 Wiki</q-item-label>
+          </q-item-section>
+        </q-item>
+        <q-item clickable tag="a" target="_blank" href="https://wiki.skland.com/endfield">
+          <q-item-section avatar>
+            <q-icon name="link" />
+          </q-item-section>
+          <q-item-section>
+            <q-item-label>Skland Wiki</q-item-label>
+            <q-item-label caption>Hypergryph</q-item-label>
+          </q-item-section>
+        </q-item>
+
+        <q-separator />
+
         <q-item-label header> {{ t('friendLinks') }} </q-item-label>
 
         <q-item clickable tag="a" target="_blank" href="https://www.gamekee.com/zmd">
@@ -177,6 +200,29 @@
           <q-item-section>
             <q-item-label>{{ t('endfieldProtocolTerminal') }}</q-item-label>
             <q-item-label caption>{{ t('entropyProjectTeam') }}</q-item-label>
+          </q-item-section>
+        </q-item>
+        <q-item clickable tag="a" target="_blank" href="https://bot.perlica.tech/">
+          <q-item-section avatar>
+            <q-icon name="link" />
+          </q-item-section>
+          <q-item-section>
+            <q-item-label>Perlica Bot</q-item-label>
+            <q-item-label caption>Origin Technology</q-item-label>
+          </q-item-section>
+        </q-item>
+
+        <q-separator />
+
+        <q-item-label header> 工具链接 </q-item-label>
+
+        <q-item clickable tag="a" target="_blank" href="https://end.canmoe.com/">
+          <q-item-section avatar>
+            <q-icon name="link" />
+          </q-item-section>
+          <q-item-section>
+            <q-item-label>终末地基质规划器</q-item-label>
+            <q-item-label caption>璨梦踏月</q-item-label>
           </q-item-section>
         </q-item>
 
