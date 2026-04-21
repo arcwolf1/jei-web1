@@ -50,6 +50,11 @@ export interface AdvancedPlannerInput {
   integerMachines?: boolean;
   /** Allow integer-machine solutions to run machines at reduced discrete rates */
   discreteMachineRates?: boolean;
+  /**
+   * Prefer a single deterministic recipe chain per item in LP mode instead of
+   * allowing multiple candidate producers to coexist and split flow.
+   */
+  preferSingleRecipeChain?: boolean;
 }
 
 // ─── Implementation ────────────────────────────────────────────────────────────
@@ -75,6 +80,7 @@ export async function solveAdvanced(input: AdvancedPlannerInput): Promise<Planne
     costs = {},
     integerMachines = false,
     discreteMachineRates = true,
+    preferSingleRecipeChain = true,
   } = input;
 
   const solverCosts = { ...DEFAULT_SOLVER_COSTS, ...costs };
@@ -88,6 +94,7 @@ export async function solveAdvanced(input: AdvancedPlannerInput): Promise<Planne
     ...(forcedRawItemKeyHashes ? { forcedRawItemKeyHashes } : {}),
     defaultNs,
     maximizeType,
+    preferSingleRecipeChain,
   });
 
   // ── 2. Solve LP ───────────────────────────────────────────────────────────

@@ -337,6 +337,9 @@ export default {
   discreteMachineRateMode: 'Allow Reduced Machine Rates',
   discreteMachineRateModeTooltip:
     'In integer machine mode, allow each machine to run at discrete reduced rates such as 1/2 or 1/4 speed before adding another full machine.',
+  preferSingleRecipeChain: 'Avoid Homogeneous Route Splits',
+  preferSingleRecipeChainTooltip:
+    'When enabled, LP keeps one deterministic candidate recipe chain per item by default; it prefers the selected recipe when present, otherwise it picks one by stable ordering instead of splitting across similar routes.',
   autoRecipePlusLP: 'Auto Recipe + LP',
   autoRecipePlusLPTooltip: 'Auto-select optimal recipes, then solve with LP',
   lpRawData: 'LP Raw Data',
@@ -352,6 +355,11 @@ export default {
   treatAsRawMaterial: 'Treat as Raw Material',
   setAsRawMaterial: 'Set as Raw Material',
   cancelRawMaterial: 'Cancel Raw Material',
+  calcRecomputeRequired:
+    'Current results are outdated. You changed raw-material or recipe choices, so recompute to refresh the plan.',
+  recomputeNow: 'Recompute',
+  lpSolveFailedAdjustSelections:
+    'LP solve failed. Keep adjusting recipes/raw materials, and if new pending choices appear, resolve them before retrying.',
   rawMaterialList: 'Raw Material List (cancelable)',
   intermediateProductionCount: 'Intermediate Production Count',
   recoveryOutput: 'Recovery Output',

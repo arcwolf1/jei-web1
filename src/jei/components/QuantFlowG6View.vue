@@ -64,6 +64,11 @@ let hoverNodeId: string | null = null;
 let iconResolveToken = 0;
 const resolvedIconByHash = ref(new Map<string, string>());
 
+type ViewportState = {
+  zoom: number;
+  position: [number, number];
+};
+
 function finiteOr(v: unknown, fallback: number): number {
   const n = typeof v === 'number' ? v : Number(v);
   return Number.isFinite(n) ? n : fallback;
@@ -505,6 +510,12 @@ function hasPersistedNodePositions(): boolean {
 async function renderGraph(fitView: boolean) {
   if (!graph) return;
   const token = ++renderToken;
+  const viewportState: ViewportState | null = !fitView
+    ? {
+        zoom: graph.getZoom(),
+        position: graph.getPosition() as [number, number],
+      }
+    : null;
   graph.setData(toGraphData());
   await graph.render();
   if (token !== renderToken) return;
@@ -512,7 +523,12 @@ async function renderGraph(fitView: boolean) {
   if (token !== renderToken) return;
   if (fitView) {
     await graph.fitView();
+    return;
   }
+  if (!viewportState) return;
+  await graph.zoomTo(viewportState.zoom, false);
+  if (token !== renderToken) return;
+  await graph.translateTo(viewportState.position, false);
 }
 
 function clearHoverEmit() {
@@ -609,6 +625,10 @@ onMounted(() => {
     const nextWidth = Math.floor(rawWidth);
     const nextHeight = Math.floor(rawHeight);
     graph.resize(nextWidth, nextHeight);
+    // The quant panel is usually mounted while hidden inside tab panels.
+    // When it becomes visible, resize fires with the real viewport size,
+    // so we need to refit the content instead of keeping the old tiny hidden-tab zoom.
+    void graph.fitView();
   });
   resizeObserver.observe(el);
 });

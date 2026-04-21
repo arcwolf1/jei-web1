@@ -18,6 +18,7 @@ import { R_ZERO } from './rational';
 import type { Rational } from './rational';
 import { normalizeRecipe, type NormalizedRecipe } from './recipeAdapter';
 import { convertToPerSecond } from './units';
+import { sortRecipeOptionsForItem } from './planner';
 
 // ─── Extended state ────────────────────────────────────────────────────────────
 
@@ -80,18 +81,17 @@ export function buildMatrixState(args: {
   forcedRawItemKeyHashes?: ReadonlySet<string>;
   defaultNs: string;
   maximizeType?: MaximizeType;
+  preferSingleRecipeChain?: boolean;
 }): MatrixStateWithNorm {
   const {
     objectives,
     index,
-    // selectedRecipeIdByItemKeyHash is intentionally NOT used for LP matrix
-    // graph building — the LP must see all candidate producers to discover
-    // multi-source splits.  The field is kept in the signature for callers
-    // that still pass it (tree builder, persistence, etc.).
+    selectedRecipeIdByItemKeyHash,
     selectedItemIdByTagId,
     forcedRawItemKeyHashes,
     defaultNs,
     maximizeType = MaximizeType.Ratio,
+    preferSingleRecipeChain = true,
   } = args;
 
   const recipes = new Map<string, Recipe>();
@@ -135,11 +135,16 @@ export function buildMatrixState(args: {
       return;
     }
 
-    // Always include every reachable producer so the LP can split supply
-    // across multiple valid recipes for the same item.  Pre-selections from
-    // autoPlanSelections or earlier LP runs must NOT filter the matrix —
-    // otherwise the LP can never discover multi-source solutions.
-    for (const recipeId of producingIds) {
+    const recipeIds = !preferSingleRecipeChain
+      ? producingIds
+      : (() => {
+          const selectedRecipeId = selectedRecipeIdByItemKeyHash.get(h);
+          if (selectedRecipeId && producingIds.includes(selectedRecipeId)) return [selectedRecipeId];
+          const sorted = sortRecipeOptionsForItem(index, key, producingIds);
+          return sorted.length ? [sorted[0]!] : producingIds.slice(0, 1);
+        })();
+
+    for (const recipeId of recipeIds) {
       exploreRecipe(recipeId);
     }
   };

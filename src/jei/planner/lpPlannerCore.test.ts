@@ -61,7 +61,7 @@ describe('lp planner core', () => {
     expect(normalized.outputByHash.get(itemKeyHash({ id: 'A' }))).toBe(3);
   });
 
-  it('includes all reachable producers for an item when no recipe is locked', () => {
+  it('defaults to one deterministic producer chain per item in LP mode', () => {
     const recipes: Recipe[] = [
       {
         id: 'rDirect',
@@ -110,15 +110,13 @@ describe('lp planner core', () => {
       defaultNs: 'test',
     });
 
-    expect(Array.from(state.recipes.keys())).toEqual(['rDirect', 'rRecycle', 'rB']);
+    expect(Array.from(state.recipes.keys())).toEqual(['rDirect']);
     expect(state.normalizedRecipes.has('rDirect')).toBe(true);
-    expect(state.normalizedRecipes.has('rRecycle')).toBe(true);
-    expect(state.normalizedRecipes.has('rB')).toBe(true);
     expect(state.itemKeyByHash.has(itemKeyHash({ id: 'X' }))).toBe(true);
-    expect(state.itemKeyByHash.has(itemKeyHash({ id: 'Y' }))).toBe(true);
+    expect(state.itemKeyByHash.has(itemKeyHash({ id: 'Y' }))).toBe(false);
   });
 
-  it('does not let preselected recipes collapse LP matrix expansion to one producer', () => {
+  it('includes all reachable producers when single-chain preference is disabled', () => {
     const recipes: Recipe[] = [
       {
         id: 'rDirect',
@@ -162,12 +160,66 @@ describe('lp planner core', () => {
         },
       ],
       index,
-      selectedRecipeIdByItemKeyHash: new Map([[itemKeyHash({ id: 'A' }), 'rDirect']]),
+      selectedRecipeIdByItemKeyHash: new Map(),
+      selectedItemIdByTagId: new Map(),
+      defaultNs: 'test',
+      preferSingleRecipeChain: false,
+    });
+
+    expect(Array.from(state.recipes.keys())).toEqual(['rDirect', 'rRecycle', 'rB']);
+    expect(state.normalizedRecipes.has('rRecycle')).toBe(true);
+    expect(state.normalizedRecipes.has('rB')).toBe(true);
+  });
+
+  it('uses the preselected recipe deterministically when single-chain preference is enabled', () => {
+    const recipes: Recipe[] = [
+      {
+        id: 'rDirect',
+        type: 't',
+        slotContents: {
+          in1: { kind: 'item', id: 'X', amount: 1 },
+          out1: { kind: 'item', id: 'A', amount: 1 },
+        },
+      } as unknown as Recipe,
+      {
+        id: 'rRecycle',
+        type: 't',
+        slotContents: {
+          in1: { kind: 'item', id: 'B', amount: 1 },
+          out1: { kind: 'item', id: 'A', amount: 1 },
+        },
+      } as unknown as Recipe,
+      {
+        id: 'rB',
+        type: 't',
+        slotContents: {
+          in1: { kind: 'item', id: 'Y', amount: 1 },
+          out1: { kind: 'item', id: 'B', amount: 1 },
+        },
+      } as unknown as Recipe,
+    ];
+
+    const state = buildMatrixState({
+      objectives: [
+        {
+          id: 'obj-a',
+          targetId: 'A',
+          value: rational(60),
+          unit: ObjectiveUnit.PerMinute,
+          type: ObjectiveType.Output,
+        },
+      ],
+      index: createIndex(recipes, {
+        A: ['rDirect', 'rRecycle'],
+        B: ['rB'],
+      }),
+      selectedRecipeIdByItemKeyHash: new Map([[itemKeyHash({ id: 'A' }), 'rRecycle']]),
       selectedItemIdByTagId: new Map(),
       defaultNs: 'test',
     });
 
-    expect(Array.from(state.recipes.keys())).toEqual(['rDirect', 'rRecycle', 'rB']);
+    expect(Array.from(state.recipes.keys())).toEqual(['rRecycle', 'rB']);
+    expect(state.normalizedRecipes.has('rDirect')).toBe(false);
     expect(state.normalizedRecipes.has('rRecycle')).toBe(true);
     expect(state.normalizedRecipes.has('rB')).toBe(true);
   });
