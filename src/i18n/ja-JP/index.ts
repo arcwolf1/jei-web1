@@ -191,6 +191,8 @@ export default {
   machineName: 'マシン名',
 
   // Planner
+  plannerMode: 'プランナーモード',
+  classicPlanner: '従来プランナー',
   plannerTabTree: 'ツリー (T)',
   plannerTabGraph: 'グラフ (G)',
   plannerTabLine: 'ライン (L)',
@@ -330,6 +332,14 @@ export default {
   useProductRecovery: '製品リカバリーを使用',
   lpMode: 'LP最適化モード',
   lpModeTooltip: '線形計画ソルバーを使用してレシピの組み合わせを自動最適化。',
+  integerMachineMode: '整数機械数モード',
+  integerMachineModeTooltip: '0.23 台のような小数機械を避けるため、整数の機械台数で求解します。',
+  discreteMachineRateMode: '減速運転を許可',
+  discreteMachineRateModeTooltip:
+    '整数機械数モードで、機械ごとに 1/2 や 1/4 などの離散的な低速運転を許可し、追加の全速機をむやみに増やさないようにします。',
+  preferSingleRecipeChain: '同質ルートの分流を避ける',
+  preferSingleRecipeChainTooltip:
+    '有効時、LP は各アイテムについて既定で 1 本の決定的な候補レシピチェーンだけを保持します。選択済みレシピを優先し、未選択なら安定した順序で 1 つ選び、類似ルートへの分散を避けます。',
   autoRecipePlusLP: '自動レシピ + LP',
   autoRecipePlusLPTooltip: '最適なレシピを自動選択し、LPで解決',
   lpRawData: 'LP生データ',
@@ -345,6 +355,11 @@ export default {
   treatAsRawMaterial: '原材料として扱う',
   setAsRawMaterial: '原材料に設定',
   cancelRawMaterial: '原材料をキャンセル',
+  calcRecomputeRequired:
+    '現在の結果は古くなっています。原材料またはレシピ選択を変更したため、再計算して結果を更新してください。',
+  recomputeNow: '再計算',
+  lpSolveFailedAdjustSelections:
+    'LP の解決に失敗しました。レシピや原材料設定を引き続き調整し、新しい保留中の選択肢が出た場合はそれらを解決してから再試行してください。',
   rawMaterialList: '原材料リスト（キャンセル可能）',
   intermediateProductionCount: '中間製品生産数',
   recoveryOutput: 'リカバリー出力',

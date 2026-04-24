@@ -16,6 +16,8 @@ describe('plannerShare', () => {
     targetAmount: 120,
     targetUnit: 'per_minute' as const,
     useProductRecovery: true,
+    integerMachines: true,
+    discreteMachineRates: true,
     selectedRecipeIdByItemKeyHash: {
       'iron-plate': 'smelt-iron',
     },

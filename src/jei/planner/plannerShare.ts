@@ -29,6 +29,8 @@ type CompactPlannerSharePayload = {
     a: number;
     tu?: PlannerTargetUnit;
     pr?: 1;
+    im?: 0 | 1;
+    dr?: 0 | 1;
     sr?: Record<string, string>;
     st?: Record<string, ItemId>;
     k?: 'advanced';
@@ -90,7 +92,8 @@ function normalizeTargets(value: unknown): AdvancedObjectiveEntry[] | undefined 
         itemKey,
         value: amountRaw,
         unit: unit as AdvancedObjectiveEntry['unit'],
-        type: typeof entry.t === 'number' ? entry.t : typeof entry.type === 'number' ? entry.type : 0,
+        type:
+          typeof entry.t === 'number' ? entry.t : typeof entry.type === 'number' ? entry.type : 0,
       };
       if (typeof entry.n === 'string') target.itemName = entry.n;
       if (typeof entry.itemName === 'string') target.itemName = entry.itemName;
@@ -102,7 +105,8 @@ function normalizeTargets(value: unknown): AdvancedObjectiveEntry[] | undefined 
 
 function normalizePlan(value: unknown): PlannerSavePayload {
   if (!isRecord(value)) throw new Error('Invalid planner share payload: missing plan object');
-  const name = typeof value.n === 'string' ? value.n : typeof value.name === 'string' ? value.name : '';
+  const name =
+    typeof value.n === 'string' ? value.n : typeof value.name === 'string' ? value.name : '';
   const rootItemKey = normalizeItemKey(value.r ?? value.rootItemKey);
   const targetAmountRaw =
     typeof value.a === 'number'
@@ -118,6 +122,18 @@ function normalizePlan(value: unknown): PlannerSavePayload {
     rootItemKey,
     targetAmount: targetAmountRaw,
     useProductRecovery: value.pr === 1 || value.useProductRecovery === true,
+    integerMachines:
+      value.im === 0
+        ? false
+        : value.im === 1 ||
+          value.integerMachines === true ||
+          (value.im === undefined && value.integerMachines === undefined),
+    discreteMachineRates:
+      value.dr === 0
+        ? false
+        : value.dr === 1 ||
+          value.discreteMachineRates === true ||
+          (value.dr === undefined && value.discreteMachineRates === undefined),
     selectedRecipeIdByItemKeyHash: normalizeStringRecord(
       value.sr ?? value.selectedRecipeIdByItemKeyHash,
     ),
@@ -236,6 +252,8 @@ function toCompactPlan(plan: PlannerSavePayload): CompactPlannerSharePayload['l'
     a: plan.targetAmount,
     ...(plan.targetUnit ? { tu: plan.targetUnit } : {}),
     ...(plan.useProductRecovery ? { pr: 1 } : {}),
+    im: plan.integerMachines !== false ? 1 : 0,
+    dr: plan.discreteMachineRates !== false ? 1 : 0,
     ...(Object.keys(plan.selectedRecipeIdByItemKeyHash).length
       ? { sr: plan.selectedRecipeIdByItemKeyHash }
       : {}),

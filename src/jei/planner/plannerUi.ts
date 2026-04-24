@@ -10,7 +10,16 @@ export type PlannerNodePosition = {
   y: number;
 };
 
-export type AdvancedPlannerTab = 'summary' | 'tree' | 'graph' | 'line' | 'quant' | 'calc';
+export type PlannerGraphRenderer = 'vue_flow' | 'g6';
+
+export type AdvancedPlannerTab =
+  | 'summary'
+  | 'tree'
+  | 'graph'
+  | 'line'
+  | 'quant'
+  | 'calc'
+  | 'lp_raw';
 
 export type AdvancedPlannerViewState = {
   activeTab?: AdvancedPlannerTab;
@@ -20,6 +29,9 @@ export type AdvancedPlannerViewState = {
     includeCycleSeeds?: boolean;
     selectedNodeId?: string | null;
     nodePositions?: Record<string, PlannerNodePosition>;
+    nodePositionsByRenderer?: Partial<
+      Record<PlannerGraphRenderer, Record<string, PlannerNodePosition>>
+    >;
   };
   quant?: {
     displayUnit?: PlannerTargetUnit;
@@ -48,6 +60,9 @@ export type PlannerSavePayload = {
   targetAmount: number;
   targetUnit?: PlannerTargetUnit;
   useProductRecovery?: boolean;
+  integerMachines?: boolean;
+  discreteMachineRates?: boolean;
+  preferSingleRecipeChain?: boolean;
   selectedRecipeIdByItemKeyHash: Record<string, string>;
   selectedItemIdByTagId: Record<string, ItemId>;
   /** 'advanced' = use LP-backed multi-objective planner */
@@ -66,6 +81,9 @@ export type PlannerInitialState = {
   targetAmount: number;
   targetUnit?: PlannerTargetUnit;
   useProductRecovery?: boolean;
+  integerMachines?: boolean;
+  discreteMachineRates?: boolean;
+  preferSingleRecipeChain?: boolean;
   selectedRecipeIdByItemKeyHash: Record<string, string>;
   selectedItemIdByTagId: Record<string, ItemId>;
   forcedRawItemKeyHashes?: string[];
@@ -76,6 +94,9 @@ export type PlannerLiveState = {
   targetAmount: number;
   targetUnit?: PlannerTargetUnit;
   useProductRecovery?: boolean;
+  integerMachines?: boolean;
+  discreteMachineRates?: boolean;
+  preferSingleRecipeChain?: boolean;
   selectedRecipeIdByItemKeyHash: Record<string, string>;
   selectedItemIdByTagId: Record<string, ItemId>;
   forcedRawItemKeyHashes?: string[];

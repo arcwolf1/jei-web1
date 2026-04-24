@@ -600,6 +600,8 @@ type SavedPlan = {
   targetAmount: number;
   targetUnit?: PlannerTargetUnit;
   useProductRecovery?: boolean;
+  integerMachines?: boolean;
+  discreteMachineRates?: boolean;
   selectedRecipeIdByItemKeyHash: Record<string, string>;
   selectedItemIdByTagId: Record<string, string>;
   createdAt: number;
@@ -616,6 +618,8 @@ function createDefaultPlannerLiveState(): PlannerLiveState {
     targetAmount: 1,
     targetUnit: 'per_minute',
     useProductRecovery: false,
+    integerMachines: true,
+    discreteMachineRates: true,
     selectedRecipeIdByItemKeyHash: {},
     selectedItemIdByTagId: {},
     forcedRawItemKeyHashes: [],
@@ -2153,6 +2157,8 @@ function openPlannerPayload(payload: PlannerSavePayload, loadKey = `share:${Date
     targetAmount: payload.targetAmount,
     ...(payload.targetUnit ? { targetUnit: payload.targetUnit } : {}),
     useProductRecovery: payload.useProductRecovery === true,
+    integerMachines: payload.integerMachines !== false,
+    discreteMachineRates: payload.discreteMachineRates !== false,
     selectedRecipeIdByItemKeyHash: payload.selectedRecipeIdByItemKeyHash,
     selectedItemIdByTagId: payload.selectedItemIdByTagId,
     forcedRawItemKeyHashes: payload.forcedRawItemKeyHashes ?? [],
@@ -2316,6 +2322,8 @@ async function applyRouteState() {
         targetAmount: 1,
         targetUnit: plannerLiveState.value.targetUnit ?? 'per_minute',
         useProductRecovery: plannerLiveState.value.useProductRecovery === true,
+        integerMachines: plannerLiveState.value.integerMachines !== false,
+        discreteMachineRates: plannerLiveState.value.discreteMachineRates !== false,
         selectedRecipeIdByItemKeyHash: auto.selectedRecipeIdByItemKeyHash,
         selectedItemIdByTagId: auto.selectedItemIdByTagId,
         forcedRawItemKeyHashes: plannerLiveState.value.forcedRawItemKeyHashes ?? [],
@@ -3187,6 +3195,8 @@ watch(
       targetAmount: 1,
       targetUnit: plannerLiveState.value.targetUnit ?? 'per_minute',
       useProductRecovery: plannerLiveState.value.useProductRecovery === true,
+      integerMachines: plannerLiveState.value.integerMachines !== false,
+      discreteMachineRates: plannerLiveState.value.discreteMachineRates !== false,
       selectedRecipeIdByItemKeyHash: auto.selectedRecipeIdByItemKeyHash,
       selectedItemIdByTagId: auto.selectedItemIdByTagId,
       forcedRawItemKeyHashes: plannerLiveState.value.forcedRawItemKeyHashes ?? [],
@@ -3919,6 +3929,8 @@ function normalizePlannerLiveState(v: unknown): PlannerLiveState {
     targetAmount: Number.isFinite(targetAmountRaw) && targetAmountRaw > 0 ? targetAmountRaw : 1,
     targetUnit,
     useProductRecovery: obj.useProductRecovery === true,
+    integerMachines: obj.integerMachines !== false,
+    discreteMachineRates: obj.discreteMachineRates !== false,
     selectedRecipeIdByItemKeyHash: normalizeStringRecord(obj.selectedRecipeIdByItemKeyHash),
     selectedItemIdByTagId: normalizeStringRecord(obj.selectedItemIdByTagId),
     forcedRawItemKeyHashes,
@@ -3971,6 +3983,8 @@ async function loadPlans(packId: string): Promise<SavedPlan[]> {
         const selectedItemIdByTagId =
           (obj.selectedItemIdByTagId as Record<string, string> | undefined) ?? {};
         const useProductRecovery = obj.useProductRecovery === true;
+        const integerMachines = obj.integerMachines !== false;
+        const discreteMachineRates = obj.discreteMachineRates !== false;
         const createdAt = typeof obj.createdAt === 'number' ? obj.createdAt : 0;
         const kind = obj.kind === 'advanced' ? 'advanced' : undefined;
         const forcedRawItemKeyHashes = Array.isArray(obj.forcedRawItemKeyHashes)
@@ -4009,6 +4023,8 @@ async function loadPlans(packId: string): Promise<SavedPlan[]> {
           targetAmount,
           ...(targetUnit ? { targetUnit } : {}),
           useProductRecovery,
+          integerMachines,
+          discreteMachineRates,
           selectedRecipeIdByItemKeyHash,
           selectedItemIdByTagId,
           createdAt,
@@ -4059,6 +4075,8 @@ function savePlannerPlan(payload: PlannerSavePayload) {
     targetAmount: payload.targetAmount,
     ...(payload.targetUnit ? { targetUnit: payload.targetUnit } : {}),
     useProductRecovery: payload.useProductRecovery === true,
+    integerMachines: payload.integerMachines !== false,
+    discreteMachineRates: payload.discreteMachineRates !== false,
     selectedRecipeIdByItemKeyHash: payload.selectedRecipeIdByItemKeyHash,
     selectedItemIdByTagId: payload.selectedItemIdByTagId,
     createdAt: Date.now(),
@@ -4082,6 +4100,8 @@ function openSavedPlan(p: SavedPlan) {
       targetAmount: p.targetAmount,
       ...(p.targetUnit ? { targetUnit: p.targetUnit } : {}),
       useProductRecovery: p.useProductRecovery === true,
+      integerMachines: p.integerMachines !== false,
+      discreteMachineRates: p.discreteMachineRates !== false,
       selectedRecipeIdByItemKeyHash: p.selectedRecipeIdByItemKeyHash,
       selectedItemIdByTagId: p.selectedItemIdByTagId,
       kind: 'advanced',
@@ -4099,6 +4119,8 @@ function openSavedPlan(p: SavedPlan) {
       targetAmount: p.targetAmount,
       ...(p.targetUnit ? { targetUnit: p.targetUnit } : {}),
       useProductRecovery: p.useProductRecovery === true,
+      integerMachines: p.integerMachines !== false,
+      discreteMachineRates: p.discreteMachineRates !== false,
       selectedRecipeIdByItemKeyHash: p.selectedRecipeIdByItemKeyHash,
       selectedItemIdByTagId: p.selectedItemIdByTagId,
       ...(p.forcedRawItemKeyHashes ? { forcedRawItemKeyHashes: p.forcedRawItemKeyHashes } : {}),

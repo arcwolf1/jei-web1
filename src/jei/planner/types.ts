@@ -200,6 +200,40 @@ export interface PlannerOptions {
   costs?: CostSettings;
 }
 
+export interface LpFlowItemAmount {
+  key: ItemKey;
+  amountPerSecond: number;
+}
+
+export interface LpFlowFluidAmount {
+  id: string;
+  amountPerSecond: number;
+  unit?: string;
+}
+
+export interface LpFlowRecipeRun {
+  recipeId: string;
+  recipeTypeKey: string;
+  ratePerSecond: number;
+  machineCount: number;
+  machineId?: string;
+  machineName?: string;
+  power?: number;
+  pollution?: number;
+  inputItems: LpFlowItemAmount[];
+  outputItems: LpFlowItemAmount[];
+  inputFluids: LpFlowFluidAmount[];
+  outputFluids: LpFlowFluidAmount[];
+}
+
+export interface LpFlowData {
+  recipes: LpFlowRecipeRun[];
+  targets: LpFlowItemAmount[];
+  externalInputs: LpFlowItemAmount[];
+  unproduceableInputs: LpFlowItemAmount[];
+  surpluses: LpFlowItemAmount[];
+}
+
 /**
  * Planner result
  */
@@ -207,7 +241,16 @@ export interface PlannerResult {
   steps: Step[];
   totals: Totals;
   matrixState?: MatrixState;
+  lpFlow?: LpFlowData;
+  diagnostics?: PlannerDiagnostics;
   resultType: ResultType;
+}
+
+export interface PlannerDiagnostics {
+  solverStatus?: string;
+  solverReturnCode?: string;
+  unboundedRecipeId?: string;
+  unboundedItemHash?: string;
 }
 
 /**

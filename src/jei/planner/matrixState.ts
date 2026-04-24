@@ -18,6 +18,7 @@ import { R_ZERO } from './rational';
 import type { Rational } from './rational';
 import { normalizeRecipe, type NormalizedRecipe } from './recipeAdapter';
 import { convertToPerSecond } from './units';
+import { sortRecipeOptionsForItem } from './planner';
 
 // ─── Extended state ────────────────────────────────────────────────────────────
 
@@ -53,10 +54,7 @@ export interface MatrixStateWithNorm {
 
 // ─── Helpers ───────────────────────────────────────────────────────────────────
 
-function getOrInitItemValues(
-  map: Record<string, ItemValues>,
-  hash: string,
-): ItemValues {
+function getOrInitItemValues(map: Record<string, ItemValues>, hash: string): ItemValues {
   if (!map[hash]) map[hash] = { out: R_ZERO };
   return map[hash];
 }
@@ -79,16 +77,21 @@ export function buildMatrixState(args: {
   selectedRecipeIdByItemKeyHash: Map<string, string>;
   /** normalised tagId → chosen itemId */
   selectedItemIdByTagId: Map<string, string>;
+  /** itemKeyHash values forced to be treated as externally supplied raw inputs */
+  forcedRawItemKeyHashes?: ReadonlySet<string>;
   defaultNs: string;
   maximizeType?: MaximizeType;
+  preferSingleRecipeChain?: boolean;
 }): MatrixStateWithNorm {
   const {
     objectives,
     index,
     selectedRecipeIdByItemKeyHash,
     selectedItemIdByTagId,
+    forcedRawItemKeyHashes,
     defaultNs,
     maximizeType = MaximizeType.Ratio,
+    preferSingleRecipeChain = true,
   } = args;
 
   const recipes = new Map<string, Recipe>();
@@ -121,17 +124,29 @@ export function buildMatrixState(args: {
     if (visitedItems.has(h)) return;
     visitedItems.add(h);
 
+    if (forcedRawItemKeyHashes?.has(h)) {
+      unproduceableIds.add(h);
+      return;
+    }
+
     const producingIds = recipesProducingItem(index, key);
     if (producingIds.length === 0) {
       unproduceableIds.add(h);
       return;
     }
 
-    // Honour user recipe selection; fall back to first (highest-priority) option
-    const selectedId = selectedRecipeIdByItemKeyHash.get(h);
-    const recipeIdToUse = selectedId ?? producingIds[0]!;
+    const recipeIds = !preferSingleRecipeChain
+      ? producingIds
+      : (() => {
+          const selectedRecipeId = selectedRecipeIdByItemKeyHash.get(h);
+          if (selectedRecipeId && producingIds.includes(selectedRecipeId)) return [selectedRecipeId];
+          const sorted = sortRecipeOptionsForItem(index, key, producingIds);
+          return sorted.length ? [sorted[0]!] : producingIds.slice(0, 1);
+        })();
 
-    exploreRecipe(recipeIdToUse);
+    for (const recipeId of recipeIds) {
+      exploreRecipe(recipeId);
+    }
   };
 
   const exploreRecipe = (recipeId: string): void => {
@@ -159,7 +174,13 @@ export function buildMatrixState(args: {
 
     // Resolve tag inputs — at LP time tags should already be resolved via
     // selectedItemIdByTagId; we exploreItem on the resolved id here as well
-    const { inputs } = extractRawInputs(recipe, recipeType, index, defaultNs, selectedItemIdByTagId);
+    const { inputs } = extractRawInputs(
+      recipe,
+      recipeType,
+      index,
+      defaultNs,
+      selectedItemIdByTagId,
+    );
     for (const key of inputs) {
       exploreItem(key);
     }
@@ -199,7 +220,9 @@ export function buildMatrixState(args: {
       // Limit: take the tightest (minimum) bound
       const existing = itemLimits[h];
       itemLimits[h] = existing
-        ? (ratePerSecond.lt(existing) ? ratePerSecond : existing)
+        ? ratePerSecond.lt(existing)
+          ? ratePerSecond
+          : existing
         : ratePerSecond;
     }
   }

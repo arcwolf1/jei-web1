@@ -76,13 +76,33 @@ export function normalizeRecipe(
   const fluidsIn = new Map<string, number>();
   const fluidsOut = new Map<string, number>();
 
+  const rawItemInputs = new Map<string, number>();
+  const rawItemOutputs = new Map<string, number>();
+  const itemKeyByHash = new Map<string, ItemKey>();
+  const inputItemOrder: string[] = [];
+  const outputItemOrder: string[] = [];
+
+  const rawFluidInputs = new Map<string, number>();
+  const rawFluidOutputs = new Map<string, number>();
+  const inputFluidOrder: string[] = [];
+  const outputFluidOrder: string[] = [];
+
+  const pushOrdered = (order: string[], key: string) => {
+    if (!order.includes(key)) order.push(key);
+  };
+
   for (const stack of inputs) {
     const amount = finiteOr(stack.amount, 0);
     if (amount <= 0) continue;
     if (stack.kind === 'item') {
-      inputItems.push({ key: stackToItemKey(stack), amount });
+      const key = stackToItemKey(stack);
+      const h = itemKeyHash(key);
+      itemKeyByHash.set(h, itemKeyByHash.get(h) ?? key);
+      rawItemInputs.set(h, (rawItemInputs.get(h) ?? 0) + amount);
+      pushOrdered(inputItemOrder, h);
     } else if (stack.kind === 'fluid') {
-      fluidsIn.set(stack.id, (fluidsIn.get(stack.id) ?? 0) + amount);
+      rawFluidInputs.set(stack.id, (rawFluidInputs.get(stack.id) ?? 0) + amount);
+      pushOrdered(inputFluidOrder, stack.id);
     }
     // 'tag' inputs should have been resolved to concrete items before reaching LP
   }
@@ -91,10 +111,38 @@ export function normalizeRecipe(
     const amount = finiteOr(stack.amount, 0);
     if (amount <= 0) continue;
     if (stack.kind === 'item') {
-      outputItems.push({ key: stackToItemKey(stack), amount });
+      const key = stackToItemKey(stack);
+      const h = itemKeyHash(key);
+      itemKeyByHash.set(h, itemKeyByHash.get(h) ?? key);
+      rawItemOutputs.set(h, (rawItemOutputs.get(h) ?? 0) + amount);
+      pushOrdered(outputItemOrder, h);
     } else if (stack.kind === 'fluid') {
-      fluidsOut.set(stack.id, (fluidsOut.get(stack.id) ?? 0) + amount);
+      rawFluidOutputs.set(stack.id, (rawFluidOutputs.get(stack.id) ?? 0) + amount);
+      pushOrdered(outputFluidOrder, stack.id);
     }
+  }
+
+  // Reduce same-item input/output loops to net production before the LP sees them.
+  for (const h of outputItemOrder) {
+    const net = (rawItemOutputs.get(h) ?? 0) - (rawItemInputs.get(h) ?? 0);
+    if (net > 0) {
+      outputItems.push({ key: itemKeyByHash.get(h)!, amount: net });
+    }
+  }
+  for (const h of inputItemOrder) {
+    const net = (rawItemInputs.get(h) ?? 0) - (rawItemOutputs.get(h) ?? 0);
+    if (net > 0) {
+      inputItems.push({ key: itemKeyByHash.get(h)!, amount: net });
+    }
+  }
+
+  for (const id of outputFluidOrder) {
+    const net = (rawFluidOutputs.get(id) ?? 0) - (rawFluidInputs.get(id) ?? 0);
+    if (net > 0) fluidsOut.set(id, net);
+  }
+  for (const id of inputFluidOrder) {
+    const net = (rawFluidInputs.get(id) ?? 0) - (rawFluidOutputs.get(id) ?? 0);
+    if (net > 0) fluidsIn.set(id, net);
   }
 
   // Build hash maps for O(1) LP coefficient lookup
@@ -109,7 +157,12 @@ export function normalizeRecipe(
     outputByHash.set(h, (outputByHash.get(h) ?? 0) + item.amount);
   }
 
-  const time = Math.max(getRecipeTime(recipe, recipeType), 1e-6);
+  const defaults = recipeType?.defaults ?? {};
+  const rawPower = finiteOr(defaults.power, NaN);
+  const rawPollution = finiteOr(defaults.pollution, NaN);
+  const rawSpeed = finiteOr(defaults.speed, NaN);
+  const effectiveSpeed = Number.isFinite(rawSpeed) && rawSpeed > 0 ? rawSpeed : 1;
+  const time = Math.max(getRecipeTime(recipe, recipeType) / effectiveSpeed, 1e-6);
 
   // Machine info
   let machineId: string | undefined;
@@ -121,12 +174,6 @@ export function normalizeRecipe(
       machineName = m.name;
     }
   }
-
-  // Default energy/pollution from recipeType.defaults
-  const defaults = recipeType?.defaults ?? {};
-  const rawPower = finiteOr(defaults.power, NaN);
-  const rawPollution = finiteOr(defaults.pollution, NaN);
-  const rawSpeed = finiteOr(defaults.speed, NaN);
 
   const result: NormalizedRecipe = {
     id: recipe.id,

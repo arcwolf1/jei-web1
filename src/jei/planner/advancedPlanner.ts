@@ -13,12 +13,17 @@
 import type { ItemKey } from '../types';
 import type { JeiIndex } from '../indexing/buildIndex';
 import { itemKeyHash } from '../indexing/key';
-import type { ObjectiveState, Step, Totals, PlannerResult } from './types';
+import type { ObjectiveState, Step, Totals, PlannerResult, LpFlowData } from './types';
 import { ResultType, MaximizeType } from './types';
 import { rational } from './rational';
 import type { Rational } from './rational';
 import { buildMatrixState } from './matrixState';
-import { solveLp, ensureGlpkLoaded, DEFAULT_SOLVER_COSTS, type SolverCostSettings } from './glpkSolver';
+import {
+  solveLp,
+  ensureGlpkLoaded,
+  DEFAULT_SOLVER_COSTS,
+  type SolverCostSettings,
+} from './glpkSolver';
 
 // ─── Public API ────────────────────────────────────────────────────────────────
 
@@ -33,12 +38,23 @@ export interface AdvancedPlannerInput {
   selectedRecipeIdByItemKeyHash: Map<string, string>;
   /** normalised tagId → chosen itemId */
   selectedItemIdByTagId: Map<string, string>;
+  /** itemKeyHash values forced to be treated as externally supplied raw inputs */
+  forcedRawItemKeyHashes?: ReadonlySet<string>;
   /** Default game namespace (from pack.manifest.gameId) */
   defaultNs: string;
   /** Maximization strategy */
   maximizeType?: MaximizeType;
   /** Override LP cost weights */
   costs?: Partial<SolverCostSettings>;
+  /** Require integer machine counts instead of fractional LP machine usage */
+  integerMachines?: boolean;
+  /** Allow integer-machine solutions to run machines at reduced discrete rates */
+  discreteMachineRates?: boolean;
+  /**
+   * Prefer a single deterministic recipe chain per item in LP mode instead of
+   * allowing multiple candidate producers to coexist and split flow.
+   */
+  preferSingleRecipeChain?: boolean;
 }
 
 // ─── Implementation ────────────────────────────────────────────────────────────
@@ -49,9 +65,7 @@ export interface AdvancedPlannerInput {
  * Returns a PlannerResult whose Step[] can be consumed by the same view
  * components that handle buildEnhancedRequirementTree() output.
  */
-export async function solveAdvanced(
-  input: AdvancedPlannerInput,
-): Promise<PlannerResult> {
+export async function solveAdvanced(input: AdvancedPlannerInput): Promise<PlannerResult> {
   // Ensure the WASM module is ready
   await ensureGlpkLoaded();
 
@@ -60,9 +74,13 @@ export async function solveAdvanced(
     index,
     selectedRecipeIdByItemKeyHash,
     selectedItemIdByTagId,
+    forcedRawItemKeyHashes,
     defaultNs,
     maximizeType = MaximizeType.Ratio,
     costs = {},
+    integerMachines = false,
+    discreteMachineRates = true,
+    preferSingleRecipeChain = true,
   } = input;
 
   const solverCosts = { ...DEFAULT_SOLVER_COSTS, ...costs };
@@ -73,17 +91,36 @@ export async function solveAdvanced(
     index,
     selectedRecipeIdByItemKeyHash,
     selectedItemIdByTagId,
+    ...(forcedRawItemKeyHashes ? { forcedRawItemKeyHashes } : {}),
     defaultNs,
     maximizeType,
+    preferSingleRecipeChain,
   });
 
   // ── 2. Solve LP ───────────────────────────────────────────────────────────
-  const solverResult = await solveLp(state, solverCosts);
+  const solverResult = await solveLp(state, solverCosts, {
+    integerMachines,
+    discreteMachineRates,
+  });
+  const lpFlow = buildLpFlowData(state, solverResult);
 
   if (solverResult.resultType !== ResultType.Solved) {
     return {
       steps: [],
       totals: {},
+      lpFlow,
+      diagnostics: {
+        ...(solverResult.solverStatus ? { solverStatus: solverResult.solverStatus } : {}),
+        ...(solverResult.solverReturnCode
+          ? { solverReturnCode: solverResult.solverReturnCode }
+          : {}),
+        ...(solverResult.unboundedRecipeId
+          ? { unboundedRecipeId: solverResult.unboundedRecipeId }
+          : {}),
+        ...(solverResult.unboundedItemHash
+          ? { unboundedItemHash: solverResult.unboundedItemHash }
+          : {}),
+      },
       resultType: solverResult.resultType,
     };
   }
@@ -109,7 +146,8 @@ export async function solveAdvanced(
     if (rate < 1e-12) continue; // Skip non-running recipes
 
     // machine count = rate (crafts/s) × time (s/craft)
-    const machineCount = rate * norm.time;
+    const effectiveMachineCount = rate * norm.time;
+    const machineCount = solverResult.recipeMachineCounts.get(recipeId) ?? effectiveMachineCount;
     const machinesRational = rational(machineCount);
 
     // For multi-output recipes, prefer the output that matches a user demand
@@ -126,18 +164,15 @@ export async function solveAdvanced(
     const itemKeyOrFallback: ItemKey = itemKey ?? { id: recipeId };
 
     // Production rate of the primary output  (items/s)
-    const itemsPerSecond = primaryOutput
-      ? (norm.outputByHash.get(itemHash) ?? 0) * rate
-      : 0;
+    const itemsPerSecond = primaryOutput ? (norm.outputByHash.get(itemHash) ?? 0) * rate : 0;
 
     const itemsRational = rational(itemsPerSecond);
-    const surplusVal = primaryOutput
-      ? (solverResult.surpluses.get(itemHash) ?? 0)
-      : 0;
+    const surplusVal = primaryOutput ? (solverResult.surpluses.get(itemHash) ?? 0) : 0;
 
     // Power / pollution for this step
-    const stepPower = norm.defaultPower != null ? machineCount * norm.defaultPower : 0;
-    const stepPollution = norm.defaultPollution != null ? machineCount * norm.defaultPollution : 0;
+    const stepPower = norm.defaultPower != null ? effectiveMachineCount * norm.defaultPower : 0;
+    const stepPollution =
+      norm.defaultPollution != null ? effectiveMachineCount * norm.defaultPollution : 0;
 
     if (stepPower > 0) totalPower = totalPower.add(rational(stepPower));
     if (stepPollution > 0) totalPollution = totalPollution.add(rational(stepPollution));
@@ -220,7 +255,93 @@ export async function solveAdvanced(
   return {
     steps,
     totals,
+    lpFlow,
+    diagnostics: {
+      ...(solverResult.solverStatus ? { solverStatus: solverResult.solverStatus } : {}),
+      ...(solverResult.solverReturnCode ? { solverReturnCode: solverResult.solverReturnCode } : {}),
+      ...(solverResult.unboundedRecipeId
+        ? { unboundedRecipeId: solverResult.unboundedRecipeId }
+        : {}),
+      ...(solverResult.unboundedItemHash
+        ? { unboundedItemHash: solverResult.unboundedItemHash }
+        : {}),
+    },
     resultType: ResultType.Solved,
+  };
+}
+
+function buildLpFlowData(
+  state: ReturnType<typeof buildMatrixState>,
+  solverResult: Awaited<ReturnType<typeof solveLp>>,
+): LpFlowData {
+  const recipes = Array.from(state.normalizedRecipes.entries())
+    .map(([recipeId, norm]) => {
+      const ratePerSecond = solverResult.recipeRates.get(recipeId) ?? 0;
+      if (ratePerSecond <= 1e-12) return null;
+
+      const effectiveMachineCount = ratePerSecond * norm.time;
+      const machineCount = solverResult.recipeMachineCounts.get(recipeId) ?? effectiveMachineCount;
+      const power =
+        norm.defaultPower != null ? effectiveMachineCount * norm.defaultPower : undefined;
+      const pollution =
+        norm.defaultPollution != null ? effectiveMachineCount * norm.defaultPollution : undefined;
+
+      return {
+        recipeId,
+        recipeTypeKey: norm.recipeTypeKey,
+        ratePerSecond,
+        machineCount,
+        ...(norm.machineId ? { machineId: norm.machineId } : {}),
+        ...(norm.machineName ? { machineName: norm.machineName } : {}),
+        ...(power !== undefined && power > 0 ? { power } : {}),
+        ...(pollution !== undefined && pollution > 0 ? { pollution } : {}),
+        inputItems: norm.inputItems
+          .map((item) => ({
+            key: item.key,
+            amountPerSecond: item.amount * ratePerSecond,
+          }))
+          .filter((item) => item.amountPerSecond > 1e-12),
+        outputItems: norm.outputItems
+          .map((item) => ({
+            key: item.key,
+            amountPerSecond: item.amount * ratePerSecond,
+          }))
+          .filter((item) => item.amountPerSecond > 1e-12),
+        inputFluids: Array.from(norm.fluidsIn.entries())
+          .map(([id, amountPerCraft]) => ({
+            id,
+            amountPerSecond: amountPerCraft * ratePerSecond,
+          }))
+          .filter((fluid) => fluid.amountPerSecond > 1e-12),
+        outputFluids: Array.from(norm.fluidsOut.entries())
+          .map(([id, amountPerCraft]) => ({
+            id,
+            amountPerSecond: amountPerCraft * ratePerSecond,
+          }))
+          .filter((fluid) => fluid.amountPerSecond > 1e-12),
+      };
+    })
+    .filter((run): run is NonNullable<typeof run> => run !== null);
+
+  const buildItemAmounts = (entries: Iterable<[string, number]>) =>
+    Array.from(entries)
+      .map(([hash, amountPerSecond]) => {
+        const key = state.itemKeyByHash.get(hash);
+        if (!key || amountPerSecond <= 1e-12) return null;
+        return { key, amountPerSecond };
+      })
+      .filter((entry): entry is NonNullable<typeof entry> => entry !== null);
+
+  const targets = buildItemAmounts(
+    state.itemIds.map((hash) => [hash, state.itemValues[hash]?.out?.toNumber() ?? 0] as const),
+  );
+
+  return {
+    recipes,
+    targets,
+    externalInputs: buildItemAmounts(solverResult.externalInputs.entries()),
+    unproduceableInputs: buildItemAmounts(solverResult.unproduceableValues.entries()),
+    surpluses: buildItemAmounts(solverResult.surpluses.entries()),
   };
 }
 

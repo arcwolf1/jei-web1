@@ -1,18 +1,50 @@
 # About
 
 ## Build
-- Version: pages-build-5-g5b64e25-dirty
-- Commit: 5b64e25 (5b64e257864c4f6b122e8a171d92226c110c7c6c)
-- Commit count: 163
-- Subject: feat: 添加基于域名的UI策略和移动端适配
+- Version: pages-build-11-g3ec72c6-dirty
+- Commit: 3ec72c6 (3ec72c630fb337c364b0bea6bd8a406306b2a798)
+- Commit count: 169
+- Subject: feat(planner): add advanced planner views and state management
 - Author: AndreaFrederica
-- Date: 2026-04-07T20:22:18+08:00
-- Generated at: 2026-04-07T18:44:42.554Z
+- Date: 2026-04-22T03:59:03+08:00
+- Generated at: 2026-04-21T20:44:06.551Z
 - Remote: https://github.com/AndreaFrederica/jei-web.git
 
 ## Version History
 
-### Unreleased (2026-04-07T20:22:18+08:00)
+### Unreleased (2026-04-22T03:59:03+08:00)
+- 3ec72c6 2026-04-22T03:59:03+08:00
+  feat(planner): add advanced planner views and state management
+  
+  - Implemented `useAdvancedPlannerQuantView` for quantitative flow modeling.
+  - Created `useAdvancedPlannerSummaryView` to summarize item and fluid totals.
+  - Developed `useAdvancedPlannerTreeView` for hierarchical tree representation of planner nodes.
+  - Added `useAdvancedPlannerViewState` for managing view state across different planner components.
+  - Enhanced utility functions for handling node positions and formatting amounts.
+- e918ef7 2026-04-21T05:03:11+08:00
+  Refactor code structure for improved readability and maintainability
+- 8132061 2026-04-21T04:18:57+08:00
+  fix: 修复LP规划器的大量逻辑bug 发现classic给规划器在新版本存在大量无法正常规划的bug
+- 0766d0c 2026-04-18T01:10:33+08:00
+  feat: 添加Warfarin Wiki的备用镜像链接
+- 5b47dff 2026-04-08T04:10:11+08:00
+  fix(ui): 优化移动端布局并修复标签页溢出问题
+  
+  - 为移动端隐藏键盘快捷键提示，避免标签文字过长
+  - 动态设置标签页箭头显示，改善移动端导航体验
+  - 添加 CSS 类限制容器最小宽度，防止内容溢出
+  - 在 CraftingPlannerView 中适配移动端布局，调整工具栏响应式设计
+- 77b407c 2026-04-08T03:35:36+08:00
+  feat: 新增配方数据源追踪和移动端界面优化
+  
+  - 在配方类型中增加 sourcePackIds 字段以追踪数据来源
+  - 为物品查询添加 aggregateHoverSources 支持，增强跨数据包匹配
+  - 新增配方查询数据源显示开关，可在设置中控制是否显示配方来源标签
+  - 优化移动端底部数据源栏，支持折叠功能并改进布局适配
+  - 重构 Wiki 组件，支持基于数据源的物品解析和导航
+  - 新增构建信息对话框，集中展示版本和构建详情
+  - 改进 Warfarin 配方渲染器，优化配方表格布局和显示效果
+  - 更新多语言翻译，添加相关设置项和界面文本
 - 5b64e25 2026-04-07T20:22:18+08:00
   feat: 添加基于域名的UI策略和移动端适配
   

@@ -1,25 +1,48 @@
 <template>
   <div class="fit column">
     <!-- Planner 标签页 -->
-    <crafting-planner-view
+    <div
       v-if="pack && index && currentItemKey"
       v-show="activeTab === 'planner'"
       class="col planner-tab-pane q-pa-md"
-      :pack="pack"
-      :index="index"
-      :root-item-key="currentItemKey"
-      :item-defs-by-key-hash="itemDefsByKeyHash"
-      :get-tag-display-name="getTagDisplayName"
-      :initial-state="plannerInitialState"
-      :initial-tab="plannerTab"
-      @item-click="$emit('item-click', $event)"
-      @save-plan="$emit('save-plan', $event)"
-      @share-plan="$emit('share-plan', $event)"
-      @share-plan-json-url="$emit('share-plan-json-url', $event)"
-      @state-change="$emit('state-change', $event)"
-      @item-mouseenter="$emit('item-mouseenter', $event)"
-      @item-mouseleave="$emit('item-mouseleave')"
-    />
+    >
+      <advanced-planner
+        v-if="embeddedPlannerMode !== 'classic'"
+        class="planner-mode-pane"
+        :pack="pack"
+        :index="index"
+        :item-defs-by-key-hash="itemDefsByKeyHash"
+        :root-item-key="currentItemKey"
+        :initial-state="plannerInitialState"
+        :initial-tab="plannerTab"
+        @item-click="$emit('item-click', $event)"
+        @save-plan="$emit('save-plan', $event)"
+        @share-plan="$emit('share-plan', $event)"
+        @share-plan-json-url="$emit('share-plan-json-url', $event)"
+        @state-change="$emit('state-change', $event)"
+        @item-mouseenter="$emit('item-mouseenter', $event)"
+        @item-mouseleave="$emit('item-mouseleave')"
+      />
+
+      <crafting-planner-view
+        v-else
+        class="planner-mode-pane"
+        :pack="pack"
+        :index="index"
+        :root-item-key="currentItemKey"
+        :item-defs-by-key-hash="itemDefsByKeyHash"
+        :get-tag-display-name="getTagDisplayName"
+        :initial-state="plannerInitialState"
+        :initial-tab="plannerTab"
+        @item-click="$emit('item-click', $event)"
+        @save-plan="$emit('save-plan', $event)"
+        @share-plan="$emit('share-plan', $event)"
+        @share-plan-json-url="$emit('share-plan-json-url', $event)"
+        @state-change="$emit('state-change', $event)"
+        @item-mouseenter="$emit('item-mouseenter', $event)"
+        @item-mouseleave="$emit('item-mouseleave')"
+      />
+    </div>
 
     <!-- Wiki 标签页内容 -->
     <div v-show="activeTab === 'wiki'" class="col overflow-auto q-pa-md">
@@ -576,6 +599,7 @@ import { usePackRoutingRuntimeStore } from 'src/stores/packRoutingRuntime';
 import StackView from 'src/jei/components/StackView.vue';
 import RecipeViewer from 'src/jei/components/RecipeViewer.vue';
 import CraftingPlannerView from 'src/jei/components/CraftingPlannerView.vue';
+import AdvancedPlanner from './AdvancedPlanner.vue';
 import WikiDocument from 'src/components/wiki/WikiDocument.vue';
 import WikiChapterGroup from 'src/components/wiki/layout/WikiChapterGroup.vue';
 import SimpleWikiRenderer from 'src/components/wiki/SimpleWikiRenderer.vue';
@@ -721,6 +745,7 @@ const props = defineProps<{
   recipeTypesByKey: Map<string, any>; // eslint-disable-line @typescript-eslint/no-explicit-any
   plannerInitialState: PlannerInitialState | null;
   plannerTab: 'tree' | 'graph' | 'line' | 'calc' | 'quant';
+  embeddedPlannerMode?: 'advanced' | 'classic';
   pluginContext: PluginItemContext;
   pluginTabs: PluginTabRuntime[];
   resolvePluginApi: (
@@ -733,6 +758,7 @@ const props = defineProps<{
 }>();
 
 const mountedPluginTabs = ref<Record<string, boolean>>({});
+
 
 watch(
   () => [props.activeTab, props.pluginTabs] as const,
@@ -1649,8 +1675,15 @@ provide('wikiImageOpen', openViewer);
 }
 
 .planner-tab-pane {
+  display: flex;
+  flex-direction: column;
   overflow-y: auto;
   overflow-x: hidden;
+  min-height: 0;
+  min-width: 0;
+}
+
+.planner-mode-pane {
   min-width: 0;
 }
 

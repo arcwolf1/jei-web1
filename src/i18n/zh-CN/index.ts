@@ -190,6 +190,8 @@ export default {
   machineName: '机器名称',
 
   // Planner
+  plannerMode: '规划器模式',
+  classicPlanner: '传统规划器',
   plannerTabTree: '树结构 (T)',
   plannerTabGraph: '节点图 (G)',
   plannerTabLine: '生产线 (L)',
@@ -328,6 +330,14 @@ export default {
   useProductRecovery: '使用产物回收',
   lpMode: 'LP优化模式',
   lpModeTooltip: '启用后使用线性规划求解器自动优化配方组合。',
+  integerMachineMode: '整数机器数',
+  integerMachineModeTooltip: '启用后按整数机器台数求解，避免连续 LP 产生 0.23 台这类小数机器。',
+  discreteMachineRateMode: '允许降速机器',
+  discreteMachineRateModeTooltip:
+    '整数机器模式下，允许单台机器以 1/2、1/4 等离散速率运行，减少为凑满整速而额外增加整机。',
+  preferSingleRecipeChain: '避免同质线路分流',
+  preferSingleRecipeChainTooltip:
+    '启用后，LP 对每个物品默认只保留一个确定性的候选配方链；优先使用已选配方，否则按稳定排序选择一个，避免相近线路被均分。',
   autoRecipePlusLP: '自动配方 + LP',
   autoRecipePlusLPTooltip: '自动选择最优配方，然后用 LP 求解',
   lpRawData: 'LP 原始数据',
@@ -343,6 +353,10 @@ export default {
   treatAsRawMaterial: '视为原料',
   setAsRawMaterial: '设为原料',
   cancelRawMaterial: '取消原料',
+  calcRecomputeRequired: '当前结果已过期。你刚刚修改了原料或配方选择，请重新计算以刷新结果。',
+  recomputeNow: '重新计算',
+  lpSolveFailedAdjustSelections:
+    'LP 求解失败。请继续调整配方/原料设置；如果出现新增的待选择项，先完成这些选择后再重试。',
   rawMaterialList: '视为原料清单（可取消）',
   intermediateProductionCount: '中间产物生产计数',
   recoveryOutput: '回收产出',

@@ -101,6 +101,187 @@ type ItemNodeAgg = {
   recoverySourceRecipeTypeKey?: string;
 };
 
+function productionLineMergeEdgeKey(e: EdgeDraft): string {
+  return e.kind === 'item'
+    ? `${e.source}->${e.target}:i:${itemKeyHash(e.itemKey)}:${e.recovery ? 'r' : e.surplus ? 's' : 'n'}`
+    : `${e.source}->${e.target}:f:${e.fluidId}:${e.unit ?? ''}`;
+}
+
+function mergeProductionLineEdges(
+  edges: Iterable<EdgeDraft | ProductionLineEdge>,
+): ProductionLineEdge[] {
+  const merged = new Map<string, ProductionLineEdge>();
+  for (const edge of edges) {
+    if (edge.kind === 'item') {
+      const draft: ItemEdgeDraft = {
+        kind: 'item',
+        source: edge.source,
+        target: edge.target,
+        itemKey: edge.itemKey,
+        amount: edge.amount,
+      };
+      if (edge.recovery) draft.recovery = true;
+      if (edge.surplus) draft.surplus = true;
+
+      const key = productionLineMergeEdgeKey(draft);
+      const prev = merged.get(key);
+      if (!prev) {
+        merged.set(key, { ...draft, id: `e:${key}` });
+        continue;
+      }
+      prev.amount += draft.amount;
+      continue;
+    }
+
+    const draft: FluidEdgeDraft = {
+      kind: 'fluid',
+      source: edge.source,
+      target: edge.target,
+      fluidId: edge.fluidId,
+      amount: edge.amount,
+    };
+    if (edge.unit) draft.unit = edge.unit;
+
+    const key = productionLineMergeEdgeKey(draft);
+    const prev = merged.get(key);
+    if (!prev) {
+      merged.set(key, { ...draft, id: `e:${key}` });
+      continue;
+    }
+    prev.amount += draft.amount;
+  }
+  return Array.from(merged.values());
+}
+
+export function collapseProductionLineIntermediateItems(
+  nodes: ProductionLineNode[],
+  edges: ProductionLineEdge[],
+): { nodes: ProductionLineNode[]; edges: ProductionLineEdge[] } {
+  const collapseTolerance = 1e-9;
+  const itemNodes = nodes.filter((n): n is Extract<ProductionLineNode, { kind: 'item' }> => n.kind === 'item');
+  const removedItemNodeIds = new Set<string>();
+  const removeEdgeIds = new Set<string>();
+  const addedEdges: EdgeDraft[] = [];
+
+  const incomingByItem = new Map<string, ItemEdge[]>();
+  const outgoingByItem = new Map<string, ItemEdge[]>();
+  itemNodes.forEach((n) => {
+    incomingByItem.set(n.nodeId, []);
+    outgoingByItem.set(n.nodeId, []);
+  });
+  edges.forEach((e) => {
+    if (e.kind !== 'item') return;
+    if (e.target.startsWith('i:')) (incomingByItem.get(e.target) ?? []).push(e);
+    if (e.source.startsWith('i:')) (outgoingByItem.get(e.source) ?? []).push(e);
+  });
+
+  itemNodes.forEach((n) => {
+    const incomingAll = incomingByItem.get(n.nodeId) ?? [];
+    const outgoingAll = outgoingByItem.get(n.nodeId) ?? [];
+    const incoming = incomingAll.filter((e) => e.source.startsWith('m:'));
+    const outgoing = outgoingAll.filter((e) => e.target.startsWith('m:'));
+    const keep =
+      !!n.isRoot ||
+      !!n.recovery ||
+      !!n.isSurplus ||
+      (n.seedAmount ?? 0) > 0 ||
+      incoming.length !== incomingAll.length ||
+      outgoing.length !== outgoingAll.length ||
+      incoming.length === 0 ||
+      outgoing.length === 0;
+    if (keep) return;
+
+    const producerChunks = incoming
+      .slice()
+      .sort((a, b) => a.source.localeCompare(b.source) || a.id.localeCompare(b.id))
+      .map((edge) => ({ source: edge.source, amount: edge.amount }));
+    const consumerChunks = outgoing
+      .slice()
+      .sort((a, b) => a.target.localeCompare(b.target) || a.id.localeCompare(b.id))
+      .map((edge) => ({
+        target: edge.target,
+        itemKey: edge.itemKey,
+        recovery: edge.recovery,
+        amount: edge.amount,
+      }));
+
+    const bridgedEdges: EdgeDraft[] = [];
+    let producerIdx = 0;
+    let consumerIdx = 0;
+    while (producerIdx < producerChunks.length && consumerIdx < consumerChunks.length) {
+      const producer = producerChunks[producerIdx]!;
+      const consumer = consumerChunks[consumerIdx]!;
+      const amount = Math.min(producer.amount, consumer.amount);
+      if (amount > collapseTolerance) {
+        bridgedEdges.push({
+          kind: 'item',
+          source: producer.source,
+          target: consumer.target,
+          itemKey: consumer.itemKey,
+          amount,
+          ...(consumer.recovery ? { recovery: true } : {}),
+        });
+      }
+
+      producer.amount -= amount;
+      consumer.amount -= amount;
+      if (producer.amount <= collapseTolerance) producerIdx += 1;
+      if (consumer.amount <= collapseTolerance) consumerIdx += 1;
+    }
+
+    const leftoverIncoming = producerChunks.reduce(
+      (sum, chunk) => sum + (chunk.amount > collapseTolerance ? chunk.amount : 0),
+      0,
+    );
+    const leftoverOutgoing = consumerChunks.reduce(
+      (sum, chunk) => sum + (chunk.amount > collapseTolerance ? chunk.amount : 0),
+      0,
+    );
+    if (leftoverIncoming > collapseTolerance || leftoverOutgoing > collapseTolerance) return;
+
+    incoming.forEach((e) => removeEdgeIds.add(e.id));
+    outgoing.forEach((e) => removeEdgeIds.add(e.id));
+    removedItemNodeIds.add(n.nodeId);
+    addedEdges.push(...bridgedEdges);
+  });
+
+  const nextEdges = mergeProductionLineEdges(
+    [
+      ...edges
+        .filter((e) => !removeEdgeIds.has(e.id))
+        .filter((e) => !removedItemNodeIds.has(e.source) && !removedItemNodeIds.has(e.target)),
+      ...addedEdges,
+    ],
+  );
+
+  let nextNodes = nodes.filter((n) => !removedItemNodeIds.has(n.nodeId));
+
+  const amountByFinalNodeId = new Map<string, number>();
+  nextEdges.forEach((e) => {
+    if (e.kind === 'item') {
+      const isFromMachine = e.source.startsWith('m:');
+      const isToMachine = e.target.startsWith('m:');
+      const isFromItem = e.source.startsWith('i:');
+      const isToItem = e.target.startsWith('i:');
+      if (isFromMachine && isToItem) {
+        amountByFinalNodeId.set(e.target, (amountByFinalNodeId.get(e.target) ?? 0) + e.amount);
+      } else if (isFromItem && isToMachine) {
+        amountByFinalNodeId.set(e.source, (amountByFinalNodeId.get(e.source) ?? 0) + e.amount);
+      }
+    } else {
+      amountByFinalNodeId.set(e.source, (amountByFinalNodeId.get(e.source) ?? 0) + e.amount);
+    }
+  });
+
+  nextNodes = nextNodes.map((n) => {
+    if (n.kind === 'item') return { ...n, amount: amountByFinalNodeId.get(n.nodeId) ?? 0 };
+    if (n.kind === 'fluid') return { ...n, amount: amountByFinalNodeId.get(n.nodeId) ?? 0 };
+    return n;
+  });
+
+  return { nodes: nextNodes, edges: nextEdges };
+}
+
 export function buildProductionLineModel(args: {
   root: AnyNode;
   rootItemKey?: ItemKey;
@@ -537,122 +718,7 @@ export function buildProductionLineModel(args: {
   let edges: ProductionLineEdge[] = Array.from(edgeByKey.values());
 
   if (collapseIntermediateItems) {
-    const itemNodes = nodes.filter((n): n is Extract<ProductionLineNode, { kind: 'item' }> => n.kind === 'item');
-    const removedItemNodeIds = new Set<string>();
-    const removeEdgeIds = new Set<string>();
-    const addedEdges: EdgeDraft[] = [];
-
-    const incomingByItem = new Map<string, ItemEdge[]>();
-    const outgoingByItem = new Map<string, ItemEdge[]>();
-    itemNodes.forEach((n) => {
-      incomingByItem.set(n.nodeId, []);
-      outgoingByItem.set(n.nodeId, []);
-    });
-    edges.forEach((e) => {
-      if (e.kind !== 'item') return;
-      if (e.target.startsWith('i:')) (incomingByItem.get(e.target) ?? []).push(e);
-      if (e.source.startsWith('i:')) (outgoingByItem.get(e.source) ?? []).push(e);
-    });
-
-    itemNodes.forEach((n) => {
-      const incoming = (incomingByItem.get(n.nodeId) ?? []).filter((e) => e.source.startsWith('m:'));
-      const outgoing = (outgoingByItem.get(n.nodeId) ?? []).filter((e) => e.target.startsWith('m:'));
-      const keep =
-        !!n.isRoot ||
-        !!n.recovery ||
-        (n.seedAmount ?? 0) > 0 ||
-        incoming.length === 0 ||
-        outgoing.length === 0;
-      if (keep) return;
-
-      const producer = incoming
-        .slice()
-        .sort((a, b) => b.amount - a.amount)[0];
-      if (!producer) return;
-
-      incoming.forEach((e) => removeEdgeIds.add(e.id));
-      outgoing.forEach((e) => removeEdgeIds.add(e.id));
-      removedItemNodeIds.add(n.nodeId);
-
-      outgoing.forEach((cons) => {
-        addedEdges.push({
-          kind: 'item',
-          source: producer.source,
-          target: cons.target,
-          itemKey: cons.itemKey,
-          amount: cons.amount,
-          ...(cons.recovery ? { recovery: true } : {}),
-        });
-      });
-    });
-
-    const mergeEdgeKey = (e: EdgeDraft) =>
-      e.kind === 'item'
-        ? `${e.source}->${e.target}:i:${itemKeyHash(e.itemKey)}:${e.recovery ? 'r' : 'n'}`
-        : `${e.source}->${e.target}:f:${e.fluidId}:${e.unit ?? ''}`;
-
-    const merged = new Map<string, ProductionLineEdge>();
-    const addMerged = (e: EdgeDraft) => {
-      const k = mergeEdgeKey(e);
-      const prev = merged.get(k);
-      if (!prev) {
-        merged.set(k, { ...(e as ProductionLineEdge), id: `e:${k}` });
-        return;
-      }
-      prev.amount += e.amount;
-    };
-
-    edges
-      .filter((e) => !removeEdgeIds.has(e.id))
-      .filter((e) => !removedItemNodeIds.has(e.source) && !removedItemNodeIds.has(e.target))
-      .forEach((e) => {
-        if (e.kind === 'item') {
-          addMerged({
-            kind: 'item',
-            source: e.source,
-            target: e.target,
-            itemKey: e.itemKey,
-            amount: e.amount,
-            ...(e.recovery ? { recovery: true } : {}),
-          });
-        } else {
-          addMerged({
-            kind: 'fluid',
-            source: e.source,
-            target: e.target,
-            fluidId: e.fluidId,
-            ...(e.unit ? { unit: e.unit } : {}),
-            amount: e.amount,
-          });
-        }
-      });
-    addedEdges.forEach((e) => addMerged(e));
-
-    edges = Array.from(merged.values());
-    nodes = nodes.filter((n) => !removedItemNodeIds.has(n.nodeId));
-
-    const amountByFinalNodeId = new Map<string, number>();
-    edges.forEach((e) => {
-      if (e.kind === 'item') {
-        const isFromMachine = e.source.startsWith('m:');
-        const isToMachine = e.target.startsWith('m:');
-        const isFromItem = e.source.startsWith('i:');
-        const isToItem = e.target.startsWith('i:');
-        if (isFromMachine && isToItem) {
-          amountByFinalNodeId.set(e.target, (amountByFinalNodeId.get(e.target) ?? 0) + e.amount);
-        } else if (isFromItem && isToMachine) {
-          amountByFinalNodeId.set(e.source, (amountByFinalNodeId.get(e.source) ?? 0) + e.amount);
-        }
-      } else {
-        amountByFinalNodeId.set(e.source, (amountByFinalNodeId.get(e.source) ?? 0) + e.amount);
-      }
-    });
-
-    nodes = nodes.map((n) => {
-      if (n.kind === 'item') return { ...n, amount: amountByFinalNodeId.get(n.nodeId) ?? 0 };
-      if (n.kind === 'fluid') return { ...n, amount: amountByFinalNodeId.get(n.nodeId) ?? 0 };
-      return n;
-    });
+    ({ nodes, edges } = collapseProductionLineIntermediateItems(nodes, edges));
   }
 
   return { nodes, edges };
